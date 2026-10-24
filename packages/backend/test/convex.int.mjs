@@ -34,8 +34,14 @@ const res = await fetch(`${SITE}/plan`, {
   body: JSON.stringify({ deviceToken: token, sessionId, request: "help", history: [], recipe: null, snapshot, retryNote: null }),
 }).then((r) => r.json());
 console.log("  /plan reply:", JSON.stringify(res));
-assert.equal(res.ok, false);
-assert.match(res.error, /server not configured|api|Error/);
+if (res.ok) {
+  // ANTHROPIC_API_KEY is set on this deployment: a real Claude step came back.
+  assert.equal(res.snapshotId, "s1");
+  assert.equal(typeof res.step, "object");
+  console.log("✓ /plan returned a real Claude step");
+} else {
+  assert.match(res.error, /server not configured|api|Error/);
+}
 const unpaired = await fetch(`${SITE}/plan`, { method: "POST", body: JSON.stringify({ deviceToken: "x", sessionId: null, request: "h", history: [], recipe: null, snapshot, retryNote: null }) }).then((r) => r.json());
 assert.equal(unpaired.error, "not paired");
 console.log("✓ /plan HTTP route wired (device checked, step budget consumed)");

@@ -2,7 +2,7 @@
 // Test-only pages: JustAsk never special-cases any of them.
 import { createServer } from "node:http";
 import { readFile } from "node:fs/promises";
-import { extname, join, normalize } from "node:path";
+import { extname, join, posix } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const ROOT = fileURLToPath(new URL("./public", import.meta.url));
@@ -10,7 +10,8 @@ const TYPES = { ".html": "text/html; charset=utf-8", ".css": "text/css", ".js": 
 
 function serve(port) {
   createServer(async (req, res) => {
-    let path = normalize(decodeURIComponent(new URL(req.url, "http://x").pathname)).replace(/^(\.\.[/\\])+/, "");
+    // URL paths always use "/", so normalize them the POSIX way on every OS.
+    let path = posix.normalize(decodeURIComponent(new URL(req.url, "http://x").pathname)).replace(/^(\.\.[/\\])+/, "");
     if (path.endsWith("/")) path += "index.html";
     if (!extname(path)) path += ".html";
     try {

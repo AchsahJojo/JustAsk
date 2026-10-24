@@ -30,6 +30,15 @@ export default defineConfig({
     },
   },
   vite: () => ({
-    define: { __JUSTASK_E2E__: JSON.stringify(E2E) },
+    define: {
+      __JUSTASK_E2E__: JSON.stringify(E2E),
+      // E2E always talks to the local mock planner, whatever apps/extension/.env says.
+      ...(E2E
+        ? {
+            "import.meta.env.VITE_PLANNER_URL": JSON.stringify("http://localhost:8787"),
+            "import.meta.env.VITE_CONVEX_URL": JSON.stringify(""),
+          }
+        : {}),
+    },
   }),
 });

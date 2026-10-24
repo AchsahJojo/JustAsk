@@ -39,7 +39,7 @@ async function waitFor(url, ms = 15000) {
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 start("node", ["apps/fixtures/serve.mjs"]);
-start("npx", ["tsx", "packages/backend/dev/server.ts"], { JUSTASK_MOCK: "1" });
+start("node", ["--import", "tsx", "packages/backend/dev/server.ts"], { JUSTASK_MOCK: "1" });
 await waitFor(`${SITE}/`);
 await waitFor(`${PLANNER}/health`);
 
