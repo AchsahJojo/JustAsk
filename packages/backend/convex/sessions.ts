@@ -23,15 +23,27 @@ export const logEvent = mutation({
     const ending = ["done", "abandoned", "blocked"].includes(type);
     if (ending && !session.endedAt) await ctx.db.patch(sessionId, { endedAt: Date.now(), outcome: type });
 
-    if (session.taskId && (type === "done" || type === "stuck")) {
+    if (session.taskId && (type === "done" || type === "stuck" || type === "abandoned" || type === "blocked")) {
       const task = await ctx.db.get(session.taskId);
-      const senior = await ctx.db.get(session.seniorId);
-      if (task && senior) {
-        if (type === "done") await ctx.db.patch(task._id, { status: "done" });
-        const allowed = type === "done" ? senior.consent.notifyOnComplete : senior.consent.notifyOnStuck;
-        if (allowed) {
-          const text = type === "done" ? `${senior.displayName} finished "${task.title}" on their own.` : `${senior.displayName} got stuck on "${task.title}".`;
-          await ctx.db.insert("notifications", { toCaregiverId: task.assignedBy, text, at: Date.now(), read: false });
+      if (task) {
+        // A completed or explicitly dismissed task is terminal. Only an active run can
+        // finish it or return it to pending after being stopped/blocked.
+        const wasActive = task.status === "active";
+        if (wasActive && type === "done") {
+          await ctx.db.patch(task._id, { status: "done" });
+        } else if (wasActive && (type === "abandoned" || type === "blocked")) {
+          await ctx.db.patch(task._id, { status: "pending" });
+        }
+
+        if (wasActive && (type === "done" || type === "stuck" || type === "blocked")) {
+          const senior = await ctx.db.get(session.seniorId);
+          if (senior) {
+            const allowed = type === "done" ? senior.consent.notifyOnComplete : senior.consent.notifyOnStuck;
+            if (allowed) {
+              const text = type === "done" ? `${senior.displayName} finished "${task.title}" on their own.` : `${senior.displayName} got stuck on "${task.title}".`;
+              await ctx.db.insert("notifications", { toCaregiverId: task.assignedBy, text, at: Date.now(), read: false });
+            }
+          }
         }
       }
     }
