@@ -8,9 +8,9 @@ import { internalMutation } from "./_generated/server";
 export const seed = internalMutation({
   args: { code: v.optional(v.string()), startUrl: v.optional(v.string()) },
   handler: async (ctx, { code, startUrl }) => {
-    const caregiverId = await ctx.db.insert("caregivers", { tokenIdentifier: "dev|sam", name: "Sam" });
-    const seniorId = await ctx.db.insert("seniors", { name: "Margaret Hill", displayName: "Mom", consent: { notifyOnComplete: true, notifyOnStuck: false } });
-    await ctx.db.insert("careLinks", { caregiverId, seniorId, relation: "son" });
+    const caregiverId = await ctx.db.insert("caregivers", { name: "Sam" });
+    const seniorId = await ctx.db.insert("seniors", { name: "Margaret Hill", displayName: "Mom", consent: { notifyOnComplete: true, notifyOnStuck: false }, origin: "caregiver", createdAt: Date.now() });
+    await ctx.db.insert("careLinks", { caregiverId, seniorId, relation: "son", linkedAt: Date.now() });
     const pairing = code ?? String(100000 + Math.floor(Math.random() * 900000));
     await ctx.db.insert("pairingCodes", { seniorId, code: pairing, expiresAt: Date.now() + 15 * 60 * 1000 });
     const taskId = await ctx.db.insert("tasks", {

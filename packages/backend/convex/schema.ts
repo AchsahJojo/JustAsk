@@ -1,19 +1,37 @@
 import { defineSchema, defineTable } from "convex/server";
+import { authTables } from "@convex-dev/auth/server";
 import { v } from "convex/values";
 
 export default defineSchema({
-  // Caregivers. Convex Auth adds its own tables when wired up (see docs/MANUAL_SETUP.md).
-  caregivers: defineTable({ tokenIdentifier: v.string(), name: v.string(), email: v.optional(v.string()) }).index("by_token", ["tokenIdentifier"]),
+  // Convex Auth: users, sessions, accounts, refresh tokens. Only caregivers sign in this way.
+  ...authTables,
+  // One row per caregiver account, created on first sign-in (`caregivers:ensureProfile`).
+  // `userId` is unset only for dev seed rows that have no login.
+  caregivers: defineTable({
+    userId: v.optional(v.id("users")),
+    name: v.string(),
+    email: v.optional(v.string()),
+    // Legacy (pre-Convex Auth seed rows). Cleared by `npx convex run migrations:caregiversToAuth`; remove after.
+    tokenIdentifier: v.optional(v.string()),
+  }).index("by_user", ["userId"]),
+  // A senior works on their own (`origin: "self"`, created by the extension) or was set up by a caregiver
+  // (`origin: "caregiver"`). Either way a caregiver is optional: careLinks may be empty.
   seniors: defineTable({
     name: v.string(),
     displayName: v.string(),
     consent: v.object({ notifyOnComplete: v.boolean(), notifyOnStuck: v.boolean() }),
+    origin: v.optional(v.union(v.literal("self"), v.literal("caregiver"))),
+    createdAt: v.optional(v.number()),
   }),
-  careLinks: defineTable({ caregiverId: v.id("caregivers"), seniorId: v.id("seniors"), relation: v.string() })
+  careLinks: defineTable({ caregiverId: v.id("caregivers"), seniorId: v.id("seniors"), relation: v.string(), linkedAt: v.optional(v.number()) })
     .index("by_caregiver", ["caregiverId"])
     .index("by_senior", ["seniorId"]),
-  pairingCodes: defineTable({ seniorId: v.id("seniors"), code: v.string(), expiresAt: v.number() }).index("by_code", ["code"]),
-  devices: defineTable({ seniorId: v.id("seniors"), tokenHash: v.string(), pairedAt: v.number() }).index("by_token", ["tokenHash"]),
+  pairingCodes: defineTable({ seniorId: v.id("seniors"), code: v.string(), expiresAt: v.number() })
+    .index("by_code", ["code"])
+    .index("by_senior", ["seniorId"]),
+  devices: defineTable({ seniorId: v.id("seniors"), tokenHash: v.string(), pairedAt: v.number() })
+    .index("by_token", ["tokenHash"])
+    .index("by_senior", ["seniorId"]),
   tasks: defineTable({
     seniorId: v.id("seniors"),
     assignedBy: v.id("caregivers"),
@@ -22,7 +40,9 @@ export default defineSchema({
     recipe: v.optional(v.object({ startUrl: v.optional(v.string()), steps: v.array(v.string()) })),
     status: v.union(v.literal("pending"), v.literal("active"), v.literal("done"), v.literal("dismissed")),
     createdAt: v.number(),
-  }).index("by_senior_status", ["seniorId", "status"]),
+  })
+    .index("by_senior_status", ["seniorId", "status"])
+    .index("by_assigner", ["assignedBy"]),
   sessions: defineTable({
     seniorId: v.id("seniors"),
     taskId: v.optional(v.id("tasks")),
@@ -40,5 +60,10 @@ export default defineSchema({
   }).index("by_session", ["sessionId"]),
   // Per-device step budget (plan §3.7 runaway cost).
   stepCounts: defineTable({ deviceId: v.id("devices"), hour: v.number(), count: v.number() }).index("by_device_hour", ["deviceId", "hour"]),
-  notifications: defineTable({ toCaregiverId: v.id("caregivers"), text: v.string(), at: v.number(), read: v.boolean() }).index("by_caregiver", ["toCaregiverId"]),
+  // Global hourly counters for unauthenticated endpoints: standalone sign-ups and failed pairing codes.
+  hourlyCounts: defineTable({ kind: v.string(), hour: v.number(), count: v.number() }).index("by_kind_hour", ["kind", "hour"]),
+  notifications: defineTable({ toCaregiverId: v.id("caregivers"), seniorId: v.optional(v.id("seniors")), text: v.string(), at: v.number(), read: v.boolean() }).index(
+    "by_caregiver",
+    ["toCaregiverId"],
+  ),
 });

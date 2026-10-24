@@ -27,9 +27,11 @@ export const logEvent = mutation({
       if (task && senior) {
         if (type === "done") await ctx.db.patch(task._id, { status: "done" });
         const allowed = type === "done" ? senior.consent.notifyOnComplete : senior.consent.notifyOnStuck;
-        if (allowed) {
+        // Only a helper she is still connected to hears about it.
+        const linked = (await ctx.db.query("careLinks").withIndex("by_senior", (q) => q.eq("seniorId", senior._id)).collect()).some((l) => l.caregiverId === task.assignedBy);
+        if (allowed && linked) {
           const text = type === "done" ? `${senior.displayName} finished "${task.title}" on their own.` : `${senior.displayName} got stuck on "${task.title}".`;
-          await ctx.db.insert("notifications", { toCaregiverId: task.assignedBy, text, at: Date.now(), read: false });
+          await ctx.db.insert("notifications", { toCaregiverId: task.assignedBy, seniorId: senior._id, text, at: Date.now(), read: false });
         }
       }
     }

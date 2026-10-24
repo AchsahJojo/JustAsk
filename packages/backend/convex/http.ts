@@ -1,8 +1,12 @@
 import { httpRouter } from "convex/server";
 import { httpAction } from "./_generated/server";
 import { internal } from "./_generated/api";
+import { auth } from "./auth";
 
 const http = httpRouter();
+
+// Convex Auth (caregiver sign-in): OpenID config and JWKS routes.
+auth.addHttpRoutes(http);
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
