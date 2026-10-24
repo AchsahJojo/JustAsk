@@ -3,6 +3,7 @@ import { CLICKABLE_SELECTOR, closestComposed, collectComposed, elementParts, fie
 import { fingerprint, normalize, roleTextKey } from "./fingerprint";
 import { Overlay } from "./overlay";
 import { performAct } from "./act";
+import { containsComposed } from "./visibility";
 
 /** Quiet time after real DOM mutations before `watch` reports a settled change. */
 export const WATCH_QUIET_MS = 600;
@@ -294,7 +295,7 @@ export class PageAgent {
         const sel = this.target as HTMLSelectElement;
         const chosen = sel.selectedIndex >= 0 ? sel.options[sel.selectedIndex] : null;
         // Compare locally; only `matched` leaves the page, never the selected value.
-        const matched = !!chosen && normalize(chosen.label || chosen.text) === normalize(spec.option ?? "");
+        const matched = !!chosen && normalize(chosen.label || chosen.text).toLowerCase() === normalize(spec.option ?? "").toLowerCase();
         if (matched) this.finish("chose");
         else this.opts.send({ type: "ja:wrong", what: "choice" });
       });
@@ -312,10 +313,24 @@ export class PageAgent {
       const enter = (e: Event) => {
         if (this.done || !this.isTargetPath(e)) return;
         if (this.hoverTimer) clearTimeout(this.hoverTimer);
-        this.hoverTimer = setTimeout(() => this.finish("hovered"), 300);
+        this.hoverTimer = setTimeout(() => {
+          this.hoverTimer = null;
+          this.finish("hovered");
+        }, 300);
+      };
+      const leave = (e: Event) => {
+        if (this.done || !this.target || !this.isTargetPath(e)) return;
+        const related = (e as MouseEvent).relatedTarget;
+        const next = related instanceof Element ? related : related instanceof Node ? related.parentElement : null;
+        // Moving between descendants of the target is still a hover; leaving it cancels the dwell.
+        if (next && containsComposed(this.target, next)) return;
+        if (this.hoverTimer) clearTimeout(this.hoverTimer);
+        this.hoverTimer = null;
       };
       this.on(this.doc, "pointerover", enter);
       this.on(this.doc, "mouseover", enter);
+      this.on(this.doc, "pointerout", leave);
+      this.on(this.doc, "mouseout", leave);
     }
   }
 

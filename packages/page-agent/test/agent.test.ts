@@ -94,9 +94,9 @@ describe("typing (hasValue state machine)", () => {
 });
 
 describe("select matched logic", () => {
-  it("matches the exact option label, reports a mismatch otherwise", () => {
+  it("matches the option label case-insensitively and reports a mismatch without sending the value", () => {
     const { agent, sent, n } = setup(`<label for="s">State</label><select id="s"><option value="">Choose…</option><option value="az">Arizona</option><option value="tx">Texas</option></select>`);
-    agent.highlight({ localId: n("State"), expect: "choose", option: "Arizona", label: "Pick here" });
+    agent.highlight({ localId: n("State"), expect: "choose", option: "arizona", label: "Pick here" });
     const s = document.getElementById("s") as HTMLSelectElement;
     s.value = "tx";
     s.dispatchEvent(new Event("change", { bubbles: true }));
@@ -105,6 +105,40 @@ describe("select matched logic", () => {
     s.dispatchEvent(new Event("change", { bubbles: true }));
     expect(sent.at(-1)).toEqual({ type: "ja:step-done", how: "chose" });
     expect(JSON.stringify(sent)).not.toMatch(/tx|az|Texas/);
+    agent.destroy();
+  });
+
+  it("matches a full option label longer than 60 characters", () => {
+    const label = `North Phoenix pharmacy (${"near the community center ".repeat(4)})`;
+    const { agent, sent, n, scan } = setup(`<label for="s">Pharmacy</label><select id="s"><option value="">Choose…</option><option>${label}</option></select>`);
+    expect(scan.snapshot.elements.find((e) => e.label === "Pharmacy")?.field?.options?.[1]).toBe(label);
+    agent.highlight({ localId: n("Pharmacy"), expect: "choose", option: label, label: "Pick here" });
+    const s = document.getElementById("s") as HTMLSelectElement;
+    s.selectedIndex = 1;
+    s.dispatchEvent(new Event("change", { bubbles: true }));
+    expect(sent.at(-1)).toEqual({ type: "ja:step-done", how: "chose" });
+    expect(JSON.stringify(sent)).not.toContain(label);
+    agent.destroy();
+  });
+});
+
+describe("hover dwell", () => {
+  it("cancels when the pointer leaves before the dwell finishes", () => {
+    vi.useFakeTimers();
+    const { agent, sent, n } = setup(`<main><button id="target"><span>Help</span></button><button id="other">Other</button></main>`);
+    const target = document.getElementById("target")!;
+    const span = target.querySelector("span")!;
+    agent.highlight({ localId: n("Help"), expect: "hover", option: null, label: "Hover here" });
+    span.dispatchEvent(new MouseEvent("pointerover", { bubbles: true, relatedTarget: document.body }));
+    vi.advanceTimersByTime(250);
+    span.dispatchEvent(new MouseEvent("pointerout", { bubbles: true, relatedTarget: document.getElementById("other") }));
+    vi.advanceTimersByTime(100);
+    expect(sent).toEqual([]);
+
+    target.dispatchEvent(new MouseEvent("pointerover", { bubbles: true, relatedTarget: document.body }));
+    vi.advanceTimersByTime(300);
+    expect(sent).toEqual([{ type: "ja:step-done", how: "hovered" }]);
+    vi.useRealTimers();
     agent.destroy();
   });
 });

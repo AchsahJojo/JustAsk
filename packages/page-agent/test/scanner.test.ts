@@ -78,6 +78,26 @@ describe("scanner", () => {
     expect(pageText(document)).not.toContain(SENTINEL);
   });
 
+  it("does not expose editable roots, editable content inside labels, or live status text", () => {
+    document.body.innerHTML = `
+      <main>
+        <p contenteditable="true" aria-label="Post">${SENTINEL}</p>
+        <label for="q">Search <span contenteditable="true">${SENTINEL}</span></label>
+        <input id="q">
+        <div contenteditable="true"><span id="editor-desc">${SENTINEL}</span></div>
+        <input id="referenced-editor-text" aria-labelledby="editor-desc">
+        <div role="alert"><p>You entered ${SENTINEL}</p><button>${SENTINEL}</button></div>
+        <div role="status">Saved ${SENTINEL}</div>
+      </main>`;
+    const { scan, json } = scanJson();
+    expect(json).not.toContain(SENTINEL);
+    expect(scan.snapshot.elements.find((e) => e.label === "Post")?.field?.hasValue).toBe(true);
+    expect(scan.snapshot.elements.find((e) => e.field?.kind === "text")?.label).toBe("Search");
+    expect(scan.snapshot.elements.some((e) => e.text === "" && e.field?.kind === "text" && e.label === null)).toBe(true);
+    expect(scan.snapshot.pageText).not.toContain("You entered");
+    expect(scan.snapshot.pageText).not.toContain("Saved");
+  });
+
   it("sends select options (up to 30, else first 10 plus count)", () => {
     const many = Array.from({ length: 50 }, (_, i) => `<option>State ${i}</option>`).join("");
     document.body.innerHTML = `<label>Few <select><option>A</option><option>B</option></select></label><label>Many <select>${many}</select></label>`;
@@ -87,6 +107,16 @@ describe("scanner", () => {
     expect(lots.field!.options!.length).toBe(10);
     expect(lots.field!.optionCount).toBe(50);
     expect(few.label).toBe("Few");
+  });
+
+  it("keeps full long option labels and treats a first placeholder option as empty", () => {
+    const long = `Select the preferred pharmacy near your home (${"North Phoenix ".repeat(8)})`;
+    document.body.innerHTML = `<label>Pharmacy <select><option>Select a pharmacy</option><option>${long}</option></select></label>`;
+    const select = document.querySelector("select")!;
+    expect(scanDocument(document).elements[0].data.field?.hasValue).toBe(false);
+    expect(scanDocument(document).elements[0].data.field?.options?.[1]).toBe(long);
+    select.selectedIndex = 1;
+    expect(scanDocument(document).elements[0].data.field?.hasValue).toBe(true);
   });
 
   it("walks open shadow roots and closed roots via the adapter", () => {
@@ -185,5 +215,14 @@ describe("scanner: search boxes and new roles (P1/P2)", () => {
       <div><h3>Throw pillow</h3><button>Add to cart</button></div></main>`;
     const els = scanDocument(document).elements.map((e) => e.data);
     expect(els.map((e) => e.nearby)).toEqual(["Steel water bottle", "Coffee mug", "Throw pillow"]);
+  });
+
+  it("keeps identical controls distinct when row context is plain text", () => {
+    document.body.innerHTML = `<ul>
+      <li><span>Medication A</span><button>Edit</button></li>
+      <li><span>Medication B</span><button>Edit</button></li>
+    </ul>`;
+    const els = scanDocument(document).elements.map((e) => e.data);
+    expect(els.filter((e) => e.text === "Edit").map((e) => e.nearby)).toEqual(["Medication A", "Medication B"]);
   });
 });

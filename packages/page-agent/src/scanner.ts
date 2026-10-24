@@ -140,11 +140,13 @@ export function accessibleName(el: Element): string {
   const ids = el.getAttribute("aria-labelledby");
   if (ids) {
     const root = el.getRootNode() as Document | ShadowRoot;
-    const txt = ids
+    const safe = ids
       .split(/\s+/)
-      .map((id) => (root.getElementById ? root.getElementById(id) : (root as ShadowRoot).querySelector(`#${CSS.escape(id)}`))?.textContent ?? "")
+      .map((id) => (root.getElementById ? root.getElementById(id) : (root as ShadowRoot).querySelector(`#${CSS.escape(id)}`)))
+      .filter((node): node is Element => !!node)
+      .map((node) => safeText(node))
       .join(" ");
-    if (txt.trim()) return clip(txt);
+    if (safe.trim()) return clip(safe);
   }
   const aria = el.getAttribute("aria-label");
   if (aria?.trim()) return clip(aria);
@@ -164,12 +166,21 @@ export function accessibleName(el: Element): string {
 
 /** A <label> can wrap its own <select>/<input>; skip those children so option text doesn't leak in. */
 function labelTextWithoutControls(label: HTMLLabelElement): string {
-  let out = "";
-  label.childNodes.forEach((n) => {
-    if (n.nodeType === Node.TEXT_NODE) out += n.textContent;
-    else if (n instanceof HTMLElement && !n.matches("input, select, textarea, option")) out += n.innerText ?? n.textContent ?? "";
-  });
-  return out;
+  return safeText(label, label.control ?? undefined);
+}
+
+/** Text for names/context only. Never includes an editable subtree or live status message. */
+function safeText(root: Node, skip?: Node): string {
+  if (root === skip) return "";
+  if (root.nodeType === Node.TEXT_NODE) return root.textContent ?? "";
+  if (root instanceof Element) {
+    if (
+      isEditableHost(root) ||
+      insideEditable(root) ||
+      root.matches("input, textarea, select, option, [role=alert], [role=status]")
+    ) return "";
+  }
+  return Array.from(root.childNodes).map((child) => safeText(child, skip)).join(" ");
 }
 
 function clip(s: string): string {
@@ -199,9 +210,21 @@ export function hasValue(el: Element): boolean {
     return el.value !== "";
   }
   if (el instanceof HTMLTextAreaElement) return el.value !== "";
-  if (el instanceof HTMLSelectElement) return el.selectedIndex > 0 || (el.selectedIndex === 0 && el.options[0]?.value !== "");
+  if (el instanceof HTMLSelectElement) {
+    if (el.selectedIndex < 0) return false;
+    const selected = el.options[el.selectedIndex];
+    if (selected && isPlaceholderOption(el, selected)) return false;
+    return true;
+  }
   if (isEditableHost(el)) return (el.textContent ?? "").trim() !== "";
   return false;
+}
+
+/** Common first-option placeholders, including the no-value-attribute form. */
+function isPlaceholderOption(select: HTMLSelectElement, option: HTMLOptionElement): boolean {
+  if (select.multiple || select.size > 1 || option.index !== 0) return false;
+  if (option.disabled || option.hidden || option.value.trim() === "") return true;
+  return /^(please\s+)?(select|choose|pick)(\s+(an?|the))?(\s+.+)?[.…]*$/i.test(normalize(option.label || option.text));
 }
 
 const DATE_HINTS: Record<string, string> = {
@@ -232,7 +255,7 @@ export function fieldInfo(el: Element): FieldInfo | undefined {
     valid: "validity" in el ? (el as HTMLInputElement).validity.valid : true,
   };
   if (el instanceof HTMLSelectElement) {
-    const labels = Array.from(el.options).map((o) => normalize(o.label || o.text).slice(0, 60));
+    const labels = Array.from(el.options).map((o) => normalize(o.label || o.text));
     info.optionCount = labels.length;
     info.options = labels.length > 30 ? labels.slice(0, 10) : labels;
   }
@@ -260,11 +283,30 @@ export function nearbyText(el: Element, ownText: string): string | null {
   for (let depth = 0; cur && depth < 4; depth++, cur = cur.parentElement) {
     const h = cur.querySelector("h1,h2,h3,h4,h5,h6,legend,strong,[role=heading]");
     if (h && !h.contains(el)) {
-      const t = clip(h.textContent ?? "");
+      const t = clip(safeText(h));
       if (t && t !== ownText) return t;
     }
+    // Generic row/list context preserves identical controls in distinct rows even when the
+    // site has no heading element (for example two unlabelled "Edit" buttons).
+    const row = cur.matches("li, tr, [role=row], [role=listitem], article, fieldset");
+    const t = clip(safeContextText(cur, el));
+    if (t && t !== ownText && (row || depth === 0)) return t;
   }
   return null;
+}
+
+function safeContextText(root: Element, target: Element): string {
+  const walk = (node: Node): string => {
+    if (node === target || (node instanceof Element && isInteractiveContext(node))) return "";
+    if (node.nodeType === Node.TEXT_NODE) return node.textContent ?? "";
+    if (node instanceof Element && node.matches("[contenteditable=true], [contenteditable=''], [contenteditable=plaintext-only], [role=textbox], [role=searchbox], [role=alert], [role=status]")) return "";
+    return Array.from(node.childNodes).map(walk).join(" ");
+  };
+  return normalize(walk(root));
+}
+
+function isInteractiveContext(el: Element): boolean {
+  return el.matches("a[href], button, input, select, textarea, [role=button], [role=link], [role=checkbox], [role=radio], [role=menuitem], [role=option]");
 }
 
 function isDisabled(el: Element): boolean {
@@ -283,7 +325,9 @@ function words(s: string): Set<string> {
 /** Scan one document (frame). Returns ranked elements, capped, numbered from 1. */
 export function scanDocument(doc: Document, opts: ScanOptions = {}): { elements: ScannedElement[]; omitted: { count: number; regions: string[] } } {
   const cap = opts.cap ?? ELEMENT_CAP;
-  const candidates = collectComposed(doc, opts).filter((el) => isVisible(el) && !insideEditable(el));
+  const candidates = collectComposed(doc, opts).filter(
+    (el) => isVisible(el) && !insideEditable(el) && !closestComposed(el, "[role=alert], [role=status]"),
+  );
 
   // Drop nested duplicates: an <a> inside a [role=button] wrapper etc. Keep the outermost interactive.
   const set = new Set(candidates);
@@ -384,8 +428,9 @@ export function pageText(doc: Document, max = 1400): string {
   for (const e of Array.from(root.querySelectorAll("h1,h2,h3,p,li,label,legend,[role=alert],[role=status]"))) {
     if (!isVisible(e)) continue;
     if (e.closest("script,style,noscript")) continue;
-    if (insideEditable(e)) continue; // typed text in editors must never be read
-    const t = normalize((e as HTMLElement).innerText ?? e.textContent ?? "");
+    if (insideEditable(e) || isEditableHost(e)) continue; // typed text in editors must never be read
+    if (e.matches("[role=alert], [role=status]") || closestComposed(e, "[role=alert], [role=status]")) continue;
+    const t = normalize(safeText(e));
     if (!t || seen.has(t)) continue;
     seen.add(t);
     out.push(t.slice(0, 200));
@@ -395,8 +440,10 @@ export function pageText(doc: Document, max = 1400): string {
 }
 
 export function mainHeading(doc: Document): string {
-  const h = Array.from(doc.querySelectorAll("h1, [role=heading][aria-level='1'], h2")).find(isVisible);
-  return h ? clip(h.textContent ?? "") : "";
+  const h = Array.from(doc.querySelectorAll("h1, [role=heading][aria-level='1'], h2")).find(
+    (el) => isVisible(el) && !isEditableHost(el) && !insideEditable(el) && !closestComposed(el, "[role=alert], [role=status]"),
+  );
+  return h ? clip(safeText(h)) : "";
 }
 
 /** URL with query and fragment stripped. */
