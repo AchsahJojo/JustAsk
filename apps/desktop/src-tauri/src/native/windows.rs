@@ -417,6 +417,14 @@ pub fn scan_foreground(app: tauri::AppHandle) -> Result<Value, String> {
     scan_window(&automation, &root, hwnd)
 }
 
+/// Dump the foreground window using the same privacy-filtered FrameScan shape as
+/// the Tauri command, without initializing the desktop app or its mouse hook.
+#[allow(dead_code)] // Also used by the standalone bin, which compiles this module directly.
+pub fn dump_snapshot() -> Result<Value, String> {
+    let (automation, root, hwnd) = current_automation()?;
+    scan_window(&automation, &root, hwnd)
+}
+
 fn scan_window(automation: &UIAutomation, root: &UIElement, hwnd: isize) -> Result<Value, String> {
     let title = root.get_name().unwrap_or_default();
     let walker = automation
