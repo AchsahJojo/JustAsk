@@ -32,6 +32,14 @@ This plan fixes those problems and splits the work across parallel Claude agents
    - a paragraph for native apps
 5. **The P1 and P2 root-cause fixes** (§10) are in scope.
 6. **The prompt eval becomes a deliverable** (§12).
+7. **Backend work uses Convex built-ins first** (`ARCHITECTURE.md` §8, "Backend: use Convex built-ins"): realtime queries, scheduled functions, crons, the rate-limiter component and convex-test.
+8. **Decisions taken from the agents' plans:**
+   - `devices:redeemCode` and `careLinks:redeemHelperCode` return `null` for a wrong code instead of throwing, so the failure count is saved.
+   - New function `devices:peekCode({code}) → {displayName} | null`.
+   - `mergeScans` keeps `surface` and `app`.
+   - Only click and submit actions count toward the switch to guide mode after 3 actions that change nothing.
+   - The duplicate check includes the nearby heading, so several "Add to cart" buttons survive.
+   - The "payment iframe" sensitive-field rule is dropped. `cc-*` autocomplete covers it.
 
 ## Wave 0: contracts and scaffolds
 

@@ -203,6 +203,23 @@ Caregivers see outcomes and counts, never page content.
 - Any install can revoke another.
 - **Social-engineering risk.** A scammer could ask her to read out a helper code. So linking a caregiver is confirmed on her install, with "Sam will be able to send you tasks."
 
+### Backend: use Convex built-ins
+
+Before writing backend code by hand, check the [Convex docs](https://docs.convex.dev/home) and `packages/backend/convex/_generated/ai/guidelines.md`.
+
+| Need | Convex feature |
+|---|---|
+| Live tasks, handoffs, prefs and devices list | [realtime queries](https://docs.convex.dev/realtime) through `ConvexClient` (side panel, desktop). Only the MV3 service worker polls. |
+| Expire handoffs and pairing codes | [scheduled functions](https://docs.convex.dev/scheduling/scheduled-functions) at expiry |
+| Hourly cleanup (stale `stepCounts`, codes, handoffs) | [cron jobs](https://docs.convex.dev/scheduling/cron-jobs) in `convex/crons.ts` |
+| Limit redeem attempts | the `@convex-dev/rate-limiter` [component](https://docs.convex.dev/components/overview), with a non-throwing `limit` so the failure count is saved |
+| `/plan` endpoint | [HTTP actions](https://docs.convex.dev/functions/http-actions). Nothing else goes over HTTP. |
+| Caregiver sign-in | [Convex Auth](https://docs.convex.dev/auth/convex-auth) (Ami). Devices keep token auth. |
+| Backend tests | [convex-test](https://docs.convex.dev/testing/convex-test), in memory |
+| Debugging the dev deployment | the Convex plugin's MCP tools (logs, data, run, insights) |
+
+The step planner stays a direct `planStep` call, because it depends on exact `fallbacks`, structured output and caching settings. The [Agent component](https://docs.convex.dev/agents/overview) and [AI Gateway](https://docs.convex.dev/ai-gateway/overview) are noted for later features, not for the step loop.
+
 ## 9. Desktop app (target)
 
 **Target apps, chosen from usage data.** The scanner is generic accessibility code. These apps are only what we test against.
