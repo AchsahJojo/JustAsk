@@ -12,6 +12,8 @@ import { useTaskList } from "./useTaskList";
 import { focusCaptionUnlessAsking } from "./focusCaption";
 
 const ALL_SITES = { origins: ["<all_urls>"] };
+/** Example requests for when she opens JustAsk and isn't sure what to ask. Plain words, no sites. */
+const IDEAS = ["What's the weather today?", "Find a recipe for chicken soup", "Read today's news"];
 const DEV = import.meta.env.MODE === "development";
 
 /** Steps JustAsk did for her. `actions` is added to SessionView by the core drive-mode work. */
@@ -189,6 +191,19 @@ export function Panel({ pinnedTabId }: { pinnedTabId: number | null }) {
             </button>
             {heard && <p className="heard">“{heard}”</p>}
 
+            {tasks.open.length === 0 && !resume && (
+              <section className="ideas" aria-label="Things you can ask">
+                <p className="soft">Not sure what to ask? Try one of these. Any page is fine, even an empty one.</p>
+                <div className="idea-chips">
+                  {IDEAS.map((idea) => (
+                    <button key={idea} className="btn soft-btn idea" onClick={() => start(idea)}>
+                      {idea}
+                    </button>
+                  ))}
+                </div>
+              </section>
+            )}
+
             <form className="typed" onSubmit={onTyped}>
               <label htmlFor="typed" className="soft">
                 Or type it here
@@ -278,7 +293,12 @@ export function Panel({ pinnedTabId }: { pinnedTabId: number | null }) {
                 </button>
               </div>
             )}
-            {phase === "paused" && view.pauseReason !== "other-tab" && (
+            {phase === "paused" && view.pauseReason === "blank-tab" && (
+              <button className="btn primary huge" onClick={() => void host.lookItUp()}>
+                Look it up for me
+              </button>
+            )}
+            {phase === "paused" && view.pauseReason !== "other-tab" && view.pauseReason !== "blank-tab" && (
               <button className="btn primary huge" onClick={() => host.retry()}>
                 Try again
               </button>

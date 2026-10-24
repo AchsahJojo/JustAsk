@@ -17,7 +17,7 @@ export interface SessionView {
   risk: StepResponse["risk"];
   /** Small status note, e.g. "Still looking…". */
   note: string;
-  pauseReason: "other-tab" | "tab-closed" | "cant-see" | "no-access" | null;
+  pauseReason: "other-tab" | "tab-closed" | "cant-see" | "blank-tab" | "no-access" | null;
   taskId: string | null;
   /** Click events she completed herself (guide steps). */
   clicks: number;
@@ -67,6 +67,8 @@ export interface ControllerDeps {
   deviceToken?: () => string | null;
   /** Synced account preferences. `showMeInstead`: turn every act step into a guide step. */
   prefs?: () => { showMeInstead: boolean };
+  /** True when the session tab is empty (New Tab page, about:blank), so a failed scan can offer to look it up. */
+  blankTab?: () => Promise<boolean>;
   /** Ids for snapshots; injectable for tests. */
   newId?: () => string;
   timing?: Partial<typeof DEFAULT_TIMING>;
@@ -225,15 +227,44 @@ export class SessionController {
 
   // ───────────── user actions ─────────────
 
-  async start(request: string, opts: { recipe?: Recipe | null; taskId?: string | null; sessionId?: string | null } = {}) {
+  /**
+   * Start a session. `prepare` runs first, while the panel already shows "planning": the host uses it
+   * to open a recipe's start page, or to search her words when she starts on an empty tab. It can
+   * `announce` a line, and returns a history note for Claude (or null). Stop during `prepare` wins.
+   */
+  async start(
+    request: string,
+    opts: {
+      recipe?: Recipe | null;
+      taskId?: string | null;
+      sessionId?: string | null;
+      prepare?: (announce: (line: string) => void) => Promise<string | null>;
+    } = {},
+  ) {
     const text = request.trim();
     if (!text) return;
     this.reset();
+    const gen = this.gen;
     this.recipe = opts.recipe ?? null;
     this.sessionId = opts.sessionId ?? null;
     if (this.deps.prefs?.().showMeInstead) this.history.push(L.SHOW_ME_NOTE);
     this.set({ ...INITIAL, request: text, taskId: opts.taskId ?? null, stepNo: 1, line: L.FILLER_LINE, phase: "planning" });
-    this.say(L.FILLER_LINE);
+    if (opts.prepare) {
+      let note: string | null = null;
+      try {
+        note = await opts.prepare((line) => {
+          if (gen !== this.gen) return;
+          this.say(line);
+          this.set({ line });
+        });
+      } catch {
+        // Couldn't open the start page or search: plan on whatever page is there.
+      }
+      if (gen !== this.gen) return;
+      if (note) this.history.push(note);
+      if (this.view.line !== L.FILLER_LINE) this.set({ line: L.FILLER_LINE });
+      else this.say(L.FILLER_LINE);
+    } else this.say(L.FILLER_LINE);
     await this.plan();
   }
 
@@ -354,12 +385,14 @@ export class SessionController {
     const line =
       reason === "cant-see"
         ? L.CANT_SEE_PAGE
-        : reason === "other-tab"
+        : reason === "blank-tab"
+          ? L.BLANK_TAB_LINE
+          : reason === "other-tab"
           ? "Keep helping on this tab?"
           : reason === "no-access"
             ? "I need permission to see this page."
             : "The page closed. Want to keep going?";
-    if (reason === "cant-see") this.say(line);
+    if (reason === "cant-see" || reason === "blank-tab") this.say(line);
     this.set({ phase: "paused", pauseReason: reason, line });
   }
 
@@ -482,7 +515,9 @@ export class SessionController {
     }
     if (gen !== this.gen) return;
     if (!ok) {
-      this.pause("cant-see");
+      const blank = await this.deps.blankTab?.().catch(() => false);
+      if (gen !== this.gen) return;
+      this.pause(blank ? "blank-tab" : "cant-see");
       return;
     }
     await this.requestStep(gen, null);

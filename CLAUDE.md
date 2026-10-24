@@ -5,7 +5,7 @@ Start with `docs/ARCHITECTURE.md`. The current build plan is `docs/refined-plan-
 - **Drive mode, with safety limits.** JustAsk clicks, types, chooses, scrolls and submits for her: one numbered action per step, announced and highlighted first, and Stop always works.
   - It **never types into, stores or reads `sensitive` fields** (passwords, one-time codes, card numbers or CVV, SSN, bank fields). For those it guides her instead.
   - `money` / `account_change` / `personal_info` steps ask first. `suspicious` blocks.
-  - Never navigate to a URL that Claude produced. Only the recipe's `startUrl`, or links on the page.
+  - Never navigate to a URL that Claude produced. Only the recipe's `startUrl`, links on the page, or (on an empty tab) a search for her own words with her default search engine (`chrome.search`).
   - The `sensitive` classification and these gates are deterministic code, never left to Claude.
 - Claude returns an element **number** for the current `snapshotId`, never a selector.
 - No API keys in extension or web code. Secrets live only in Convex env.

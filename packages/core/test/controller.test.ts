@@ -488,3 +488,45 @@ describe("parseCommand", () => {
     expect(h.plans[1].history.at(-1)).toContain("the bus stop on Main");
   });
 });
+
+describe("start on an empty tab", () => {
+  it("runs prepare first, announces its line, and gives Claude its note", async () => {
+    const h = harness([guide(1)]);
+    const prepare = vi.fn(async (announce: (l: string) => void) => {
+      announce("This tab is empty, so I'll look that up for you.");
+      return 'The tab was empty, so JustAsk searched the web for "refill"';
+    });
+    await h.c.start("help me refill", { prepare });
+    expect(prepare).toHaveBeenCalledOnce();
+    expect(h.spoken[0]).toMatch(/look that up/);
+    expect(h.plans[0].history).toContain('The tab was empty, so JustAsk searched the web for "refill"');
+    expect(h.c.state.phase).toBe("guiding");
+  });
+
+  it("Stop during prepare wins: nothing is planned", async () => {
+    const h = harness([guide(1)]);
+    let release!: () => void;
+    const p = h.c.start("x", { prepare: () => new Promise<string | null>((r) => (release = () => r(null))) });
+    await new Promise((r) => setTimeout(r, 5));
+    await h.c.stop();
+    release();
+    await p;
+    expect(h.plans.length).toBe(0);
+    expect(h.c.state.phase).toBe("idle");
+  });
+
+  it("a failed scan on an empty tab pauses with Look it up, not a dead end", async () => {
+    const plans: unknown[] = [];
+    const c = new SessionController({
+      bridge: { scan: vi.fn(async () => []), highlight: vi.fn(), clear: vi.fn(async () => {}), pulse: vi.fn(), waitForChange: vi.fn(), act: vi.fn(), watch: vi.fn() } as unknown as PageBridge,
+      planner: { plan: vi.fn(async (r) => (plans.push(r), { ok: true as const, snapshotId: "x", step: guide(1), latencyMs: 1 })) },
+      speech: { speak: () => {}, stop: () => {} },
+      blankTab: async () => true,
+    });
+    await c.start("weather");
+    expect(c.state.phase).toBe("paused");
+    expect(c.state.pauseReason).toBe("blank-tab");
+    expect(c.state.line).toMatch(/Look it up/);
+    expect(plans.length).toBe(0);
+  });
+});

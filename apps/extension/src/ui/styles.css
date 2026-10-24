@@ -132,3 +132,9 @@ input:focus { border-color: var(--ink); outline: none; }
 
 /* Development builds only (eval capture). */
 .link.dev-snap { font-size: 13px; color: var(--ink-3); }
+
+/* "Not sure what to ask?" examples on the start screen. */
+.ideas { display: grid; gap: 8px; }
+.ideas .soft { margin: 0; font-size: 16px; }
+.idea-chips { display: grid; gap: 8px; }
+.btn.idea { justify-content: flex-start; text-align: left; font-size: 18px; padding: 12px 16px; }

@@ -1,12 +1,12 @@
 import { browser } from "wxt/browser";
-import { SessionController, lines, type SessionView } from "@justask/core";
+import { SessionController, lines, searchQueryFor, type SessionView } from "@justask/core";
 import type { EventType, FromContent, Recipe } from "@justask/shared";
 import { ExtensionBridge } from "./bridge";
 import { HttpPlanner } from "./planner";
 import { BrowserSpeech } from "./speech";
 import { getSettings, type Settings } from "./config";
 import { backend } from "./backend";
-import { isInjectable } from "../platform";
+import { isBlankTab, isInjectable, searchInTab } from "../platform";
 import type { Handoff } from "./prefs";
 
 const FOLLOW_WINDOW_MS = 5000;
@@ -45,6 +45,7 @@ export class SessionHost {
       deviceToken: () => this.settings?.deviceToken ?? null,
       // Synced "Show me instead": guide every step rather than acting for her.
       prefs: () => ({ showMeInstead: this.settings?.showMeInstead ?? false }),
+      blankTab: () => this.onBlankTab(),
       store: {
         save: (view, extra) => {
           void browser.storage.session.set({ session: { view, ...extra, tabId: this.sessionTabId } }).catch(() => {});
@@ -96,18 +97,46 @@ export class SessionHost {
     this.sessionTabId = await this.activeTabId();
     const recipe = opts.recipe ?? null;
     this.recipe = recipe;
-    // A recipe startUrl opens in the session tab, never a new one, and only from a caregiver recipe.
-    if (recipe?.startUrl && this.sessionTabId !== null) {
-      const tab = await browser.tabs.get(this.sessionTabId);
-      if (!sameUrl(tab.url, recipe.startUrl)) {
-        const loaded = waitForLoad(this.sessionTabId);
-        await browser.tabs.update(this.sessionTabId, { url: recipe.startUrl });
-        await loaded;
-      }
-    }
     this.sessionId = await backend.startSession(request, opts.taskId ?? null);
     if (opts.taskId) await backend.setTaskStatus(opts.taskId, "active");
-    await this.controller.start(request, { recipe, taskId: opts.taskId ?? null, sessionId: this.sessionId });
+    await this.controller.start(request, {
+      recipe,
+      taskId: opts.taskId ?? null,
+      sessionId: this.sessionId,
+      prepare: (announce) => this.prepareTab(request, recipe, announce),
+    });
+  }
+
+  /**
+   * Get the session tab ready before the first scan.
+   * - A caregiver recipe's startUrl opens in the session tab (never a new one).
+   * - On an empty tab (New Tab page, about:blank), her words are searched with her default search
+   *   engine, so she never has to find the right website first.
+   */
+  private async prepareTab(request: string, recipe: Recipe | null, announce: (line: string) => void): Promise<string | null> {
+    const tabId = this.sessionTabId;
+    if (tabId === null) return null;
+    const tab = await browser.tabs.get(tabId);
+    if (recipe?.startUrl) {
+      if (!sameUrl(tab.url, recipe.startUrl)) {
+        const loaded = waitForLoad(tabId);
+        await browser.tabs.update(tabId, { url: recipe.startUrl });
+        await loaded;
+      }
+      return null;
+    }
+    if (!isBlankTab(tab.url)) return null;
+    return this.searchHere(tabId, request, announce);
+  }
+
+  /** Search her words in this tab and wait for the results. Returns the history note, or null if it couldn't. */
+  private async searchHere(tabId: number, request: string, announce: (line: string) => void): Promise<string | null> {
+    const q = searchQueryFor(request);
+    announce(lines.SEARCH_LINE);
+    const loaded = waitForLoad(tabId);
+    if (!(await searchInTab(tabId, q))) return null;
+    await loaded;
+    return lines.searchedNote(q);
   }
 
   /** The recipe of the current session (for the dev snapshot capture). */
@@ -133,10 +162,26 @@ export class SessionHost {
     return true;
   }
 
-  /** "Yes, here": move the session to the tab she is on now. */
+  /** "Yes, here": move the session to the tab she is on now. An empty tab gets her request searched first. */
   async continueHere() {
     this.sessionTabId = await this.activeTabId();
+    if (await this.onBlankTab()) return this.lookItUp();
     await this.controller.resume("She moved to a different tab and wants help there");
+  }
+
+  private async onBlankTab(): Promise<boolean> {
+    if (this.sessionTabId === null) return false;
+    const tab = await browser.tabs.get(this.sessionTabId).catch(() => null);
+    return !!tab && isBlankTab(tab.url);
+  }
+
+  /** "Look it up": the session tab is empty, so search her request there and keep going. */
+  async lookItUp() {
+    const tabId = this.sessionTabId;
+    const request = this.controller.state.request;
+    if (tabId === null || !request) return;
+    const note = await this.searchHere(tabId, request, (line) => this.speak(line));
+    await this.controller.resume(note ?? undefined);
   }
 
   async goBack() {
@@ -146,6 +191,7 @@ export class SessionHost {
   }
 
   async retry() {
+    if (await this.onBlankTab()) return this.lookItUp();
     await this.controller.resume();
   }
 
@@ -187,10 +233,12 @@ export class SessionHost {
       if (tabId !== this.sessionTabId || !active()) return;
       if (info.status === "complete") {
         if (!isInjectable(tab.url)) {
-          this.controller.pause("cant-see");
+          // She went to an empty tab (New Tab, Home): offer to look it up instead of a dead end.
+          this.controller.pause(isBlankTab(tab.url) ? "blank-tab" : "cant-see");
           return;
         }
-        if (this.controller.state.phase === "paused" && this.controller.state.pauseReason === "cant-see") {
+        const reason = this.controller.state.pauseReason;
+        if (this.controller.state.phase === "paused" && (reason === "cant-see" || reason === "blank-tab")) {
           void this.controller.resume("She went back to a page I can see");
           return;
         }

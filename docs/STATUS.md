@@ -55,6 +55,11 @@ A caregiver is optional. When she has one, the caregiver can set JustAsk up for 
   - `#justask=<id>` claims a handoff from the desktop app and shows an in-page Start banner
   - `#justask-link=<code>` asks "Link to Margaret's JustAsk?" before linking
 - **Resilience:** survives rerenders (fingerprint rebinding), open and closed shadow roots, same- and cross-origin iframes, new tabs, `<dialog>` modals, late-loading editors (watches until the page settles), and resume after the panel reloads.
+- **Starting from nothing:**
+  - On an empty New Tab page, JustAsk searches her words (without "help me" or "please") with her default search engine in that tab, then carries on from the results.
+  - If a session lands on an empty tab, the panel offers **Look it up for me** instead of a dead end.
+  - When nothing is on her list, the start screen shows example requests.
+  - When Chrome opens with tasks waiting, a notification says "You have N things on your list"; clicking it opens the panel.
 - **Dev only:** "Save snapshot" exports a request for the eval harness.
 
 ### Caregiver web app (`apps/caregiver`, Vite + React + Clayzo)
@@ -111,8 +116,8 @@ A caregiver is optional. When she has one, the caregiver can set JustAsk up for 
 ### Tests and tooling
 | Command | What | Status |
 |---|---|---|
-| `npm test` | 301 unit tests (Vitest), including the convex-test backend suites | passing |
-| `npm run test:e2e` | 12 Puppeteer scenarios with the real extension and the mock planner on :8788 | passing |
+| `npm test` | 325 unit tests (Vitest), including the convex-test backend suites | passing |
+| `npm run test:e2e` | 14 Puppeteer scenarios with the real extension and the mock planner on :8788 | passing |
 | `CONVEX_CODE=… npm run test:e2e` | adds pairing, task card, recipe and completion against local Convex | passing |
 | `npm run test:accounts` | accounts against local Convex (auth, merge, helper codes, Show me instead, task list) | passing |
 | `npm run test:convex` | pairing, tasks and the `/plan` route against local Convex | passing |

@@ -29,7 +29,7 @@ There are two surfaces:
    - **Never typed by JustAsk:** sensitive fields. These are passwords, one-time codes, card numbers and CVVs, SSNs, bank accounts, and any field whose `autocomplete` value is for credentials or payment. For these, JustAsk guides her instead.
    - **Always asked first:** steps that spend money, change the account, or send personal information.
    - **Always blocked:** pages that look like scams.
-   - **Navigation:** never to a URL Claude made up. Only the recipe's `startUrl`, or links on the page.
+   - **Navigation:** never to a URL Claude made up. Only the recipe's `startUrl`, links on the page, or, on an empty tab, a search for her own words with her default search engine.
 2. **Claude returns an element number** for the current snapshot. Never a selector or coordinates.
 3. **No API keys in client code.** Secrets live only in Convex env.
 4. **No site-specific or app-specific code.** Fixtures and target apps are tests, not special cases.
@@ -364,6 +364,7 @@ Solved by drive mode (§11).
   - Search text that uses only her words goes straight in.
 - **Personal-data guard on text.** Reject SSNs, card numbers (Luhn check), phone numbers, emails and the word "password". JustAsk doesn't store her personal details, so it can't type them anyway.
 - **Navigation.** Only by clicking links on the page, or opening the recipe's `startUrl`. Never a URL from Claude.
+- **Empty tab.** If she starts on the New Tab page or `about:blank` and there is no `startUrl`, the extension searches her request (filler words removed, `searchQueryFor` in `packages/core`) with `chrome.search.query` in that tab, so her default engine is used and no site is built in. Claude gets a history note saying so. Landing on an empty tab mid-session pauses with **Look it up for me**.
 - **Runaway protection.**
   - The existing caps stay: 40 steps per session, and 60 per device per hour.
   - After 3 actions in a row that don't change the page, JustAsk switches to guide mode.

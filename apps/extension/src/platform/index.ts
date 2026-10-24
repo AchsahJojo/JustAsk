@@ -64,3 +64,30 @@ export function isInjectable(url: string | undefined): boolean {
   if (/\.pdf($|\?)/i.test(url)) return false;
   return true;
 }
+
+/** An empty tab: the browser's New Tab page or about:blank. Nothing to help with yet, so JustAsk searches. */
+export function isBlankTab(url: string | undefined): boolean {
+  if (!url) return true;
+  return /^(about:(blank|newtab|home)|chrome:\/\/(newtab|new-tab-page)\/?|chrome-search:\/\/local-ntp|edge:\/\/newtab\/?|brave:\/\/newtab\/?|vivaldi:\/\/newtab\/?)/i.test(url);
+}
+
+/**
+ * Search `text` in this tab with her own default search engine (chrome.search / browser.search).
+ * No search site is built in. False when the browser has no search API.
+ */
+export async function searchInTab(tabId: number, text: string): Promise<boolean> {
+  const b = browser as unknown as {
+    search?: {
+      query?: (o: { text: string; tabId: number }) => Promise<void>;
+      search?: (o: { query: string; tabId: number }) => Promise<void>;
+    };
+  };
+  try {
+    if (b.search?.query) await b.search.query({ text, tabId });
+    else if (b.search?.search) await b.search.search({ query: text, tabId });
+    else return false;
+    return true;
+  } catch {
+    return false;
+  }
+}
