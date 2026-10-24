@@ -1,0 +1,18 @@
+{
+  "id": "gaps-store",
+  "url": "{FIXTURES}/gaps/store",
+  "request": "help me buy a water bottle",
+  "pendingFixture": true,
+  "note": "P2: search first, not the Shop by room menu or the off-canvas drawer.",
+  "expected": {
+    "kind": "act",
+    "allowKinds": [
+      "guide",
+      "act"
+    ],
+    "targetText": "Search products",
+    "forbidTargetText": [
+      "Shop by room"
+    ]
+  }
+}

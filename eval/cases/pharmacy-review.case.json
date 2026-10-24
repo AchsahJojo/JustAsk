@@ -1,0 +1,21 @@
+{
+  "id": "pharmacy-review",
+  "url": "{FIXTURES}/pharmacy/refill/review",
+  "request": "help me refill my prescription",
+  "history": [
+    "She did: \"Click the big blue button that says Refill a prescription.\" (click)",
+    "She did: \"Click the blue Refill button next to Lisinopril.\" (click)",
+    "She did: \"Click the box that says Pick up in store. It is free.\" (click)"
+  ],
+  "expected": {
+    "kind": "guide",
+    "allowKinds": [
+      "guide",
+      "act"
+    ],
+    "targetText": "Send my refill request",
+    "forbidTargetText": [
+      "Cancel"
+    ]
+  }
+}
