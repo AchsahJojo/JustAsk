@@ -1,0 +1,136 @@
+{
+  "snapshotId": "eval-gaps-store",
+  "url": "http://localhost:6174/gaps/store",
+  "title": "Store | Home",
+  "heading": "Everything for your home",
+  "pageText": "Everything for your home\nFree shipping on orders over $35.",
+  "elements": [
+    {
+      "n": 1,
+      "role": "search box",
+      "text": "Search products",
+      "label": null,
+      "nearby": "Everything for your home",
+      "color": null,
+      "big": true,
+      "disabled": false,
+      "inModal": false,
+      "inViewport": true,
+      "region": "header",
+      "field": {
+        "kind": "text",
+        "hasValue": false,
+        "valid": true
+      }
+    },
+    {
+      "n": 2,
+      "role": "button",
+      "text": "Search",
+      "label": null,
+      "nearby": "Everything for your home",
+      "color": null,
+      "big": false,
+      "disabled": false,
+      "inModal": false,
+      "inViewport": true,
+      "region": "header"
+    },
+    {
+      "n": 3,
+      "role": "button",
+      "text": "Shop by room",
+      "label": null,
+      "nearby": "Everything for your home",
+      "color": null,
+      "big": false,
+      "disabled": false,
+      "inModal": false,
+      "inViewport": true,
+      "region": "nav"
+    },
+    {
+      "n": 4,
+      "role": "link",
+      "text": "Deals",
+      "label": null,
+      "nearby": "Everything for your home",
+      "color": null,
+      "big": false,
+      "disabled": false,
+      "inModal": false,
+      "inViewport": true,
+      "region": "nav"
+    },
+    {
+      "n": 5,
+      "role": "link",
+      "text": "Cart",
+      "label": null,
+      "nearby": "Everything for your home",
+      "color": null,
+      "big": false,
+      "disabled": false,
+      "inModal": false,
+      "inViewport": true,
+      "region": "nav"
+    },
+    {
+      "n": 6,
+      "role": "link",
+      "text": "Steel water bottle",
+      "label": null,
+      "nearby": "Everything for your home",
+      "color": null,
+      "big": true,
+      "disabled": false,
+      "inModal": false,
+      "inViewport": true,
+      "region": "main"
+    },
+    {
+      "n": 7,
+      "role": "link",
+      "text": "Coffee mug",
+      "label": null,
+      "nearby": "Everything for your home",
+      "color": null,
+      "big": true,
+      "disabled": false,
+      "inModal": false,
+      "inViewport": true,
+      "region": "main"
+    },
+    {
+      "n": 8,
+      "role": "link",
+      "text": "Throw pillow",
+      "label": null,
+      "nearby": "Everything for your home",
+      "color": null,
+      "big": true,
+      "disabled": false,
+      "inModal": false,
+      "inViewport": true,
+      "region": "main"
+    },
+    {
+      "n": 9,
+      "role": "link",
+      "text": "Table lamp",
+      "label": null,
+      "nearby": "Everything for your home",
+      "color": null,
+      "big": true,
+      "disabled": false,
+      "inModal": false,
+      "inViewport": true,
+      "region": "main"
+    }
+  ],
+  "omitted": {
+    "count": 0,
+    "regions": []
+  },
+  "surface": "web"
+}

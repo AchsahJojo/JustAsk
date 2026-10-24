@@ -1,0 +1,27 @@
+{
+  "snapshotId": "eval-gaps-composer",
+  "url": "http://localhost:6174/gaps/composer",
+  "title": "Composer",
+  "heading": "Home feed",
+  "pageText": "Home feed\nSee what your friends are sharing.",
+  "elements": [
+    {
+      "n": 1,
+      "role": "button",
+      "text": "Start a post",
+      "label": null,
+      "nearby": "Home feed",
+      "color": "blue",
+      "big": false,
+      "disabled": false,
+      "inModal": false,
+      "inViewport": true,
+      "region": "main"
+    }
+  ],
+  "omitted": {
+    "count": 0,
+    "regions": []
+  },
+  "surface": "web"
+}

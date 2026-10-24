@@ -1,0 +1,11 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Review your refill | Maple Pharmacy</title><link rel="stylesheet" href="/site.css"></head>
+<body>
+<main>
+<div class="muted"><a href="/pharmacy/prescriptions">Prescriptions</a> › <a href="/pharmacy/refill/pickup">Pickup</a> › Review</div><h1>Check your refill</h1>
+<div class="list"><div><span class="muted" style="width:110px">Medicine</span><span>Lisinopril 10 mg tablet, 30 tablets</span></div><div><span class="muted" style="width:110px">Getting it</span><span id="how"></span></div><div><span class="muted" style="width:110px">Cost</span><span id="cost"></span></div></div>
+<div class="row" style="margin-top:18px"><button class="btn big green" onclick="location.href=`/pharmacy/refill/confirmation`">Send my refill request</button><a href="/pharmacy/refill/pickup">Edit</a><a href="/" style="color:#64748b">Cancel</a></div>
+<script>const m=localStorage.method;how.textContent=m==="mail"?"Mail to 14 Elm Court · 3 to 5 days":"Pick up at 120 Main St · today after 4 PM";cost.textContent=m==="mail"?"$5.00 copay + $4.99 shipping, paid on delivery":"$5.00 copay, paid at pickup";</script>
+</main>
+<script src="/site.js"></script>
+</body></html>

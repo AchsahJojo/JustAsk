@@ -1,0 +1,29 @@
+{
+  "name": "@justask/caregiver",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "npm run animations && vite",
+    "build": "npm run animations && vite build",
+    "preview": "vite preview",
+    "animations": "tsx animations/build.ts",
+    "typecheck": "tsc --noEmit -p ."
+  },
+  "dependencies": {
+    "@clayzo/webgl-player": "0.3.18",
+    "@convex-dev/auth": "0.0.96",
+    "@justask/backend": "*",
+    "@justask/shared": "*",
+    "convex": "^1.48.0",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1"
+  },
+  "devDependencies": {
+    "@clayzo/animation": "0.3.18",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "@vitejs/plugin-react": "^6.1.2",
+    "vite": "^8.3.5"
+  }
+}

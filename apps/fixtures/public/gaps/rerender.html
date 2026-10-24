@@ -1,0 +1,11 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><link rel="stylesheet" href="/site.css"><title>Rerender | Fixtures</title></head><body><main><h1>Library card</h1><p class="muted">These buttons are rebuilt every 500 ms, like a busy React page.</p><div id="app"></div>
+<script>
+let tick = 0;
+function render() {
+  tick++;
+  document.getElementById("app").innerHTML =
+    '<div class="row"><button class="btn" onclick="done()">Renew my card</button><button class="btn outline">Lost card</button><span class="muted">Updated ' + tick + '</span></div>';
+}
+function done() { document.querySelector("main").innerHTML = "<h1>Card renewed</h1><p>Your library card is renewed until 2027.</p>"; clearInterval(iv); }
+render(); const iv = setInterval(render, 500);
+</script></main></body></html>

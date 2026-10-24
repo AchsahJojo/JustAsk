@@ -1,0 +1,14 @@
+{
+  "id": "gaps-composer",
+  "url": "{FIXTURES}/gaps/composer",
+  "request": "write a post",
+  "pendingFixture": true,
+  "expected": {
+    "kind": "guide",
+    "allowKinds": [
+      "guide",
+      "act"
+    ],
+    "targetText": "Start a post"
+  }
+}

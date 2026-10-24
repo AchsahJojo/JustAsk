@@ -1,0 +1,6 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><link rel="stylesheet" href="/site.css"><title>Shadow DOM | Fixtures</title></head><body><main><h1>Settings</h1><open-card></open-card><closed-card></closed-card><p id="result" class="muted"></p>
+<script>
+class OpenCard extends HTMLElement { constructor(){ super(); const r=this.attachShadow({mode:"open"}); r.innerHTML='<p>Open root</p><button id="b">Turn on large text</button>'; r.getElementById("b").onclick=()=>result.textContent="Large text is on."; } }
+class ClosedCard extends HTMLElement { constructor(){ super(); const r=this.attachShadow({mode:"closed"}); r.innerHTML='<p>Closed root</p><button>Turn on captions</button>'; r.querySelector("button").onclick=()=>result.textContent="Captions are on."; } }
+customElements.define("open-card", OpenCard); customElements.define("closed-card", ClosedCard);
+</script></main></body></html>
