@@ -4,15 +4,17 @@ import { requireDevice } from "./lib";
 
 export const start = mutation({
   args: { token: v.string(), request: v.string(), taskId: v.optional(v.id("tasks")) },
+  returns: v.id("sessions"),
   handler: async (ctx, { token, request, taskId }) => {
     const device = await requireDevice(ctx, token);
-    return ctx.db.insert("sessions", { seniorId: device.seniorId, taskId, request: request.slice(0, 200), startedAt: Date.now() });
+    return ctx.db.insert("sessions", { seniorId: device.seniorId, deviceId: device._id, taskId, request: request.slice(0, 200), startedAt: Date.now() });
   },
 });
 
 /** Outcome events only. Never page content. */
 export const logEvent = mutation({
   args: { token: v.string(), sessionId: v.id("sessions"), type: v.string(), latencyMs: v.optional(v.number()) },
+  returns: v.null(),
   handler: async (ctx, { token, sessionId, type, latencyMs }) => {
     const device = await requireDevice(ctx, token);
     const session = await ctx.db.get(sessionId);
@@ -33,5 +35,6 @@ export const logEvent = mutation({
         }
       }
     }
+    return null;
   },
 });
