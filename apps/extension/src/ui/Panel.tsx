@@ -9,6 +9,8 @@ import { pullPrefs } from "../lib/prefsSync";
 import { buildCapture, captureFileName } from "../lib/capture";
 import { Orb, type OrbMode } from "./Orb";
 import { usePendingTasks } from "./usePendingTasks";
+import { filterSnoozedTasks } from "./taskVisibility";
+import { focusCaptionUnlessAsking } from "./focusCaption";
 
 const ALL_SITES = { origins: ["<all_urls>"] };
 const DEV = import.meta.env.MODE === "development";
@@ -28,6 +30,7 @@ export function Panel({ pinnedTabId }: { pinnedTabId: number | null }) {
   const [answer, setAnswer] = useState("");
   const [name, setName] = useState("");
   const [tasks, setTasks] = usePendingTasks();
+  const [snoozedTaskIds, setSnoozedTaskIds] = useState<ReadonlySet<string>>(() => new Set());
   const [resume, setResume] = useState<{ request: string; taskId: string | null } | null>(null);
   const [access, setAccess] = useState(true);
   const captionRef = useRef<HTMLParagraphElement>(null);
@@ -63,8 +66,8 @@ export function Panel({ pinnedTabId }: { pinnedTabId: number | null }) {
 
   // Keep the newest caption in view for screen magnifiers and move focus for screen readers.
   useEffect(() => {
-    captionRef.current?.focus({ preventScroll: true });
-  }, [view.line]);
+    focusCaptionUnlessAsking(view.phase, captionRef.current);
+  }, [view.line, view.phase]);
 
   const phase = view.phase;
   const running = !["idle", "done", "blocked"].includes(phase);
@@ -119,6 +122,7 @@ export function Panel({ pinnedTabId }: { pinnedTabId: number | null }) {
   };
 
   const actions = actionsOf(view);
+  const visibleTasks = filterSnoozedTasks(tasks, snoozedTaskIds);
 
   return (
     <div className="panel" data-phase={phase}>
@@ -155,7 +159,7 @@ export function Panel({ pinnedTabId }: { pinnedTabId: number | null }) {
             <h1 className="hello">{name ? `Hi ${name}.` : "Hi there."}</h1>
             {view.line && <p className="soft">{view.line}</p>}
 
-            {tasks.slice(0, 1).map((t) => (
+            {visibleTasks.slice(0, 1).map((t) => (
               <section key={t.id} className="card task" aria-live="polite">
                 <p className="eyebrow">{t.from} asked you to</p>
                 <p className="task-title">{t.title}</p>
@@ -166,8 +170,8 @@ export function Panel({ pinnedTabId }: { pinnedTabId: number | null }) {
                   <button
                     className="btn ghost"
                     onClick={() => {
+                      setSnoozedTaskIds((current) => new Set(current).add(t.id));
                       setTasks((ts) => ts.filter((x) => x.id !== t.id));
-                      void backend.setTaskStatus(t.id, "pending");
                     }}
                   >
                     Later

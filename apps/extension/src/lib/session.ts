@@ -106,7 +106,7 @@ export class SessionHost {
       }
     }
     this.sessionId = await backend.startSession(request, opts.taskId ?? null);
-    if (opts.taskId) void backend.setTaskStatus(opts.taskId, "active");
+    if (opts.taskId) await backend.setTaskStatus(opts.taskId, "active");
     await this.controller.start(request, { recipe, taskId: opts.taskId ?? null, sessionId: this.sessionId });
   }
 
