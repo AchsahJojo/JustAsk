@@ -181,4 +181,26 @@ await ana.c.mutation("activity:markAllRead", {});
 assert.equal((await ana.c.query("activity:feed", {})).every((n) => n.read), true);
 ok("activity mark-all-read");
 
+// --- Her task list persists: started tasks stay open, "I did it" moves them to done ---
+{
+  const kim = await caregiver("Kim");
+  const { seniorId, code } = await kim.c.mutation("devices:createSeniorWithCode", { name: "Lee Park", displayName: "Dad", relation: "Father" });
+  const { token: t } = await anon.mutation("devices:redeemCode", { code });
+  await anon.mutation("devices:setConsent", { token: t, notifyOnComplete: true, notifyOnStuck: false });
+  const a = await kim.c.mutation("tasks:assign", { seniorId, title: "Pay the gas bill" });
+  const b = await kim.c.mutation("tasks:assign", { seniorId, title: "Book a haircut" });
+  await anon.mutation("tasks:setStatus", { token: t, taskId: a, status: "active" }); // pressed Start, then closed the panel
+  let list = await anon.query("tasks:listForDevice", { token: t });
+  assert.deepEqual(list.open.map((x) => [x.title, x.status]), [["Pay the gas bill", "active"], ["Book a haircut", "pending"]]);
+  assert.equal(list.open[0].from, "Kim");
+  await anon.mutation("tasks:setStatus", { token: t, taskId: a, status: "done" });
+  await anon.mutation("tasks:setStatus", { token: t, taskId: b, status: "dismissed" });
+  list = await anon.query("tasks:listForDevice", { token: t });
+  assert.deepEqual(list.open, []);
+  assert.deepEqual(list.done.map((x) => x.title), ["Pay the gas bill"]);
+  assert.match((await kim.c.query("activity:feed", {}))[0].text, /Dad finished "Pay the gas bill"/);
+  await assert.rejects(anon.query("tasks:listForDevice", { token: "nope" }), /not paired/);
+  ok("task list: started task stays open after closing; I did it → done + note; removed tasks leave");
+}
+
 console.log("\nall account checks passed");

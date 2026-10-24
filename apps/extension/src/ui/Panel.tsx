@@ -3,7 +3,7 @@ import { browser } from "wxt/browser";
 import type { SessionView } from "@justask/core";
 import { SessionHost } from "../lib/session";
 import { BrowserListener } from "../lib/speech";
-import { backend, type PendingTask } from "../lib/backend";
+import { backend, type PendingTask, type Task, type TaskList } from "../lib/backend";
 import { getSettings } from "../lib/config";
 import { Orb, type OrbMode } from "./Orb";
 
@@ -20,7 +20,7 @@ export function Panel({ pinnedTabId }: { pinnedTabId: number | null }) {
   const [typed, setTyped] = useState("");
   const [answer, setAnswer] = useState("");
   const [name, setName] = useState("");
-  const [tasks, setTasks] = useState<PendingTask[]>([]);
+  const [tasks, setTasks] = useState<TaskList>({ open: [], done: [] });
   const [resume, setResume] = useState<{ request: string; taskId: string | null } | null>(null);
   const [access, setAccess] = useState(true);
   const captionRef = useRef<HTMLParagraphElement>(null);
@@ -46,7 +46,11 @@ export function Panel({ pinnedTabId }: { pinnedTabId: number | null }) {
       const res = (r as { resume?: { request: string; taskId: string | null } }).resume;
       if (res && host.controller.state.phase === "idle") setResume(res);
     });
-    const poll = async () => setTasks(await backend.pendingTasks());
+    // Keep the last list when offline, so tasks never blink away.
+    const poll = async () => {
+      const list = await backend.taskList();
+      if (list) setTasks(list);
+    };
     void poll();
     const iv = setInterval(poll, 15_000);
     return () => {
@@ -88,9 +92,14 @@ export function Panel({ pinnedTabId }: { pinnedTabId: number | null }) {
     void host.start(text, opts);
   };
 
-  const startTask = (t: PendingTask) => {
-    setTasks((ts) => ts.filter((x) => x.id !== t.id));
+  const startTask = (t: Task) => {
+    setTasks((ts) => ({ ...ts, open: ts.open.map((x) => (x.id === t.id ? { ...x, status: "active" as const } : x)) }));
     start(t.spokenPrompt, { recipe: t.recipe, taskId: t.id });
+  };
+
+  const finishTask = (t: Task, status: "done" | "dismissed") => {
+    setTasks((ts) => ({ open: ts.open.filter((x) => x.id !== t.id), done: status === "done" ? [{ ...t, status: "done" }, ...ts.done] : ts.done }));
+    void backend.setTaskStatus(t.id, status);
   };
 
   const onTyped = (e: FormEvent) => {
@@ -128,26 +137,7 @@ export function Panel({ pinnedTabId }: { pinnedTabId: number | null }) {
             <h1 className="hello">{name ? `Hi ${name}.` : "Hi there."}</h1>
             {view.line && <p className="soft">{view.line}</p>}
 
-            {tasks.slice(0, 1).map((t) => (
-              <section key={t.id} className="card task" aria-live="polite">
-                <p className="eyebrow">{t.from} asked you to</p>
-                <p className="task-title">{t.title}</p>
-                <div className="row">
-                  <button className="btn primary" onClick={() => startTask(t)}>
-                    Start
-                  </button>
-                  <button
-                    className="btn ghost"
-                    onClick={() => {
-                      setTasks((ts) => ts.filter((x) => x.id !== t.id));
-                      void backend.setTaskStatus(t.id, "pending");
-                    }}
-                  >
-                    Later
-                  </button>
-                </div>
-              </section>
-            ))}
+            <Tasks list={tasks} onStart={startTask} onFinish={finishTask} />
 
             {resume && (
               <section className="card">
@@ -298,6 +288,88 @@ export function Panel({ pinnedTabId }: { pinnedTabId: number | null }) {
         </footer>
       )}
     </div>
+  );
+}
+
+/** Her task list. Tasks stay until she finishes or removes them; closing the panel never loses one. */
+function Tasks({ list, onStart, onFinish }: { list: TaskList; onStart: (t: Task) => void; onFinish: (t: Task, status: "done" | "dismissed") => void }) {
+  const [first, ...rest] = list.open;
+  if (!first && list.done.length === 0) return null;
+  return (
+    <>
+      {first && (
+        <section className="card task" aria-live="polite">
+          <p className="eyebrow">{first.from} asked you to</p>
+          <p className="task-title">{first.title}</p>
+          {first.status === "active" && <p className="soft">You started this. Pick up where you left off.</p>}
+          <div className="row">
+            <button className="btn primary" onClick={() => onStart(first)}>
+              {first.status === "active" ? "Keep going" : "Start"}
+            </button>
+            <button className="btn ghost" onClick={() => onFinish(first, "done")}>
+              I did it
+            </button>
+          </div>
+        </section>
+      )}
+      {rest.length > 0 && (
+        <section className="tasklist" aria-label="More tasks">
+          <p className="eyebrow">Also on your list</p>
+          <ul>
+            {rest.map((t) => (
+              <li key={t.id}>
+                <span className="tl-main">
+                  <span className="tl-title">{t.title}</span>
+                  <span className="soft small">
+                    From {t.from}
+                    {t.status === "active" ? " · started" : ""}
+                  </span>
+                </span>
+                <button className="btn outline small" onClick={() => onStart(t)}>
+                  {t.status === "active" ? "Keep going" : "Start"}
+                </button>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+      {(list.done.length > 0 || list.open.length > 0) && (
+        <details className="tasklist done-list">
+          <summary>
+            {list.done.length > 0 ? `Done (${list.done.length})` : "Manage tasks"}
+          </summary>
+          <ul>
+            {list.done.map((t) => (
+              <li key={t.id}>
+                <span className="tl-check" aria-hidden="true">
+                  ✓
+                </span>
+                <span className="tl-main">
+                  <span className="tl-title">{t.title}</span>
+                  <span className="soft small">From {t.from}</span>
+                </span>
+              </li>
+            ))}
+            {list.open.map((t) => (
+              <li key={t.id}>
+                <span className="tl-main">
+                  <span className="tl-title">{t.title}</span>
+                  <span className="soft small">Not done yet</span>
+                </span>
+                <button
+                  className="btn ghost small"
+                  onClick={() => {
+                    if (confirm(`Remove “${t.title}” from your list? ${t.from} will see that you removed it.`)) onFinish(t, "dismissed");
+                  }}
+                >
+                  Remove
+                </button>
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
+    </>
   );
 }
 

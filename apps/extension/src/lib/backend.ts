@@ -17,6 +17,16 @@ export interface PendingTask {
   from: string;
 }
 
+export interface Task extends PendingTask {
+  status: "pending" | "active" | "done";
+  createdAt: number;
+}
+
+export interface TaskList {
+  open: Task[];
+  done: Task[];
+}
+
 /** Thin Convex client for the device side. Every call takes the device token; no keys. */
 export class Backend {
   private client: ConvexHttpClient | null = null;
@@ -93,6 +103,17 @@ export class Backend {
       return await c.client.query("tasks:pendingForDevice" as never, { token: c.token } as never);
     } catch {
       return [];
+    }
+  }
+
+  /** Her task list: open tasks stay until finished or removed. Null when offline or not set up. */
+  async taskList(): Promise<TaskList | null> {
+    const c = await this.c();
+    if (!c) return null;
+    try {
+      return await c.client.query("tasks:listForDevice" as never, { token: c.token } as never);
+    } catch {
+      return null;
     }
   }
 

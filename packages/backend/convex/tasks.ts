@@ -60,6 +60,33 @@ export const pendingForDevice = query({
   },
 });
 
+/**
+ * Extension: her task list. Open tasks (waiting or started) stay until she finishes or removes them,
+ * so closing the panel never loses one. Plus what she finished in the last two weeks.
+ */
+export const listForDevice = query({
+  args: { token: v.string() },
+  handler: async (ctx, { token }) => {
+    const device = await requireDevice(ctx, token);
+    const by = (status: "pending" | "active" | "done") =>
+      ctx.db
+        .query("tasks")
+        .withIndex("by_senior_status", (q) => q.eq("seniorId", device.seniorId).eq("status", status))
+        .collect();
+    const [pending, active, done] = await Promise.all([by("pending"), by("active"), by("done")]);
+    const names = new Map<string, string>();
+    const row = async (t: (typeof pending)[number]) => {
+      if (!names.has(t.assignedBy)) names.set(t.assignedBy, (await ctx.db.get(t.assignedBy))?.name ?? "Your helper");
+      return { id: t._id, title: t.title, spokenPrompt: t.spokenPrompt, recipe: t.recipe ?? null, from: names.get(t.assignedBy)!, status: t.status, createdAt: t.createdAt };
+    };
+    const since = Date.now() - 14 * 86_400_000;
+    return {
+      open: await Promise.all([...active, ...pending].sort((a, b) => a.createdAt - b.createdAt).map(row)),
+      done: await Promise.all(done.filter((t) => t.createdAt > since).sort((a, b) => b.createdAt - a.createdAt).slice(0, 10).map(row)),
+    };
+  },
+});
+
 export const setStatus = mutation({
   args: { token: v.string(), taskId: v.id("tasks"), status: v.union(v.literal("active"), v.literal("done"), v.literal("dismissed"), v.literal("pending")) },
   handler: async (ctx, { token, taskId, status }) => {
@@ -67,5 +94,14 @@ export const setStatus = mutation({
     const task = await ctx.db.get(taskId);
     if (!task || task.seniorId !== device.seniorId) throw new Error("not found");
     await ctx.db.patch(taskId, { status });
+    // "I did it" from her task list: the same consent-gated note as finishing with JustAsk.
+    if (status === "done" && task.status !== "done") {
+      const senior = await ctx.db.get(device.seniorId);
+      const linked = (await ctx.db.query("careLinks").withIndex("by_senior", (q) => q.eq("seniorId", device.seniorId)).collect()).some((l) => l.caregiverId === task.assignedBy);
+      if (senior?.consent.notifyOnComplete && linked) {
+        const who = senior.displayName || senior.name || "They";
+        await ctx.db.insert("notifications", { toCaregiverId: task.assignedBy, seniorId: senior._id, text: `${who} finished "${task.title}".`, at: Date.now(), read: false });
+      }
+    }
   },
 });

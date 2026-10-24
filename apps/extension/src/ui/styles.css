@@ -110,3 +110,15 @@ input:focus { border-color: var(--ink); outline: none; }
 .btn.is-listening { background: var(--accent); color: #fff; }
 @keyframes listen { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.02); } }
 @media (prefers-reduced-motion: reduce) { .is-listening { animation: none; } }
+
+/* Task list */
+.tasklist { display: grid; gap: 8px; }
+.tasklist ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.tasklist li { display: flex; align-items: center; gap: 12px; background: var(--paper); border: 1.5px solid var(--line); border-radius: 14px; padding: 12px 14px; }
+.tl-main { flex: 1; min-width: 0; display: grid; gap: 2px; }
+.tl-title { font-weight: 700; font-size: 18px; }
+.tl-check { flex: none; width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; background: color-mix(in srgb, var(--sage) 16%, transparent); color: var(--sage); font-weight: 800; }
+.done-list summary { cursor: pointer; color: var(--ink-3); font-size: 16px; font-weight: 650; padding: 4px 0; }
+.done-list[open] summary { margin-bottom: 8px; }
+.soft.small, .small { font-size: 15px; }
+.btn.small { font-size: 16px; padding: 8px 14px; }

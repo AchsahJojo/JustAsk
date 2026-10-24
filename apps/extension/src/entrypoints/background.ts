@@ -20,7 +20,9 @@ export default defineBackground(() => {
     if (a.name !== "tasks") return;
     const tasks = await backend.pendingTasks();
     const seen = ((await browser.storage.local.get("seenTasks")) as { seenTasks?: string[] }).seenTasks ?? [];
-    await browser.action.setBadgeText({ text: tasks.length ? String(tasks.length) : "" });
+    // The badge counts every open task (waiting or started), not just new ones.
+    const open = (await backend.taskList())?.open.length ?? tasks.length;
+    await browser.action.setBadgeText({ text: open ? String(open) : "" });
     await browser.action.setBadgeBackgroundColor({ color: "#E8654A" });
     const fresh = tasks.filter((t) => !seen.includes(t.id));
     for (const t of fresh) {
