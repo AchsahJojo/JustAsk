@@ -161,6 +161,15 @@ try {
   await shot("09-person-done");
   step("consent on: task shows Done, stats appear");
 
+  // Typing help: the caregiver turns "Type it for me" on; her extension sees it.
+  assert.match(await text(), /hasn't chosen yet/);
+  await page.evaluate(() => [...document.querySelectorAll("label.check")].find((l) => l.textContent.includes("Type searches for"))?.querySelector("input")?.click());
+  await waitText("Set by a helper");
+  const me = await senior.query("devices:me", { token });
+  assert.deepEqual([me.assistTyping, me.assistSetBy], [true, "caregiver"]);
+  await shot("09b-typing-help");
+  step("caregiver turns on Type it for me; the senior's profile reflects it");
+
   // Take back a second task.
   await clickText("New task", "button");
   await typeIn("Task", "Join the Zoom call");

@@ -85,7 +85,8 @@ export function Setup() {
       // Message first: it must not appear after the consent boxes and push them down mid-click.
       setPairMsg(res.displayName ? `Connected. Hi ${res.displayName}!` : "Connected.");
       await refreshMe();
-    } catch {
+    } catch (e) {
+      console.warn("[setup] pairing failed", e);
       setPairMsg("JustAsk couldn't reach the internet. Check the connection and try again.");
     }
   };

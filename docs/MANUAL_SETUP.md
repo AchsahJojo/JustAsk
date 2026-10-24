@@ -109,15 +109,20 @@ Run these in a real, headed Chrome with the production build (`apps/extension/.o
 - **Abuse caps.** 500 standalone sign-ups and 300 failed codes per hour, globally (`convex/lib.ts`). Per-IP limits need an HTTP action in front; not done.
 - **Migration.** Old seed rows had `caregivers.tokenIdentifier`. Run `npx convex run migrations:caregiversToAuth` once per deployment, then the field can be removed from the schema.
 
+- **Type it for me.** Off until chosen. JustAsk asks her at the first search box (or in setup step 5), and a linked caregiver can turn it on or off under **Typing help**. It only fills boxes `isSearchBox` accepts, re-checked in the page, and never submits.
+- **Task list.** Tasks stay in her panel until she finishes or removes them (`tasks:listForDevice`). Started tasks show **Keep going**; **I did it** marks one done and sends the consent-gated note.
+
 ### Manual checks for accounts
 - [ ] Real Chrome: install fresh, skip step 4, and use JustAsk with no caregiver against the Convex `/plan` (needs the API key).
 - [ ] Caregiver app on a phone (layout was checked at 390 px in Puppeteer, not on a device).
 - [ ] Two caregivers connected to one senior: both get the completion note for their own tasks only.
+- [ ] Type it for me on real search boxes (Google, Amazon, a store search) with a real key. Check it never fills a sign-in or checkout box.
+- [ ] Email verification and password reset need Resend: whoever owns the Convex project sets `AUTH_RESEND_KEY` and verifies a sending domain.
 
 ## 6. What is already tested (and how to rerun)
 
 - `npm test` — 49 unit tests: StepResponse schema + validator rules, scanner (numbering, hidden elements, `.value` never used as a label, the **sentinel leak test** across every field type, select options cap, open and closed shadow roots, the modal-only rule, ranking before the 150 cap, duplicate collapse), fingerprint rebinding, click/typing/select/lost observers, the controller loop (multi-step, re-plan then block, risk confirm, suspicious, clarify, frames, wrong click, stop with a late reply, password line), and the `planStep` request shape (beta header, `fallbacks`, effort, schema, caching, no sampling params or `thinking`, refusal and `max_tokens` handling).
-- `npm run test:e2e` — 11 Puppeteer scenarios in Chrome for Testing with the real extension: the full pharmacy refill (4 clicks, wrong click, done), 500 ms rerenders, open + closed shadow roots, same- and cross-origin iframes plus the money confirmation, typing + password + select with the **sentinel leak test against the planner's received requests**, the `<dialog>` modal-only rule, new-tab follow, 1,000 links, `chrome://` pages, the setup page, and the production build (no pre-granted host access). Screenshots land in `e2e/screenshots/`.
+- `npm run test:e2e` — 13 Puppeteer scenarios in Chrome for Testing with the real extension: the full pharmacy refill (4 clicks, wrong click, done), 500 ms rerenders, open + closed shadow roots, same- and cross-origin iframes plus the money confirmation, typing + password + select with the **sentinel leak test against the planner's received requests**, the `<dialog>` modal-only rule, new-tab follow, 1,000 links, `chrome://` pages, the setup page, and the production build (no pre-granted host access). Screenshots land in `e2e/screenshots/`.
 - `CONVEX_CODE=<code> node e2e/run.mjs accounts` — pairing through the setup page against local Convex, the task card, the recipe `startUrl`, a completed task, and the completion note in Convex.
 - `npm run test:convex` — pairing (one use only), device token checks, pending tasks, events closing a task, and the `/plan` HTTP route.
 - `npm run test:accounts` — against local Convex: caregiver sign-up/sign-in (wrong password, duplicate email, short password, bad email), standalone seniors, pairing (spaces, one use, replaced codes, stale tokens), merging a standalone senior with a caregiver profile (and the page redirect), second computers, task validation (`javascript:` and credential URLs, step limits), consent-gated status and stats, isolation between caregivers, disconnect and remove.

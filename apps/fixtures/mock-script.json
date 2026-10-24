@@ -18,5 +18,9 @@
   { "title": "Dialog", "step": { "kind": "clarify", "say": "This page asks about cookies. Accept all, or only necessary?", "expect": null, "option": null, "risk": "none" } },
   { "title": "New tab", "step": { "kind": "guide", "say": "Click the blue button that says Open the guide.", "targetText": "Open the guide", "expect": "click", "option": null, "risk": "none" } },
   { "title": "Guide", "step": { "kind": "guide", "say": "Click the green button that says I read it.", "targetText": "I read it", "expect": "click", "option": null, "risk": "none" } },
-  { "title": "Links", "step": { "kind": "guide", "say": "Click the blue button that says Renew my library card.", "targetText": "Renew my library card", "expect": "click", "option": null, "risk": "none" } }
+  { "title": "Links", "step": { "kind": "guide", "say": "Click the blue button that says Renew my library card.", "targetText": "Renew my library card", "expect": "click", "option": null, "risk": "none" } },
+
+  { "title": "Price Finder | Search", "unlessFilled": true, "step": { "kind": "guide", "say": "Click the white search box at the top, then type air fryer.", "targetText": "Search products", "expect": "type", "option": null, "fill": "air fryer", "risk": "none" } },
+  { "title": "Price Finder | Search", "step": { "kind": "guide", "say": "Now click the Search button.", "targetText": "Search", "expect": "click", "option": null, "risk": "none" } },
+  { "title": "Price Finder | Results", "step": { "kind": "done", "say": "Here are air fryers under fifty dollars. You did it!", "expect": null, "option": null, "risk": "none" } }
 ]

@@ -306,7 +306,7 @@ export function Panel({ pinnedTabId }: { pinnedTabId: number | null }) {
                 </button>
               )}
               {phase === "guiding" && view.expect === "type" && (
-                <button className="btn primary huge" onClick={() => host.controller.doneTyping()}>
+                <button className={`btn ${view.fill ? "outline" : "primary"} huge`} onClick={() => host.controller.doneTyping()}>
                   I'm done typing
                 </button>
               )}

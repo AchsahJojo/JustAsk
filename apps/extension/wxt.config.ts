@@ -30,6 +30,10 @@ export default defineConfig({
     },
   },
   vite: () => ({
-    define: { __JUSTASK_E2E__: JSON.stringify(E2E) },
+    define: {
+      __JUSTASK_E2E__: JSON.stringify(E2E),
+      // E2E builds ignore apps/extension/.env: their own mock planner port, and no Convex unless a test sets one.
+      ...(E2E ? { "import.meta.env.VITE_PLANNER_URL": JSON.stringify("http://localhost:8788"), "import.meta.env.VITE_CONVEX_URL": JSON.stringify("") } : {}),
+    },
   }),
 });
