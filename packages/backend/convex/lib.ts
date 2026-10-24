@@ -6,7 +6,8 @@ import type { deviceInfo } from "./validators";
 
 export const STEPS_PER_HOUR = 60;
 export const CODE_TTL_MS = 15 * 60 * 1000;
-export const DEFAULT_PREFS = { voice: "browser" as const, rate: 1, showMeInstead: false };
+/** JustAsk speaks and listens through Cartesia only; "browser" is kept in the validator for old rows. */
+export const DEFAULT_PREFS = { voice: "cartesia" as const, rate: 1, showMeInstead: false };
 
 export async function sha256(s: string): Promise<string> {
   const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(s));

@@ -1,5 +1,6 @@
 import { ConvexHttpClient } from "convex/browser";
 import type { EventType, Recipe } from "@justask/shared";
+import { NO_ACCOUNT } from "@justask/voice";
 import { getSettings } from "./config";
 import type { DeviceInfo } from "../platform/device";
 import { parseCode, parseDevices, parseHandoff, type DeviceRow, type Handoff, type SyncedPrefs } from "./prefs";
@@ -156,6 +157,22 @@ export class Backend {
     const code = parseCode(await this.mutation<unknown>(c.client, "careLinks:createHelperCode", { token: c.token }));
     if (!code) throw new Error("createHelperCode returned no code");
     return code;
+  }
+
+  /**
+   * A short-lived Cartesia token for listening and speaking (voice:cartesiaToken). The API key stays
+   * in Convex. Throws `Error(NO_ACCOUNT)` before this browser has an account; null on other failures.
+   */
+  async cartesiaToken(): Promise<{ token: string; expiresAt: number } | null> {
+    const c = await this.c();
+    if (!c) throw new Error(NO_ACCOUNT);
+    try {
+      const r = await c.client.action("voice:cartesiaToken" as never, { token: c.token } as never);
+      const t = r as { token?: unknown; expiresAt?: unknown } | null;
+      return t && typeof t.token === "string" && typeof t.expiresAt === "number" ? { token: t.token, expiresAt: t.expiresAt } : null;
+    } catch {
+      return null;
+    }
   }
 
   /** Mark this install as recently used. Never throws. */

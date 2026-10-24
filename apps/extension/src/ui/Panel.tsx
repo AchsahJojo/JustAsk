@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { browser } from "wxt/browser";
 import type { SessionView } from "@justask/core";
 import { SessionHost } from "../lib/session";
-import { BrowserListener } from "../lib/speech";
+import { newListener } from "../lib/speech";
 import { backend, type PendingTask, type Task, type TaskList } from "../lib/backend";
 import { getSettings } from "../lib/config";
 import { pullPrefs } from "../lib/prefsSync";
@@ -21,7 +21,7 @@ const actionsOf = (v: SessionView) => (v as SessionView & { actions?: number }).
 
 export function Panel({ pinnedTabId }: { pinnedTabId: number | null }) {
   const host = useMemo(() => new SessionHost({ pinnedTabId }), [pinnedTabId]);
-  const listener = useMemo(() => new BrowserListener(), []);
+  const listener = useMemo(() => newListener(), []);
   const [view, setView] = useState<SessionView>(host.controller.state);
   const [speaking, setSpeaking] = useState(false);
   const [listening, setListening] = useState(false);
@@ -81,7 +81,7 @@ export function Panel({ pinnedTabId }: { pinnedTabId: number | null }) {
     // The mic never hears JustAsk: lines wait until the user stops talking.
     host.speech.hold(true);
     let said = false;
-    listener.listen({
+    void listener.listen({
       onInterim: (t) => {
         if (t.trim()) said = true;
         setHeard(t);

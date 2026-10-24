@@ -1,7 +1,8 @@
-// Speech input for the desktop app. WebView2 has no working Web Speech recognition, so this
-// streams the microphone to Cartesia's streaming STT WebSocket (docs.cartesia.ai, API version
-// 2026-08-14) with a short-lived access token minted by the Convex action voice:cartesiaToken.
-// The API key never reaches the app. Any failure falls back to the typed box.
+// Speech input everywhere (extension side panel and desktop app): JustAsk listens only through
+// Cartesia's streaming STT WebSocket (docs.cartesia.ai, API version 2026-08-14), with a short-lived
+// access token minted by the Convex action voice:cartesiaToken. The API key never reaches the client.
+// Any failure falls back to the typed box.
+import { NO_ACCOUNT, type TokenSource } from "./tokens";
 
 export const CARTESIA_STT_WS = "wss://api.cartesia.ai/stt/websocket";
 export const CARTESIA_VERSION = "2026-08-14";
@@ -12,6 +13,7 @@ export const STT_MESSAGES = {
   unavailable: "Voice isn't working right now. Please type instead.",
   micOff: "The microphone is off. You can type instead.",
   noSpeech: "I didn't hear anything. Try again, or type it.",
+  noAccount: "Voice works once your JustAsk is set up. Open Settings to set it up, or type instead.",
 } as const;
 
 /** Build the STT WebSocket URL. `ink-whisper` finalizes by itself after a pause, which suits press-to-talk. */
@@ -78,19 +80,32 @@ export interface ListenHandlers {
   onEnd: () => void;
 }
 
-const WORKLET = `class JaPcm extends AudioWorkletProcessor {
+/** The microphone worklet: posts each 128-sample block of channel 0 to the page. */
+export const PCM_WORKLET_SOURCE = `class JaPcm extends AudioWorkletProcessor {
   process(inputs) { const ch = inputs[0] && inputs[0][0]; if (ch) this.port.postMessage(ch.slice(0)); return true; }
 }
 registerProcessor("ja-pcm", JaPcm);`;
 
+export interface ListenerOptions {
+  /**
+   * URL of a file holding the PCM worklet (`PCM_WORKLET_SOURCE`). Extension pages need this: their
+   * content security policy blocks `blob:` scripts. Default: a blob URL (desktop WebView).
+   */
+  workletUrl?: string;
+  limits?: { maxMs: number; noSpeechMs: number; closeWaitMs: number };
+}
+
 /** Press-to-talk listener over Cartesia STT. One utterance per `listen`; pressing again finishes it. */
 export class CartesiaListener {
   private active: { finish: () => void; abort: () => void } | null = null;
+  private limits: { maxMs: number; noSpeechMs: number; closeWaitMs: number };
 
   constructor(
-    private getToken: () => Promise<string | null>,
-    private limits = { maxMs: 15_000, noSpeechMs: 8_000, closeWaitMs: 2_500 },
-  ) {}
+    private tokens: TokenSource,
+    private opts: ListenerOptions = {},
+  ) {
+    this.limits = opts.limits ?? { maxMs: 15_000, noSpeechMs: 8_000, closeWaitMs: 2_500 };
+  }
 
   static supported(): boolean {
     return (
@@ -174,13 +189,14 @@ export class CartesiaListener {
 
     // 1. Token from Convex.
     let token: string | null = null;
+    let noAccount = false;
     try {
-      token = await this.getToken();
-    } catch {
-      token = null;
+      token = await this.tokens.get();
+    } catch (e) {
+      noAccount = (e as Error)?.message === NO_ACCOUNT;
     }
     if (ended) return;
-    if (!token) return end({ error: STT_MESSAGES.unavailable });
+    if (!token) return end({ error: noAccount ? STT_MESSAGES.noAccount : STT_MESSAGES.unavailable });
 
     // 2. Microphone.
     try {
@@ -228,9 +244,12 @@ export class CartesiaListener {
     // 4. Audio: 16 kHz mono, ~100 ms chunks of Int16 PCM.
     try {
       ctx = new AudioContext({ sampleRate: STT_SAMPLE_RATE });
-      const url = URL.createObjectURL(new Blob([WORKLET], { type: "application/javascript" }));
-      await ctx.audioWorklet.addModule(url);
-      URL.revokeObjectURL(url);
+      if (this.opts.workletUrl) await ctx.audioWorklet.addModule(this.opts.workletUrl);
+      else {
+        const url = URL.createObjectURL(new Blob([PCM_WORKLET_SOURCE], { type: "application/javascript" }));
+        await ctx.audioWorklet.addModule(url);
+        URL.revokeObjectURL(url);
+      }
       if (ended || !ctx || !stream) return;
       const src = ctx.createMediaStreamSource(stream);
       const node = new AudioWorkletNode(ctx, "ja-pcm");

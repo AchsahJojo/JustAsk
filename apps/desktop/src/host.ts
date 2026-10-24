@@ -4,8 +4,7 @@ import { SessionController, type SessionView } from "@justask/core";
 import type { EventType, Recipe } from "@justask/shared";
 import { NativeBridge } from "./bridge";
 import { HttpPlanner } from "./planner";
-import { BrowserSpeech } from "./speech";
-import { CartesiaListener } from "./stt";
+import { CartesiaListener, CartesiaSpeech, CartesiaTokens, NO_ACCOUNT } from "@justask/voice";
 import { DesktopBackend, type PendingHandoff, type PendingTask } from "./backend";
 import { deviceInfo, detectPlatform, newMachineId, type DeviceInfo } from "./device";
 import { handoffUrl, isOpenableUrl } from "./links";
@@ -29,7 +28,12 @@ const RUNNING = (phase: SessionView["phase"]) => !["idle", "done", "blocked"].in
 export class DesktopHost {
   readonly backend = new DesktopBackend(import.meta.env.VITE_CONVEX_URL);
   readonly bridge = new NativeBridge();
-  readonly speech = new BrowserSpeech();
+  /** One Cartesia token for listening and speaking (voice:cartesiaToken). JustAsk's voice is Cartesia only. */
+  readonly voiceTokens = new CartesiaTokens(async () => {
+    if (!this.hs.token) throw new Error(NO_ACCOUNT);
+    return this.backend.cartesiaToken(this.hs.token);
+  });
+  readonly speech = new CartesiaSpeech(this.voiceTokens, { voiceId: import.meta.env.VITE_CARTESIA_VOICE_ID || undefined });
   readonly listener: CartesiaListener;
   readonly controller: SessionController;
 
@@ -46,7 +50,7 @@ export class DesktopHost {
   private disconnectBridge: (() => void) | null = null;
 
   constructor() {
-    this.listener = new CartesiaListener(async () => (this.hs.token ? this.backend.cartesiaToken(this.hs.token) : null));
+    this.listener = new CartesiaListener(this.voiceTokens);
     this.controller = new SessionController({
       bridge: this.bridge,
       planner: new HttpPlanner(() => import.meta.env.VITE_PLANNER_URL || "http://localhost:8787"),
@@ -122,6 +126,7 @@ export class DesktopHost {
 
   async signOut() {
     await this.controller.stop();
+    this.voiceTokens.clear();
     this.goOffline();
     await save({ deviceToken: null, displayName: "" });
     this.set({ token: null, displayName: "", tasks: [] });

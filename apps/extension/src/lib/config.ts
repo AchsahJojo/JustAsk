@@ -20,7 +20,7 @@ export const DEFAULTS: Settings = {
   displayName: "",
   setupDone: false,
   consent: { notifyOnComplete: false, notifyOnStuck: false },
-  voice: "browser",
+  voice: "cartesia",
   rate: 0.9,
   showMeInstead: false,
 };

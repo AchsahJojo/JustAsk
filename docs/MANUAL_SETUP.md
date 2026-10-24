@@ -11,7 +11,7 @@ Status: the Chrome extension, the step loop, the page agent, the Convex backend,
 | **Anthropic API key** | Convex env: `npx convex env set ANTHROPIC_API_KEY sk-ant-…` (run in `packages/backend`) | One person | Never put it in the extension, `.env` files for the extension, or the caregiver app. For local dev only, you can `export ANTHROPIC_API_KEY=…` before `npm run planner:dev`. |
 | **Convex account + project** | `cd packages/backend && npx convex dev` (log in when asked) | One person | This creates the project and writes `packages/backend/.env.local`. The repo was tested against an anonymous *local* Convex deployment only. |
 | **Extension env** | `apps/extension/.env` (copy `.env.example`) | Everyone who builds | `VITE_PLANNER_URL` = the Convex **HTTP actions** URL (`https://<name>.convex.site`). `VITE_CONVEX_URL` = the Convex **client** URL (`https://<name>.convex.cloud`). Both are public, not secrets. |
-| **Cartesia API key** (later) | Convex env: `CARTESIA_API_KEY` | B | Not used yet. Voice is the browser's `speechSynthesis` and Web Speech. See §4. |
+| **Cartesia API key** | Convex env: `CARTESIA_API_KEY` | A | Required for any voice. JustAsk speaks (Sonic) and listens (`ink-whisper`) only through Cartesia, in the extension and the desktop app. Already set on Xander's dev deployment; a local Convex needs `npx convex env set CARTESIA_API_KEY …`. Optional: `VITE_CARTESIA_VOICE_ID` in `apps/extension/.env` / `apps/desktop/.env` to pick a voice. |
 | **Convex Auth keys** | Convex env: `JWT_PRIVATE_KEY`, `JWKS`, `SITE_URL` (run in `packages/backend`) | One person, once per deployment | Caregiver sign-in (email + password). Easiest: `npx @convex-dev/auth` and follow the prompts. `SITE_URL` is the caregiver app's URL (`http://localhost:5176` locally). Already set on the local anonymous deployment. |
 | **Caregiver app env** | `apps/caregiver/.env.local` (copy `.env.example`) | Everyone who runs it | `VITE_CONVEX_URL` = the Convex **client** URL. `VITE_EXTENSION_URL` = the Chrome Web Store link once published. Public, not secrets. |
 | Chrome Web Store developer account | — | Later | $5 one-time. Needed for Phase 1 publishing. |
@@ -55,7 +55,9 @@ Run these in a real, headed Chrome with the production build (`apps/extension/.o
 ### Voice
 - [ ] The microphone works in the side panel after it was allowed on the setup page. Say "help me refill my prescription".
 - [ ] While the user speaks, the orb shows the listening ripples. "Say that again", "stop" and "I'm stuck" work by voice.
-- [ ] Text-to-speech uses a clear US English voice at a slow rate. Pick a voice on the senior's actual machine. The choice logic is in `apps/extension/src/lib/speech.ts`.
+- [ ] JustAsk's voice is Cartesia Sonic, clear and calm at the Normal speed, and Slower / Faster in settings change it. Pick the voice in Cartesia's voice library and set `VITE_CARTESIA_VOICE_ID`.
+- [ ] Press the mic while JustAsk is talking: it goes quiet, listens, and says the next line only after you stop.
+- [ ] Before the browser has an account, pressing the mic says voice works once JustAsk is set up (captions still show).
 - [ ] Recognition is not muted while JustAsk speaks yet (planned). Check whether JustAsk hears itself on laptop speakers.
 
 ### Tabs and pages (plan §3.5) — partly automated
@@ -76,7 +78,7 @@ Run these in a real, headed Chrome with the production build (`apps/extension/.o
 - [ ] Autofill — Chrome autofill on an address form advances typing steps.
 
 ### Edge (spike 6, feature freeze)
-- [ ] In `apps/extension`, run `npx wxt build -b edge`. Load `.output/edge-mv3` unpacked in Edge, and check that the side panel and Web Speech work.
+- [ ] In `apps/extension`, run `npx wxt build -b edge`. Load `.output/edge-mv3` unpacked in Edge, and check that the side panel and Cartesia voice (speaking and listening) work.
 
 ### Accessibility
 - [ ] Zoom the panel to 200%. Nothing is cut off.
@@ -92,7 +94,6 @@ Run these in a real, headed Chrome with the production build (`apps/extension/.o
 
 - **Caregiver password reset.** There is no email provider, so "forgot password" isn't offered. Add `reset` to the `Password` provider in `convex/auth.ts` with Resend (needs `AUTH_RESEND_KEY`).
 - **Caregiver app deploy** (Vercel). `npm run build -w @justask/caregiver` writes `apps/caregiver/dist`. Set `SITE_URL` in Convex to the deployed URL.
-- **Cartesia**: Sonic TTS (via a token minted by a Convex action) and STT for Brave, Firefox and Safari. They plug in behind `SpeechOut` / `BrowserListener`.
 - **Dock mode** (Phase 1): the in-page panel for Opera, Safari and popup windows. The panel already accepts `?tabId=` and `sidepanel.html` is web-accessible.
 - **Firefox and Safari** builds compile (`wxt build -b firefox`) but are not tested.
 - `matchOriginAsFallback` for `about:blank` / `srcdoc` frames: `executeScript` doesn't support it. A registered content script would.
@@ -133,7 +134,7 @@ Run these in a real, headed Chrome with the production build (`apps/extension/.o
 
 ## 6. What is already tested (and how to rerun)
 
-- `npm test` — 387 unit tests (including the `convex-test` backend suites): StepResponse schema + validator rules, scanner (numbering, hidden elements, `.value` never used as a label, the **sentinel leak test** across every field type, select options cap, open and closed shadow roots, the modal-only rule, ranking before the 150 cap, duplicate collapse), fingerprint rebinding, click/typing/select/lost observers, the controller loop (multi-step, re-plan then block, risk confirm, suspicious, clarify, frames, wrong click, stop with a late reply, password line), and the `planStep` request shape (beta header, `fallbacks`, effort, schema, caching, no sampling params or `thinking`, refusal and `max_tokens` handling).
+- `npm test` — 407 unit tests (including the `convex-test` backend suites): StepResponse schema + validator rules, scanner (numbering, hidden elements, `.value` never used as a label, the **sentinel leak test** across every field type, select options cap, open and closed shadow roots, the modal-only rule, ranking before the 150 cap, duplicate collapse), fingerprint rebinding, click/typing/select/lost observers, the controller loop (multi-step, re-plan then block, risk confirm, suspicious, clarify, frames, wrong click, stop with a late reply, password line), and the `planStep` request shape (beta header, `fallbacks`, effort, schema, caching, no sampling params or `thinking`, refusal and `max_tokens` handling).
 - `npm run test:e2e` — 15 Puppeteer scenarios (mock planner on :8788, so a dev planner on :8787 never answers them) in Chrome for Testing with the real extension: the full pharmacy refill (4 clicks, wrong click, done), 500 ms rerenders, open + closed shadow roots, same- and cross-origin iframes plus the money confirmation, typing + password + select with the **sentinel leak test against the planner's received requests**, the `<dialog>` modal-only rule, new-tab follow, 1,000 links, `chrome://` pages, the setup page, and the production build (no pre-granted host access). Screenshots land in `e2e/screenshots/`.
 - `CONVEX_CODE=<code> node e2e/run.mjs accounts` — pairing through the setup page against local Convex, the task card, the recipe `startUrl`, a completed task, and the completion note in Convex.
 - `npm run test:convex` — pairing (one use only), device token checks, pending tasks, events closing a task, and the `/plan` HTTP route.

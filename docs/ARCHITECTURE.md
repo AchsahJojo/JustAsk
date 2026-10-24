@@ -82,8 +82,9 @@ Only Convex calls the Claude API, in [`packages/backend/lib/planStep.ts`](../pac
 | `packages/page-agent` | DOM scanner and ranker, fingerprint, overlay, and `PageAgent` (observers, `waitForChange`) | content script, happy-dom tests | shared |
 | `packages/backend` | Convex schema and functions; `lib/planStep.ts` (the Claude call); `dev/server.ts` (local planner, with Claude or the scripted mock) | Convex / Node | shared, core |
 | `apps/extension` | WXT shell: `entrypoints/` (background, content, sidepanel, setup); `lib/` (`SessionHost`, `ExtensionBridge`, `HttpPlanner`, the Convex client, speech, config); `ui/`; `platform/` | browser | all packages |
+| `packages/voice` | JustAsk's voice, Cartesia only: `CartesiaSpeech` (Sonic TTS over WebSocket, Web Audio playback), `CartesiaListener` (`ink-whisper` STT, press-to-talk), `CartesiaTokens` (one cached token for both) | side panel, desktop webview | core |
 | `apps/fixtures`, `e2e/` | test sites on :5174 and :5175; `mock-script.json`; Puppeteer e2e | Node | — |
-| `apps/desktop` (target) | Tauri app: React UI, `NativeBridge` (TypeScript), Rust native layer | Windows / macOS | shared, core |
+| `apps/desktop` (target) | Tauri app: React UI, `NativeBridge` (TypeScript), Rust native layer | Windows / macOS | shared, core, voice |
 | `apps/caregiver` (teammates) | caregiver web app | browser | shared |
 
 ## 5. One step, end to end
@@ -266,8 +267,12 @@ apps/desktop/
 - Secure fields are never set.
 
 **Voice**
-- Web Speech recognition doesn't work in WebView2 or WKWebView. Use Cartesia STT, with a token minted by a Convex action (`CARTESIA_API_KEY` is already set in Convex env).
-- Text-to-speech uses `speechSynthesis`.
+- JustAsk's voice is **Cartesia only**, in the desktop app and the extension alike (`packages/voice`).
+  - **Listening:** Cartesia STT (`ink-whisper`), press-to-talk, 16 kHz PCM from an AudioWorklet. The extension ships the worklet as `public/ja-pcm-worklet.js`, because extension pages block `blob:` scripts.
+  - **Speaking:** Cartesia Sonic (`sonic-3`) over the TTS WebSocket. One request per line, raw float PCM, played gap-free with Web Audio. The user's speed setting becomes `generation_config.speed`. Stop and new lines send `cancel` for the old context.
+  - **Token:** one short-lived token (10 minutes, STT + TTS grants) from the Convex action `voice:cartesiaToken` is shared by both. `CARTESIA_API_KEY` lives only in Convex env. Before an install has an account there is no token: captions still show every line, and the mic says voice works once JustAsk is set up.
+  - **Voice:** `VITE_CARTESIA_VOICE_ID` at build time; default `DEFAULT_VOICE_ID` in `packages/voice/src/tts.ts`.
+  - The mic never hears JustAsk: spoken lines are held while it is open.
 
 **Handoffs: how the extension and the desktop app work together**
 

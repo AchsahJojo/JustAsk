@@ -26,7 +26,7 @@ A caregiver is optional. When there is one, the caregiver can set JustAsk up for
 
 ### Chrome extension (`apps/extension`)
 - **Side panel:**
-  - voice or typed requests
+  - voice (Cartesia, listening and speaking) or typed requests
   - the step loop with an orb, spoken captions, Say that again, I'm stuck and Stop
   - a big red Stop while JustAsk acts
 - **Drive mode:**
@@ -85,7 +85,7 @@ A caregiver is optional. When there is one, the caregiver can set JustAsk up for
   - Ask window with the orb, a tray menu, and Welcome and Settings screens
   - pairing (create an account, or link with a code)
   - a Convex client, OS task alerts and handoffs
-  - Cartesia speech-to-text (token minted by Convex)
+  - Cartesia voice for listening and speaking (`packages/voice`, token minted by Convex)
 - **`NativeBridge`:** the same `PageBridge` the extension uses, over Tauri commands.
 - **Windows UI Automation** (`src-tauri/src/native/windows.rs`):
   - scans the foreground window
@@ -115,17 +115,19 @@ A caregiver is optional. When there is one, the caregiver can set JustAsk up for
 ### Shared packages
 - `packages/shared`: Zod `StepResponse` (single source for the JSON Schema), `checkStep`, message and API types, caregiver task limits.
 - `packages/core`: `SessionController` (plan → check → act or guide → verify), the prompt, spoken lines and voice commands. No browser APIs.
+- `packages/voice`: JustAsk's voice, **Cartesia only**: Sonic TTS and `ink-whisper` STT over WebSockets with one shared short-lived token, used by the extension and the desktop app. No browser speech APIs anywhere.
 - `packages/page-agent`: scanner, visibility, sensitive-field classifier, the `act` executor, `watch`, and fingerprint rebinding. DOM only.
 
 ### Tests and tooling
 | Command | What | Status |
 |---|---|---|
-| `npm test` | 387 unit tests (Vitest), including the convex-test backend suites | passing |
+| `npm test` | 407 unit tests (Vitest), including the convex-test backend suites | passing |
 | `npm run test:e2e` | 15 Puppeteer scenarios with the real extension and the mock planner on :8788 | passing |
 | `CONVEX_CODE=… npm run test:e2e` | adds pairing, task card, recipe and completion against local Convex | passing |
 | `npm run test:accounts` | accounts against local Convex (auth, merge, helper codes, Show me instead, task list) | passing |
 | `npm run test:convex` | pairing, tasks and the `/plan` route against local Convex | passing |
 | `npm run test:caregiver` | caregiver app end to end in Puppeteer (desktop, phone, dark mode) | passing |
+| `CONVEX_URL=… npm run test:voice` | live Cartesia check: Convex mints a token, Sonic speaks a line, STT accepts audio (needs `CARTESIA_API_KEY` on that deployment) | run against Xander's deployment |
 | `npm run eval` / `eval:capture` | prompt accuracy and latency on 17 cases (pharmacy, gap fixtures, 3 live sites) | built; needs an API key |
 | `npm run typecheck` | all workspaces | 0 errors |
 
@@ -219,7 +221,7 @@ Fixed since `docs/possible_bugs.md` was written:
 Fixed in this pass (2026-10-24):
 - **`/plan` and Convex logs:** the HTTP action now calls the planner in-process (`runPlan` in `convex/plan.ts`) instead of `runAction`, so page text is never a function argument Convex could record.
 - **Dev planner:** it keeps request bodies and serves `GET /__received` only in mock mode (what e2e uses). With Claude it keeps nothing.
-- **Voice:** JustAsk's spoken lines wait while the mic is open (`BrowserSpeech.hold`).
+- **Voice:** JustAsk's spoken lines wait while the mic is open (`CartesiaSpeech.hold`).
 - **Colors:** `colorName` reads `oklch()`, `oklab()`, `lab()`, `lch()` and `color()`, so "the blue button" works on modern CSS.
 - **Iframes:** over the 150 cap, elements from every frame are ranked together (`crossFrameScore`), so a payment or sign-in iframe's button isn't crowded out. Child frames under 50×50 skip themselves.
 - **Shadow DOM:** dialog detection, page text and the main heading look inside web components (`queryAllComposed`), and a component's button gets the heading around it. The main heading now prefers the h1 over an earlier h2.

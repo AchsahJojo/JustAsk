@@ -37,8 +37,14 @@ export function Ask({ host, hs }: { host: DesktopHost; hs: HostState }) {
     setNote("");
     setHeard("");
     setListening(true);
+    // The mic never hears JustAsk: lines wait until the user stops talking.
+    host.speech.hold(true);
+    let said = false;
     void host.listener.listen({
-      onInterim: setHeard,
+      onInterim: (t) => {
+        if (t.trim()) said = true;
+        setHeard(t);
+      },
       onFinal: (t) => {
         setHeard("");
         onText(t);
@@ -47,7 +53,10 @@ export function Ask({ host, hs }: { host: DesktopHost; hs: HostState }) {
         setNote(msg);
         typedRef.current?.focus();
       },
-      onEnd: () => setListening(false),
+      onEnd: () => {
+        host.speech.hold(false, said);
+        setListening(false);
+      },
     });
   };
 

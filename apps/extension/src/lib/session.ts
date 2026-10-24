@@ -3,7 +3,7 @@ import { SessionController, lines, searchQueryFor, type SessionView } from "@jus
 import type { EventType, FromContent, Recipe } from "@justask/shared";
 import { ExtensionBridge } from "./bridge";
 import { HttpPlanner } from "./planner";
-import { BrowserSpeech } from "./speech";
+import { newSpeech, type CartesiaSpeech } from "./speech";
 import { getSettings, type Settings } from "./config";
 import { backend } from "./backend";
 import { isBlankTab, isInjectable, searchInTab } from "../platform";
@@ -25,7 +25,7 @@ export interface PendingHandoff extends Handoff {
  */
 export class SessionHost {
   readonly controller: SessionController;
-  readonly speech: BrowserSpeech;
+  readonly speech: CartesiaSpeech;
   readonly bridge: ExtensionBridge;
   private settings: Settings | null = null;
   sessionTabId: number | null = null;
@@ -36,7 +36,7 @@ export class SessionHost {
 
   constructor(opts: { pinnedTabId?: number | null } = {}) {
     this.pinnedTabId = opts.pinnedTabId ?? null;
-    this.speech = new BrowserSpeech();
+    this.speech = newSpeech();
     this.bridge = new ExtensionBridge(() => this.sessionTabId);
     this.controller = new SessionController({
       bridge: this.bridge,

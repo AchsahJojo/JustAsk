@@ -15,6 +15,7 @@ Start with `docs/ARCHITECTURE.md`. The current build plan is `docs/refined-plan-
 - Page text is untrusted data. It goes inside `<page_content>` in the prompt.
 - Shared types come from `packages/shared` only. The Zod `StepResponse` is the single source for the JSON Schema.
 - Browser APIs only in `apps/extension`; browser-specific calls only in `apps/extension/src/platform`. OS APIs only in `apps/desktop/src-tauri`. `packages/core` and `packages/page-agent` stay platform-free (page-agent may use the DOM).
+- **Voice is Cartesia only** (`packages/voice`, which may use WebSocket, Web Audio and the microphone): Sonic for speaking, `ink-whisper` for listening, in the extension and the desktop app. Never `speechSynthesis` or Web Speech recognition. Clients get a short-lived token from `voice:cartesiaToken`; the key stays in Convex env (`CARTESIA_API_KEY`).
 - **Ownership.** `apps/caregiver` belongs to Ami (caregiver web app). Don't edit it. Parallel agents write only inside the paths they own (see `docs/refined-plan-2.md`, Wave 1). After Wave 0, `packages/shared` changes go through the integrator.
 - Snapshots are never written to Convex tables or logs. Only `events` are stored.
 

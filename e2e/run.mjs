@@ -356,13 +356,16 @@ const scenarios = {
     await closeSession(s);
   },
 
-  async "start screen: example requests when nothing is on the user's list"() {
+  async "start screen: example requests; the Cartesia mic explains it needs setup"() {
     // A session left mid-way shows "Keep going?" instead of the examples.
     await sw.evaluate(() => chrome.storage.local.remove("resume"));
     const s = await openSession("/");
     await s.panel.waitForSelector(".ideas .idea");
     assert.ok((await s.panel.$$(".ideas .idea")).length >= 3);
     await shot(s.panel, "02b-panel-ideas");
+    // Voice is Cartesia only: before this browser has an account there's no token, and the mic says so plainly.
+    await s.panel.click("button.ask");
+    await s.panel.waitForFunction(() => document.querySelector(".note")?.textContent.includes("Voice works once your JustAsk is set up"), { timeout: 8000, polling: 100 });
     await closeSession(s);
   },
 

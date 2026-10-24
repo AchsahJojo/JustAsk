@@ -10,7 +10,7 @@ test("defaults", async () => {
   const a = await newAccount(t);
   expect(await t.query(api.prefs.get, { token: a })).toEqual({
     displayName: "Margaret",
-    voice: "browser",
+    voice: "cartesia",
     rate: 1,
     showMeInstead: false,
     consent: { notifyOnComplete: false, notifyOnStuck: false },
@@ -22,7 +22,7 @@ test("caregiver-created seniors (no prefs field) get defaults too", async () => 
   const { as } = await caregiver(t);
   const { code } = await as.mutation(api.devices.createSeniorWithCode, { name: "M", displayName: "Mom", relation: "son" });
   const res = await t.mutation(api.devices.redeemCode, { code });
-  expect(await t.query(api.prefs.get, { token: res!.token })).toMatchObject({ voice: "browser", rate: 1, showMeInstead: false });
+  expect(await t.query(api.prefs.get, { token: res!.token })).toMatchObject({ voice: "cartesia", rate: 1, showMeInstead: false });
 });
 
 test("set merges and syncs across installs", async () => {
@@ -30,7 +30,7 @@ test("set merges and syncs across installs", async () => {
   const a = await newAccount(t);
   const b = await linkDevice(t, a);
   const out = await t.mutation(api.prefs.set, { token: a, rate: 0.8, showMeInstead: true });
-  expect(out).toMatchObject({ voice: "browser", rate: 0.8, showMeInstead: true });
+  expect(out).toMatchObject({ voice: "cartesia", rate: 0.8, showMeInstead: true });
   await t.mutation(api.prefs.set, { token: b, voice: "cartesia", consent: { notifyOnComplete: true, notifyOnStuck: true } });
   expect(await t.query(api.prefs.get, { token: a })).toEqual({
     displayName: "Margaret",
