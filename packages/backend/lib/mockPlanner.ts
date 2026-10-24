@@ -11,7 +11,10 @@ export interface MockRule {
   unlessFilled?: boolean;
   /** Only when the history contains this text. */
   afterHistory?: string;
-  /** `text` may be left out of the script; it defaults to null. */
+  /**
+   * Any step kind, including `act` (drive mode). `text` is what an act + type step types; it
+   * may be left out of the script and defaults to null. Rules that fail `checkStep` are skipped.
+   */
   step: Omit<StepResponse, "target" | "text"> & { text?: string | null; targetText?: string };
 }
 

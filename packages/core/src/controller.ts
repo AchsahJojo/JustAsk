@@ -1,7 +1,9 @@
-import { checkStep, type ActResult, type ActSpec, type EventType, type FrameScan, type FromContent, type HighlightSpec, type PageSnapshot, type PlanRequest, type PlanResponse, type Recipe, type StepResponse } from "@justask/shared";
+import { checkStep, type ActResult, type ActSpec, type EventType, type FrameScan, type FromContent, type HighlightSpec, type PageSnapshot, type PlanRequest, type PlanResponse, type Recipe, type SnapshotElement, type StepResponse } from "@justask/shared";
 import { mergeScans, type TargetRef } from "./merge";
 import * as L from "./lines";
 import { parseCommand } from "./commands";
+import { gateAct, herWords } from "./drive";
+import { snapshotSignature } from "./signature";
 
 export type Phase = "idle" | "planning" | "confirming" | "acting" | "guiding" | "verifying" | "asking" | "waiting" | "paused" | "done" | "blocked";
 
@@ -17,7 +19,10 @@ export interface SessionView {
   note: string;
   pauseReason: "other-tab" | "tab-closed" | "cant-see" | "no-access" | null;
   taskId: string | null;
+  /** Steps she did herself (guide steps). */
   clicks: number;
+  /** Steps JustAsk did for her (act steps that succeeded). */
+  actions: number;
 }
 
 export interface PageBridge {
@@ -72,7 +77,18 @@ export const DEFAULT_TIMING = {
   quietChangeMs: 700,
   maxSteps: 40,
   wrongDebounceMs: 250,
+  /** Drive mode: the pause between announcing an action and doing it (Stop cancels it). */
+  actBeatMs: 1_000,
+  /** Waiting phase: how often to re-scan for a change. */
+  waitRecheckMs: 1_500,
+  /** Waiting phase: at most this many automatic re-plans per wait… */
+  waitMaxReplans: 4,
+  /** …within this window; then it asks "Do you see it now?" and stops polling. */
+  waitWindowMs: 20_000,
 };
+
+/** Consecutive click/submit actions that changed nothing before the session switches to guide mode. */
+const NO_CHANGE_LIMIT = 3;
 
 const INITIAL: SessionView = {
   phase: "idle",
@@ -85,12 +101,29 @@ const INITIAL: SessionView = {
   pauseReason: null,
   taskId: null,
   clicks: 0,
+  actions: 0,
 };
+
+/** What a "yes" in the confirming phase does next. */
+type Pending = "guide" | "act" | "risk-text" | "text";
+
+interface WaitState {
+  /** kind + say of the current wait step, so an identical re-plan stays quiet. */
+  key: string;
+  /** Signature of the interactive elements when last planned. */
+  sig: string;
+  replans: number;
+  since: number;
+  timer: ReturnType<typeof setTimeout> | null;
+  busy: boolean;
+  again: boolean;
+  gaveUp: boolean;
+}
 
 /**
  * The session state machine and step loop. No browser APIs: everything goes through
  * the injected PageBridge / Planner / SpeechOut, so the same controller runs in the
- * side panel, in the background (dock mode), or in tests.
+ * side panel, in the desktop app, or in tests.
  */
 export class SessionController {
   private view: SessionView = { ...INITIAL };
@@ -108,6 +141,12 @@ export class SessionController {
   private sessionId: string | null = null;
   private lastWrongAt = 0;
   private t: typeof DEFAULT_TIMING;
+  /** Drive mode was switched off for this session (3 actions that changed nothing). */
+  private guideMode = false;
+  private noChange = 0;
+  private pending: Pending | null = null;
+  private waiting: WaitState | null = null;
+  private sleeps = new Set<() => void>();
 
   constructor(private deps: ControllerDeps) {
     this.t = { ...DEFAULT_TIMING, ...deps.timing };
@@ -132,6 +171,7 @@ export class SessionController {
   }
 
   private set(patch: Partial<SessionView>) {
+    if (patch.phase !== undefined && patch.phase !== "waiting") this.leaveWaiting();
     this.view = { ...this.view, ...patch };
     this.deps.store?.save(this.view, { history: this.history, recipe: this.recipe });
     for (const fn of this.listeners) fn(this.view);
@@ -141,13 +181,43 @@ export class SessionController {
     this.deps.speech.speak(text, { interrupt });
   }
 
+  /** A new generation: anything in flight (planner calls, the act beat, wait rechecks) is dropped. */
+  private bump(): number {
+    this.gen++;
+    for (const cancel of [...this.sleeps]) cancel();
+    return this.gen;
+  }
+
+  /** Resolves true after `ms`, or false as soon as a newer generation starts (Stop, pause, a new plan). */
+  private sleep(ms: number, gen: number): Promise<boolean> {
+    return new Promise((resolve) => {
+      const done = () => {
+        clearTimeout(timer);
+        this.sleeps.delete(done);
+        resolve(gen === this.gen);
+      };
+      const timer = setTimeout(done, ms);
+      this.sleeps.add(done);
+    });
+  }
+
+  /** Prefix a history line with the page it happened on. */
+  private onPage(line: string): string {
+    const title = this.snapshot?.title;
+    return title ? `On ${JSON.stringify(title)}: ${line}` : line;
+  }
+
+  private element(n: number | null): SnapshotElement | undefined {
+    return n === null ? undefined : this.snapshot?.elements.find((e) => e.n === n);
+  }
+
   /** Restore after the panel or service worker restarts (state came from storage.session). */
   restore(view: SessionView, history: string[], recipe: Recipe | null) {
-    this.view = { ...view, note: "" };
+    this.view = { ...INITIAL, ...view, note: "" };
     this.history = history;
     this.recipe = recipe;
     for (const fn of this.listeners) fn(this.view);
-    if (["planning", "guiding", "verifying", "confirming"].includes(view.phase)) void this.plan();
+    if (["planning", "guiding", "verifying", "confirming", "acting"].includes(view.phase)) void this.plan();
   }
 
   // ───────────── user actions ─────────────
@@ -158,6 +228,7 @@ export class SessionController {
     this.reset();
     this.recipe = opts.recipe ?? null;
     this.sessionId = opts.sessionId ?? null;
+    if (this.deps.prefs?.().showMeInstead) this.history.push(L.SHOW_ME_NOTE);
     this.set({ ...INITIAL, request: text, taskId: opts.taskId ?? null, stepNo: 1, line: L.FILLER_LINE, phase: "planning" });
     this.say(L.FILLER_LINE);
     await this.plan();
@@ -197,7 +268,7 @@ export class SessionController {
 
   async stop() {
     const wasActive = this.view.phase !== "idle" && this.view.phase !== "done";
-    this.gen++;
+    this.bump();
     this.abort?.abort();
     this.deps.speech.stop();
     await this.deps.bridge.clear();
@@ -224,7 +295,15 @@ export class SessionController {
 
   async confirm(yes: boolean) {
     if (this.view.phase !== "confirming" || !this.step) return;
+    const step = this.step;
+    const pending = this.pending ?? "guide";
+    this.pending = null;
     if (!yes) {
+      if (pending === "text") {
+        // She doesn't want that text typed: she types it herself instead.
+        this.history.push(this.onPage(L.TEXT_DECLINED_NOTE));
+        return this.showGuide(this.asGuide(step, false));
+      }
       this.history.push("She chose not to do that step");
       this.say("Okay, we won't do that.");
       await this.deps.bridge.clear();
@@ -232,7 +311,9 @@ export class SessionController {
       this.set({ phase: "done", line: "Okay, we won't do that. Nothing was sent.", note: "" });
       return;
     }
-    await this.showGuide(this.step);
+    if (pending === "risk-text") return this.askText(step);
+    if (pending === "act" || pending === "text") return this.doAct(step);
+    await this.showGuide(step);
   }
 
   doneTyping() {
@@ -244,7 +325,7 @@ export class SessionController {
 
   pause(reason: NonNullable<SessionView["pauseReason"]>) {
     if (this.view.phase === "idle" || this.view.phase === "done" || this.view.phase === "blocked") return;
-    this.gen++;
+    this.bump();
     this.abort?.abort();
     void this.deps.bridge.clear();
     const line =
@@ -259,7 +340,7 @@ export class SessionController {
     this.set({ phase: "paused", pauseReason: reason, line });
   }
 
-  /** Resume (after "Yes, here", a new followed tab, or returning to the session tab). */
+  /** Resume (after "Yes, here", "I'm ready", a new followed tab, or returning to the session tab). */
   async resume(note?: string) {
     if (this.view.phase !== "paused" && this.view.phase !== "waiting") return;
     if (note) {
@@ -272,7 +353,7 @@ export class SessionController {
   /** A new tab opened from the session tab after a click: move there and keep going. */
   async followedNewTab() {
     if (this.view.phase === "idle" || this.view.phase === "done") return;
-    this.gen++;
+    this.bump();
     this.abort?.abort();
     this.history.push("That opened a new tab");
     this.say(L.NEW_TAB_LINE);
@@ -311,7 +392,8 @@ export class SessionController {
         this.set({ phase: "planning", line: L.LOST_LINE, note: "" });
         return this.plan();
       case "ja:page-changed":
-        if (this.view.phase === "waiting") return this.resume("The page changed while she was waiting");
+        // Routed through the signature check: only a real change in the list re-plans.
+        if (this.view.phase === "waiting") return this.recheck(this.gen);
         return;
     }
   }
@@ -328,15 +410,15 @@ export class SessionController {
 
   private async onStepDone(how: string) {
     if (this.view.phase !== "guiding" || !this.step) return;
-    const gen = ++this.gen;
+    const gen = this.bump();
     const did = this.step.say;
     const clicks = this.view.clicks + 1;
-    this.history.push(`She did: ${JSON.stringify(did)} (${how})`);
+    this.history.push(this.onPage(`She did: ${JSON.stringify(did)} (${how})`));
     const p = L.praise(this.history.length);
     this.say(p);
     await this.deps.bridge.clear();
     this.target = null;
-    this.set({ phase: "verifying", line: `${p} Let me look at the next page…`, clicks, note: "" });
+    this.set({ phase: "verifying", line: `${p} ${L.LOOKING_NEXT}`, clicks, note: "" });
     // Clicks usually change the page; typing and choosing usually don't, so don't make her wait.
     const changed = await this.deps.bridge.waitForChange(how === "click" ? this.t.changeTimeoutMs : this.t.quietChangeMs);
     if (gen !== this.gen) return;
@@ -362,7 +444,7 @@ export class SessionController {
   }
 
   private async plan(genIn?: number) {
-    const gen = genIn ?? ++this.gen;
+    const gen = genIn ?? this.bump();
     this.replans = 0;
     if (this.view.stepNo > this.t.maxSteps) {
       return this.block("This is taking a lot of steps. Let's take a break and ask your helper.");
@@ -438,17 +520,32 @@ export class SessionController {
       return this.block(step.say || L.SUSPICIOUS_LINE);
     }
     switch (step.kind) {
-      // Wave 0 stub: drive mode (docs/ARCHITECTURE.md §11) lands with the core-loop work. Until then act = guide.
       case "act":
-      case "guide":
+      case "guide": {
         this.deps.events?.log("step_shown", { latencyMs });
-        if (step.risk !== "none" && L.RISK_QUESTION[step.risk]) {
-          const q = L.RISK_QUESTION[step.risk];
+        let s = step;
+        let next: Pending = "guide";
+        if (step.kind === "act") {
+          const gate = gateAct(step, this.element(step.target), {
+            showMeInstead: this.deps.prefs?.().showMeInstead ?? false,
+            guideMode: this.guideMode,
+            her: herWords(this.view.request, this.history, this.recipe),
+          });
+          if (gate.mode === "guide") s = this.asGuide(step, gate.reason !== "personal-data");
+          else next = gate.mode === "act" ? "act" : "risk-text";
+        }
+        this.step = s;
+        if (s.risk !== "none" && L.RISK_QUESTION[s.risk]) {
+          const q = L.RISK_QUESTION[s.risk];
+          this.pending = next;
           this.say(q);
-          this.set({ phase: "confirming", line: q, risk: step.risk, expect: step.expect });
+          this.set({ phase: "confirming", line: q, risk: s.risk, expect: s.expect });
           return;
         }
-        return this.showGuide(step);
+        if (next === "guide") return this.showGuide(s);
+        if (next === "risk-text") return this.askText(s);
+        return this.doAct(s);
+      }
       case "clarify":
         this.deps.events?.log("clarify");
         this.say(step.say);
@@ -456,56 +553,227 @@ export class SessionController {
         this.set({ phase: "asking", line: step.say, expect: null, risk: "none" });
         return;
       case "wait":
-        this.say(step.say);
-        this.set({ phase: "waiting", line: step.say, expect: null, risk: "none" });
-        return;
-      case "done":
+        return this.enterWait(step);
+      case "done": {
         this.deps.events?.log("done");
         await this.deps.bridge.clear();
-        this.say(step.say || L.DONE_LINE);
-        this.set({ phase: "done", line: step.say || L.DONE_LINE, expect: null, risk: "none" });
+        const line = this.view.actions > 0 ? L.doneActed(this.view.actions, this.view.clicks) : step.say || L.DONE_LINE;
+        this.say(line);
+        this.set({ phase: "done", line, expect: null, risk: "none" });
         return;
+      }
       case "blocked":
         this.deps.events?.log("blocked");
         return this.block(step.say);
     }
   }
 
-  private async showGuide(step: StepResponse) {
+  // ───────────── drive mode (docs/ARCHITECTURE.md §11) ─────────────
+
+  /**
+   * The same step, for her to do. A first-person act line ("I'm clicking…") becomes a fixed guide
+   * line. With `keepText` false (personal data, or she declined), the text is never said.
+   */
+  private asGuide(step: StepResponse, keepText: boolean): StepResponse {
+    if (step.kind === "guide") return step;
+    const el = this.element(step.target);
+    const sensitive = !!el?.field?.sensitive || el?.field?.kind === "password";
+    const firstPerson = /^\s*I(?:'m|’m| am| will|'ll|’ll)\b/i.test(step.say);
+    const say =
+      firstPerson || !keepText
+        ? L.guideInstead(step.expect, el?.text || el?.label || "", { text: keepText && !sensitive ? step.text : null, option: step.option, sensitive })
+        : step.say;
+    return { ...step, kind: "guide", say, text: null };
+  }
+
+  /** Typed text with words she didn't say: ask first. */
+  private askText(step: StepResponse) {
+    const q = L.typeConfirm(step.text ?? "");
+    this.pending = "text";
+    this.say(q);
+    this.set({ phase: "confirming", line: q, risk: step.risk, expect: step.expect });
+  }
+
+  /** Highlight, announce, wait a beat, then act. Falls back to guiding her when the action fails. */
+  private async doAct(step: StepResponse) {
+    const gen = this.gen;
     const ref = this.map.get(step.target!);
     if (!ref) return this.block(L.TROUBLE_LINE, false);
     this.target = ref;
-    const el = this.snapshot?.elements.find((e) => e.n === step.target);
+    const expect = step.expect as ActSpec["expect"];
+    this.set({ phase: "acting", line: step.say, expect, risk: step.risk, note: "" });
+    const shown = await this.deps.bridge.highlight(ref, { localId: ref.localId, expect, option: step.option, label: L.ACT_LABEL });
+    if (gen !== this.gen) return;
+    if (!shown) return this.lost();
+    this.lostCount = 0;
+    this.say(step.say);
+    if (!(await this.sleep(this.t.actBeatMs, gen))) return;
+
+    let res: ActResult;
+    try {
+      res = await this.deps.bridge.act(ref, { localId: ref.localId, expect, text: expect === "type" ? step.text : null, option: step.option });
+    } catch {
+      res = { ok: false };
+    }
+    if (gen !== this.gen) return;
+    if (!res.ok) {
+      this.history.push(this.onPage(L.ACT_FAILED_NOTE));
+      return this.showGuide(this.asGuide(step, true));
+    }
+
+    this.history.push(this.onPage(`JustAsk did: ${JSON.stringify(step.say)} (${expect})`));
+    await this.deps.bridge.clear();
+    this.target = null;
+    // No praise after JustAsk's own actions.
+    this.set({ phase: "verifying", line: L.LOOKING_NEXT, actions: this.view.actions + 1, note: "" });
+    const strong = expect === "click" || expect === "submit";
+    const changed = await this.deps.bridge.waitForChange(strong ? this.t.changeTimeoutMs : this.t.quietChangeMs);
+    if (gen !== this.gen) return;
+    // Typing, choosing and scrolling often leave the DOM as it was, so only clicks and submits count.
+    if (strong && changed) this.noChange = 0;
+    if (strong && !changed) {
+      this.history.push(L.NO_CHANGE_NOTE);
+      this.deps.events?.log("no_change");
+      if (++this.noChange >= NO_CHANGE_LIMIT && !this.guideMode) {
+        this.guideMode = true;
+        this.history.push(L.GUIDE_MODE_NOTE);
+      }
+    }
+    this.set({ stepNo: this.view.stepNo + 1 });
+    await this.plan(gen);
+  }
+
+  // ───────────── waiting (docs/ARCHITECTURE.md §10 P1) ─────────────
+
+  private enterWait(step: StepResponse) {
+    const key = `${step.kind}|${step.say}`;
+    const w = this.waiting;
+    if (w && this.view.phase === "waiting") {
+      // A re-plan while waiting: the same wait stays quiet.
+      if (w.key !== key) {
+        w.key = key;
+        this.say(step.say);
+        this.set({ line: step.say });
+      }
+      this.scheduleRecheck();
+      return;
+    }
+    this.say(step.say);
+    this.set({ phase: "waiting", line: step.say, expect: null, risk: "none" });
+    this.deps.bridge.watch(true);
+    this.waiting = { key, sig: this.snapshot ? snapshotSignature(this.snapshot) : "", replans: 0, since: Date.now(), timer: null, busy: false, again: false, gaveUp: false };
+    this.scheduleRecheck();
+  }
+
+  private scheduleRecheck() {
+    const w = this.waiting;
+    if (!w || w.gaveUp) return;
+    if (w.timer) clearTimeout(w.timer);
+    const gen = this.gen;
+    w.timer = setTimeout(() => {
+      if (this.waiting !== w) return;
+      w.timer = null;
+      void this.recheck(gen);
+    }, this.t.waitRecheckMs);
+  }
+
+  /** Re-scan while waiting; re-plan only when the interactive elements changed, within the cap. */
+  private async recheck(gen: number): Promise<void> {
+    const w = this.waiting;
+    if (!w || w.gaveUp || gen !== this.gen) return;
+    if (w.busy) {
+      w.again = true;
+      return;
+    }
+    if (w.replans >= this.t.waitMaxReplans || Date.now() - w.since >= this.t.waitWindowMs) return this.giveUpWaiting(w);
+    w.busy = true;
+    try {
+      let ok = false;
+      try {
+        ok = await this.scanPage();
+      } catch {
+        ok = false;
+      }
+      if (gen !== this.gen || this.waiting !== w) return;
+      if (ok) {
+        const sig = snapshotSignature(this.snapshot!);
+        if (sig !== w.sig) {
+          w.sig = sig;
+          w.replans++;
+          this.replans = 0;
+          await this.requestStep(gen, null);
+          if (gen !== this.gen || this.waiting !== w) return;
+        }
+      }
+    } finally {
+      w.busy = false;
+    }
+    if (w.again) {
+      w.again = false;
+      return this.recheck(gen);
+    }
+    this.scheduleRecheck();
+  }
+
+  private giveUpWaiting(w: WaitState) {
+    w.gaveUp = true;
+    if (w.timer) clearTimeout(w.timer);
+    w.timer = null;
+    this.deps.bridge.watch(false);
+    this.say(L.SEE_IT_NOW);
+    this.set({ line: L.SEE_IT_NOW });
+  }
+
+  private leaveWaiting() {
+    const w = this.waiting;
+    if (!w) return;
+    this.waiting = null;
+    if (w.timer) clearTimeout(w.timer);
+    if (!w.gaveUp) this.deps.bridge.watch(false);
+  }
+
+  // ───────────── guiding ─────────────
+
+  private async showGuide(step: StepResponse) {
+    const ref = this.map.get(step.target!);
+    if (!ref) return this.block(L.TROUBLE_LINE, false);
+    this.step = step;
+    this.target = ref;
+    const el = this.element(step.target);
     const shown = await this.deps.bridge.highlight(ref, {
       localId: ref.localId,
       expect: step.expect ?? "click",
       option: step.option,
       label: labelFor(step.expect),
     });
-    if (!shown) {
-      // Resolve failed (rerender with no unique fingerprint match): re-plan once.
-      this.history.push("The page changed before she could click");
-      if (this.lostCount++ < 1) {
-        this.set({ phase: "planning", line: L.LOST_LINE });
-        return this.plan();
-      }
-      return this.block(L.TROUBLE_LINE, false);
-    }
-    const line = step.expect === "type" && el?.field?.kind === "password" && !/can'?t see/i.test(step.say) ? `${step.say} I can't see it.` : step.say;
+    if (!shown) return this.lost();
+    const secret = el?.field?.kind === "password" || !!el?.field?.sensitive;
+    const line = step.expect === "type" && secret && !/can'?t see/i.test(step.say) ? `${step.say} I can't see it.` : step.say;
     this.lostCount = 0;
     this.say(line);
     this.set({ phase: "guiding", line, expect: step.expect, risk: step.risk, note: "" });
   }
 
+  /** Resolve failed (rerender with no unique fingerprint match): re-plan once, then block. */
+  private lost() {
+    this.history.push("The page changed before she could click");
+    if (this.lostCount++ < 1) {
+      this.set({ phase: "planning", line: L.LOST_LINE });
+      return this.plan();
+    }
+    return this.block(L.TROUBLE_LINE, false);
+  }
+
   private async block(line: string, speak = true) {
-    this.gen++;
+    this.bump();
     await this.deps.bridge.clear();
     if (speak || line) this.say(line);
     this.set({ phase: "blocked", line, note: "" });
   }
 
   private reset() {
-    this.gen++;
+    this.bump();
+    this.leaveWaiting();
     this.history = [];
     this.recipe = null;
     this.snapshot = null;
@@ -514,6 +782,9 @@ export class SessionController {
     this.target = null;
     this.replans = 0;
     this.lostCount = 0;
+    this.guideMode = false;
+    this.noChange = 0;
+    this.pending = null;
   }
 }
 
@@ -525,8 +796,10 @@ function labelFor(expect: StepResponse["expect"]): string {
       return "Pick here";
     case "hover":
       return "Point here";
-    case "file":
-      return "Click here";
+    case "scroll":
+      return "Scroll to here";
+    case "submit":
+      return "Press Enter here";
     default:
       return "Click here";
   }

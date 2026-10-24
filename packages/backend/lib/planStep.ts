@@ -3,6 +3,7 @@ import { buildTurn, SYSTEM_PROMPT } from "@justask/core";
 import { StepResponse, stepJsonSchema, type PlanRequest, type PlanResponse } from "@justask/shared";
 
 export const MODEL = "claude-opus-5-5";
+export const EFFORT = "low";
 const STEP_JSON_SCHEMA = stepJsonSchema();
 
 export function makeClient(apiKey: string): Anthropic {
@@ -17,22 +18,37 @@ export interface PlanLog {
   cacheReadTokens?: number;
 }
 
+/** Overrides for the prompt eval (docs/ARCHITECTURE.md §12). Defaults: `claude-opus-5-5`, effort `low`. */
+export interface PlanOptions {
+  model?: string;
+  effort?: "low" | "medium" | "high" | "xhigh" | "max";
+}
+
 /**
  * One planStep call. The snapshot goes to Claude and is never stored or logged here
  * (plan §3.7: no page data in Convex storage); only `PlanLog` numbers come back for logging.
+ * The third argument is either the log callback (existing callers) or the eval options;
+ * options can also come fourth, after a log callback.
  */
-export async function planStep(client: Anthropic, req: PlanRequest, log: (l: PlanLog) => void = () => {}): Promise<PlanResponse> {
+export async function planStep(
+  client: Anthropic,
+  req: PlanRequest,
+  logOrOptions: ((l: PlanLog) => void) | PlanOptions = () => {},
+  options: PlanOptions = {},
+): Promise<PlanResponse> {
+  const log = typeof logOrOptions === "function" ? logOrOptions : () => {};
+  const opts: PlanOptions = typeof logOrOptions === "function" ? options : { ...logOrOptions, ...options };
   const started = Date.now();
   for (let attempt = 0; attempt < 2; attempt++) {
     let res;
     try {
       res = await client.beta.messages.create({
-        model: MODEL,
+        model: opts.model ?? MODEL,
         max_tokens: 4096, // covers low-effort thinking + the reply
         betas: ["server-side-fallback-2026-07-01"],
         fallbacks: "default",
         output_config: {
-          effort: "low",
+          effort: opts.effort ?? EFFORT,
           format: { type: "json_schema", schema: STEP_JSON_SCHEMA },
         },
         system: [{ type: "text", text: SYSTEM_PROMPT, cache_control: { type: "ephemeral" } }],
