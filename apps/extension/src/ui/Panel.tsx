@@ -78,15 +78,25 @@ export function Panel({ pinnedTabId }: { pinnedTabId: number | null }) {
     host.speech.stop();
     setNote("");
     setHeard("");
+    // The mic never hears JustAsk: lines wait until she stops talking.
+    host.speech.hold(true);
+    let said = false;
     listener.listen({
-      onInterim: setHeard,
+      onInterim: (t) => {
+        if (t.trim()) said = true;
+        setHeard(t);
+      },
       onFinal: (t) => {
         setHeard("");
         onText(t);
       },
       onError: setNote,
-      onEnd: () => setListening(false),
+      onEnd: () => {
+        host.speech.hold(false, said);
+        setListening(false);
+      },
     });
+    if (!listener.listening) host.speech.hold(false);
     setListening(listener.listening);
   };
 
@@ -227,7 +237,7 @@ export function Panel({ pinnedTabId }: { pinnedTabId: number | null }) {
               <Orb mode={orbMode} size={phase === "done" ? 132 : 96} />
               <div className="stage-text">
                 {(phase === "guiding" || phase === "acting") && <p className="eyebrow accent">Step {view.stepNo}</p>}
-                {phase === "confirming" && <p className="eyebrow accent">Check first</p>}
+                {phase === "confirming" && <p className="eyebrow accent">{view.scam ? "Safety check" : "Check first"}</p>}
                 <p ref={captionRef} tabIndex={-1} className={`caption ${phase === "planning" || phase === "verifying" ? "dim" : ""}`} aria-live="assertive">
                   {view.line}
                 </p>
@@ -237,18 +247,20 @@ export function Panel({ pinnedTabId }: { pinnedTabId: number | null }) {
 
             {phase === "guiding" && <p className="hint">{view.expect === "type" ? "Type in the box with the glowing outline. I can't see what you type." : "Look for the glowing box. Take your time."}</p>}
             {phase === "acting" && <p className="hint">I'm doing this step for you. Watch the glowing box. Press Stop at any time.</p>}
-            {phase === "done" &&
-              (actions > 0 ? (
-                <p className="hint big">
-                  I did {actions} {actions === 1 ? "step" : "steps"} for you.
-                </p>
-              ) : (
-                <p className="hint big">
-                  You made {view.clicks} {view.clicks === 1 ? "click" : "clicks"} yourself.
-                </p>
-              ))}
+            {phase === "done" && doneSummary(actions, view.guidedSteps ?? view.clicks) && <p className="hint big">{doneSummary(actions, view.guidedSteps ?? view.clicks)}</p>}
 
-            {phase === "confirming" && (
+            {phase === "confirming" && view.scam && (
+              <div className="choices">
+                <button className="btn primary huge" onClick={() => void host.controller.scamAnswer(true)}>
+                  Yes, someone asked me
+                </button>
+                <button className="btn outline huge" onClick={() => void host.controller.scamAnswer(false)}>
+                  No, it's my own idea
+                </button>
+              </div>
+            )}
+
+            {phase === "confirming" && !view.scam && (
               <div className="choices">
                 <button className="btn primary huge" onClick={() => host.controller.confirm(true)}>
                   Yes, go ahead
@@ -314,7 +326,7 @@ export function Panel({ pinnedTabId }: { pinnedTabId: number | null }) {
         <footer className="actions">
           {phase === "done" || phase === "blocked" ? (
             <button className="btn dark huge" onClick={() => host.controller.stop()}>
-              Start again
+              Ask for something else
             </button>
           ) : (
             <>
@@ -333,7 +345,7 @@ export function Panel({ pinnedTabId }: { pinnedTabId: number | null }) {
               </button>
               <div className="row">
                 <button className={`btn soft-btn grow ${listening ? "is-listening" : ""}`} onClick={() => talk((t) => void host.controller.input(t))}>
-                  {listening ? "Listening…" : phase === "asking" ? "Answer out loud" : "Talk to me"}
+                  {listening ? "Listening…" : phase === "asking" ? "Answer out loud" : "Say something"}
                 </button>
                 <button className="btn soft-btn" onClick={() => host.controller.stuck()}>
                   I'm stuck
@@ -431,6 +443,15 @@ function Tasks({ list, onStart, onFinish }: { list: TaskList; onStart: (t: Task)
       )}
     </>
   );
+}
+
+/** "I did 3 steps for you, and you did 2." Nothing when no step happened (so never "0 clicks"). */
+function doneSummary(byMe: number, byHer: number): string {
+  const steps = (n: number) => `${n} ${n === 1 ? "step" : "steps"}`;
+  if (byMe && byHer) return `I did ${steps(byMe)} for you, and you did ${byHer}.`;
+  if (byMe) return `I did ${steps(byMe)} for you.`;
+  if (byHer) return `You did ${steps(byHer)} yourself.`;
+  return "";
 }
 
 function StopIcon() {

@@ -14,7 +14,11 @@ const scriptPath = process.env.JUSTASK_MOCK_SCRIPT ?? fileURLToPath(new URL("../
 const rules: MockRule[] = useClaude ? [] : JSON.parse(readFileSync(scriptPath, "utf8"));
 const client = useClaude ? makeClient(process.env.ANTHROPIC_API_KEY!) : null;
 
-/** Requests received, for e2e assertions (leak test). Only kept in memory, dev only. */
+/**
+ * Requests received, for e2e assertions (leak test). Mock mode only (what e2e runs), in memory:
+ * with Claude, the planner keeps nothing, so real pages never sit behind GET /__received.
+ */
+const keepReceived = !useClaude;
 const received: string[] = [];
 
 const server = createServer(async (req, res) => {
@@ -23,7 +27,7 @@ const server = createServer(async (req, res) => {
   res.setHeader("Access-Control-Allow-Methods", "POST, GET, OPTIONS");
   if (req.method === "OPTIONS") return res.writeHead(204).end();
   if (req.method === "GET" && req.url === "/health") return res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify({ ok: true, mode: useClaude ? "claude" : "mock" }));
-  if (req.method === "GET" && req.url === "/__received") return res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify(received));
+  if (req.method === "GET" && req.url === "/__received" && keepReceived) return res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify(received));
   if (req.method === "POST" && req.url === "/__reset") {
     received.length = 0;
     return res.writeHead(204).end();
@@ -36,7 +40,7 @@ const server = createServer(async (req, res) => {
 
   let body = "";
   for await (const chunk of req) body += chunk;
-  received.push(body);
+  if (keepReceived) received.push(body);
   const parsed = PlanRequest.safeParse(JSON.parse(body || "{}"));
   if (!parsed.success) {
     return res.writeHead(400, { "content-type": "application/json" }).end(JSON.stringify({ ok: false, error: "bad request", retryable: false }));

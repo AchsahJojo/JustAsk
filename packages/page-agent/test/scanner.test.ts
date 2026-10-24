@@ -226,3 +226,49 @@ describe("scanner: search boxes and new roles (P1/P2)", () => {
     expect(els.filter((e) => e.text === "Edit").map((e) => e.nearby)).toEqual(["Medication A", "Medication B"]);
   });
 });
+
+describe("shadow DOM context", () => {
+  it("a dialog inside a web component hides the rest of the page", () => {
+    document.body.innerHTML = `<main><button>Behind the dialog</button><div id="host"></div></main>`;
+    const sr = document.getElementById("host")!.attachShadow({ mode: "open" });
+    sr.innerHTML = `<div role="dialog" aria-modal="true"><h2>Cookies</h2><button>Accept all</button></div>`;
+    const { scan } = scanJson();
+    expect(scan.snapshot.elements.map((e) => e.text)).toEqual(["Accept all"]);
+    expect(scan.snapshot.pageText).toContain("Cookies");
+  });
+
+  it("reads page text and the heading from inside components, and gives a component's button its outside heading", () => {
+    document.body.innerHTML = `<main><section><h2>Lisinopril 10 mg</h2><div id="row"></div></section><div id="title"></div></main>`;
+    document.getElementById("title")!.attachShadow({ mode: "open" }).innerHTML = `<h1>Your prescriptions</h1><p>Two ready to refill.</p>`;
+    document.getElementById("row")!.attachShadow({ mode: "open" }).innerHTML = `<button>Refill</button>`;
+    const { scan } = scanJson();
+    expect(scan.snapshot.heading).toBe("Your prescriptions");
+    expect(scan.snapshot.pageText).toContain("Two ready to refill.");
+    expect(scan.snapshot.elements.find((e) => e.text === "Refill")?.nearby).toBe("Lisinopril 10 mg");
+  });
+});
+
+describe("long dropdowns", () => {
+  const STATES = ["Alabama", "Alaska", "Arizona", "Arkansas", "California", "Colorado", "Connecticut", "Delaware", "Florida", "Georgia", "Hawaii", "Idaho", "Illinois", "Indiana", "Iowa", "Kansas", "Kentucky", "Louisiana", "Maine", "Maryland", "Massachusetts", "Michigan", "Minnesota", "Mississippi", "Missouri", "Montana", "Nebraska", "Nevada", "New Hampshire", "New Jersey", "New Mexico", "New York", "Texas", "Utah", "Vermont"];
+  const html = `<main><label>State <select name="state"><option value="">Select a state</option>${STATES.map((s) => `<option>${s}</option>`).join("")}</select></label></main>`;
+
+  it("sends the first options plus the ones matching her words", () => {
+    document.body.innerHTML = html;
+    const { scan } = scanJson(["ship it to my house", 'She said: "Texas"']);
+    const f = scan.snapshot.elements[0].field!;
+    expect(f.optionCount).toBe(STATES.length + 1);
+    expect(f.options!.slice(0, 10)).toEqual(["Select a state", ...STATES.slice(0, 9)]);
+    expect(f.options).toContain("Texas");
+    expect(f.options!.length).toBeLessThanOrEqual(30);
+  });
+
+  it("without matching words, only the first 10", () => {
+    document.body.innerHTML = html;
+    expect(scanJson(["help me"]).scan.snapshot.elements[0].field!.options).toHaveLength(10);
+  });
+
+  it("a placeholder with no value attribute is not a choice", () => {
+    document.body.innerHTML = `<main><label>State <select><option>Select a state</option><option>Texas</option></select></label></main>`;
+    expect(scanJson().scan.snapshot.elements[0].field!.hasValue).toBe(false);
+  });
+});

@@ -93,6 +93,28 @@ describe("mergeScans", () => {
   });
 });
 
+describe("mergeScans across frames", () => {
+  it("over the cap, ranks all frames together so a child frame's button survives a busy parent", () => {
+    const parent = frame(0, Array.from({ length: 200 }, (_, i) => `Link ${i}`));
+    parent.snapshot.elements.forEach((e) => {
+      e.region = "footer";
+      e.inViewport = false;
+    });
+    const pay = frame(4, ["Pay now"], false);
+    pay.snapshot.elements[0].big = true;
+    const { snapshot, map } = mergeScans([parent, pay], "s", 150);
+    expect(snapshot.elements).toHaveLength(150);
+    const n = snapshot.elements.find((e) => e.text === "Pay now")!.n;
+    expect(map.get(n)).toEqual({ frameId: 4, localId: 1 });
+    expect(n).toBe(150); // still numbered in reading order: top frame first
+    expect(snapshot.omitted.count).toBe(51);
+  });
+  it("under the cap, keeps everything in reading order", () => {
+    const { snapshot } = mergeScans([frame(2, ["X"], false), frame(0, ["A", "B"])], "s");
+    expect(snapshot.elements.map((e) => e.text)).toEqual(["A", "B", "X"]);
+  });
+});
+
 describe("SessionController", () => {
   it("runs a multi-step loop to done", async () => {
     const h = harness([guide(1, "Click A."), guide(2, "Click B."), { kind: "done", say: "All done, you did it!", target: null, expect: null, option: null, text: null, risk: "none" }]);
@@ -528,5 +550,55 @@ describe("start on an empty tab", () => {
     expect(c.state.pauseReason).toBe("blank-tab");
     expect(c.state.line).toMatch(/Look it up/);
     expect(plans.length).toBe(0);
+  });
+});
+
+describe("clear risk questions", () => {
+  it("says exactly what would be pressed and on which site", async () => {
+    const f = frame(0, ["Place order"]);
+    f.snapshot.url = "https://www.pharmacy.example/checkout";
+    const h = harness([guide(1, "Click Place order.", { risk: "money" })], [[f]]);
+    await h.c.start("buy");
+    expect(h.c.state.phase).toBe("confirming");
+    expect(h.c.state.note).toBe("Next, I'd show you “Place order” on pharmacy.example.");
+    expect(h.spoken.at(-1)).toMatch(/^Next, I'd show you “Place order” on pharmacy\.example\. This step will spend money/);
+  });
+});
+
+describe("scam check on her request", () => {
+  it("asks before doing anything; someone asked -> stops with what to do, nothing planned", async () => {
+    const h = harness([guide(1)]);
+    const prepare = vi.fn(async () => null);
+    await h.c.start("email the gift card codes to the man from the IRS", { prepare });
+    expect(h.c.state.phase).toBe("confirming");
+    expect(h.c.state.scam).toBe("gift-card");
+    expect(h.c.state.line).toBe("Did someone call, text or email asking you to do this?");
+    expect(h.c.state.note).toMatch(/never ask to be paid with gift card numbers/);
+    expect(h.spoken.at(-1)).toMatch(/gift card numbers\. Did someone call, text or email/);
+    expect(prepare).not.toHaveBeenCalled();
+    expect(h.plans.length).toBe(0);
+    await h.c.confirm(true); // voice "yes" = someone asked
+    expect(h.c.state.phase).toBe("blocked");
+    expect(h.c.state.line).toMatch(/looks like a scam/);
+    expect(h.c.state.note).toMatch(/call your bank/);
+    expect(h.plans.length).toBe(0);
+    expect(h.events).toEqual(["scam_check", "scam_stopped"]);
+  });
+
+  it("her own idea -> carries on carefully, and Claude is told", async () => {
+    const h = harness([guide(1)]);
+    const prepare = vi.fn(async () => null);
+    await h.c.start("wire $3,000 to my grandson, he's in jail", { prepare });
+    await h.c.scamAnswer(false);
+    expect(prepare).toHaveBeenCalledOnce();
+    expect(h.c.state.phase).toBe("guiding");
+    expect(h.plans[0].history.join("\n")).toMatch(/her own idea/);
+  });
+
+  it("an ordinary request is not asked", async () => {
+    const h = harness([guide(1)]);
+    await h.c.start("buy a gift card for my grandson's birthday");
+    expect(h.c.state.scam).toBeNull();
+    expect(h.c.state.phase).toBe("guiding");
   });
 });

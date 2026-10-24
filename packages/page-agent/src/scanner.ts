@@ -2,7 +2,7 @@ import type { FieldInfo, FieldKind, SnapshotElement } from "@justask/shared";
 import { colorName } from "./color";
 import { fingerprint, normalize } from "./fingerprint";
 import { isSensitive } from "./sensitive";
-import { closestComposed, containsComposed, inViewport, isVisible, pickModal } from "./visibility";
+import { closestComposed, composedParent, containsComposed, inViewport, isVisible, pickModal, queryAllComposed, type ShadowGetter } from "./visibility";
 
 export { closestComposed, isVisible };
 
@@ -246,7 +246,11 @@ function dateHint(kind: FieldKind): string | undefined {
   return DATE_HINTS.date;
 }
 
-export function fieldInfo(el: Element): FieldInfo | undefined {
+/** Most options sent for one long dropdown: the first few, plus every one that matches her words. */
+const LONG_LIST = 30;
+const LONG_LIST_HEAD = 10;
+
+export function fieldInfo(el: Element, ctxWords?: Set<string>): FieldInfo | undefined {
   const kind = fieldKind(el);
   if (!kind) return undefined;
   const info: FieldInfo = {
@@ -257,7 +261,12 @@ export function fieldInfo(el: Element): FieldInfo | undefined {
   if (el instanceof HTMLSelectElement) {
     const labels = Array.from(el.options).map((o) => normalize(o.label || o.text));
     info.optionCount = labels.length;
-    info.options = labels.length > 30 ? labels.slice(0, 10) : labels;
+    // A long list (states, countries) sends the first few options plus any that match words from her
+    // request, the current step or her answers, so the option she wants (for example "Texas") is there.
+    info.options =
+      labels.length > LONG_LIST
+        ? labels.filter((l, i) => i < LONG_LIST_HEAD || (!!ctxWords && [...words(l)].some((w) => ctxWords.has(w)))).slice(0, LONG_LIST)
+        : labels;
   }
   if (el instanceof HTMLInputElement && (el.type === "checkbox" || el.type === "radio")) info.checked = el.checked;
   const hint = dateHint(kind);
@@ -279,8 +288,9 @@ function regionOf(el: Element, modal: Element | null): SnapshotElement["region"]
 
 /** Nearest heading or row text, for context ("Refill" next to "Lisinopril"). */
 export function nearbyText(el: Element, ownText: string): string | null {
-  let cur: Element | null = el.parentElement;
-  for (let depth = 0; cur && depth < 4; depth++, cur = cur.parentElement) {
+  // Composed parents: a button inside a web component still gets the heading around the component.
+  let cur: Element | null = composedParent(el);
+  for (let depth = 0; cur && depth < 4; depth++, cur = composedParent(cur)) {
     const h = cur.querySelector("h1,h2,h3,h4,h5,h6,legend,strong,[role=heading]");
     if (h && !h.contains(el)) {
       const t = clip(safeText(h));
@@ -340,7 +350,7 @@ export function scanDocument(doc: Document, opts: ScanOptions = {}): { elements:
     return true;
   });
 
-  const modal = pickModal(doc);
+  const modal = pickModal(doc, opts.getShadowRoot);
   const win = doc.defaultView ?? window;
 
   const ctxWords = words((opts.context ?? []).join(" "));
@@ -356,7 +366,7 @@ export function scanDocument(doc: Document, opts: ScanOptions = {}): { elements:
     const text = visibleText(el);
     let name = accessibleName(el);
     if (name === text) name = "";
-    const field = fieldInfo(el);
+    const field = fieldInfo(el, ctxWords);
     if (!text && !name && !field) continue;
     const region = inModal ? "modal" : regionOf(el, modal);
     const disabled = isDisabled(el);
@@ -421,11 +431,12 @@ export function scanDocument(doc: Document, opts: ScanOptions = {}): { elements:
 }
 
 /** Page text for context: headings, paragraphs, list items. Never form values. */
-export function pageText(doc: Document, max = 1400): string {
+export function pageText(doc: Document, max = 1400, getShadowRoot?: ShadowGetter): string {
   const seen = new Set<string>();
   const out: string[] = [];
-  const root: ParentNode = pickModal(doc) ?? doc; // same modal choice as scanDocument
-  for (const e of Array.from(root.querySelectorAll("h1,h2,h3,p,li,label,legend,[role=alert],[role=status]"))) {
+  const root = pickModal(doc, getShadowRoot) ?? doc; // same modal choice as scanDocument
+  // Composed: words inside web components (shadow roots) are part of the page she sees.
+  for (const e of queryAllComposed(root, "h1,h2,h3,p,li,label,legend,[role=alert],[role=status]", getShadowRoot)) {
     if (!isVisible(e)) continue;
     if (e.closest("script,style,noscript")) continue;
     if (insideEditable(e) || isEditableHost(e)) continue; // typed text in editors must never be read
@@ -439,10 +450,10 @@ export function pageText(doc: Document, max = 1400): string {
   return out.join("\n").slice(0, max);
 }
 
-export function mainHeading(doc: Document): string {
-  const h = Array.from(doc.querySelectorAll("h1, [role=heading][aria-level='1'], h2")).find(
-    (el) => isVisible(el) && !isEditableHost(el) && !insideEditable(el) && !closestComposed(el, "[role=alert], [role=status]"),
-  );
+export function mainHeading(doc: Document, getShadowRoot?: ShadowGetter): string {
+  const ok = (el: Element) => isVisible(el) && !isEditableHost(el) && !insideEditable(el) && !closestComposed(el, "[role=alert], [role=status]");
+  // The page's h1 wins over an earlier h2 (a section title); h2 only when there is no h1.
+  const h = queryAllComposed(doc, "h1, [role=heading][aria-level='1']", getShadowRoot).find(ok) ?? queryAllComposed(doc, "h2", getShadowRoot).find(ok);
   return h ? clip(safeText(h)) : "";
 }
 

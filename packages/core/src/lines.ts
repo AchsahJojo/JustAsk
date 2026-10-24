@@ -19,6 +19,17 @@ export const TYPING_NOT_DETECTED = "I can't see anything in that box yet. Please
 export const STOPPED_LINE = "Okay, I stopped. Press the big button any time.";
 export const NO_CHANGE_NOTE = "the page did not change after that";
 
+/** Before a risk question: exactly what JustAsk would press next, and where. */
+export const riskDetail = (what: string, place: string, guide: boolean) =>
+  `Next, ${guide ? "I'd show you" : "I'd press"} “${what.slice(0, 60)}”${place ? ` on ${place}` : ""}.`;
+
+// Scam check (scam.ts). Plain, warm, and specific about what to do next.
+export const SCAM_STOP_LINE = "This looks like a scam. Please don't send anything.";
+export const SCAM_STOP_TIP = "Hang up or stop replying, and talk to someone you trust. If you already sent money or codes, call your bank or card company right away. They may be able to stop it.";
+/** History note for Claude when she says it's her own idea. */
+export const SCAM_OWN_IDEA_NOTE =
+  "JustAsk asked whether someone told her to do this (it looked like a common scam) and she said it is her own idea. Still never type gift card numbers, passwords or texted codes for her, and mark any payment step risk money";
+
 export const RISK_QUESTION: Record<string, string> = {
   money: "This step will spend money. Do you want to go ahead?",
   personal_info: "This step shares your personal information. Do you want to go ahead?",

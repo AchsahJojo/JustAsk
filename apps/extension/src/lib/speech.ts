@@ -5,6 +5,9 @@ export class BrowserSpeech implements SpeechOut {
   private voice: SpeechSynthesisVoice | null = null;
   onSpeaking: (on: boolean) => void = () => {};
   muted = false;
+  /** While the microphone is open, lines wait here, so recognition never hears JustAsk ("stop", "again"). */
+  private holding = false;
+  private held: string | null = null;
 
   /** Speaking rate; the panel applies her synced setting. */
   constructor(public rate = 0.9) {
@@ -18,8 +21,27 @@ export class BrowserSpeech implements SpeechOut {
     }
   }
 
+  /**
+   * Hold lines while she is talking; when she stops, say the newest held line. `drop` skips it
+   * (she said something, and JustAsk's answer to that replaces it).
+   */
+  hold(on: boolean, drop = false) {
+    this.holding = on;
+    if (on) {
+      if (typeof speechSynthesis !== "undefined") speechSynthesis.cancel();
+      return;
+    }
+    const t = this.held;
+    this.held = null;
+    if (t && !drop) this.speak(t);
+  }
+
   speak(text: string, opts: { interrupt?: boolean } = {}) {
     if (this.muted || typeof speechSynthesis === "undefined" || !text) return;
+    if (this.holding) {
+      this.held = text;
+      return;
+    }
     if (opts.interrupt !== false) speechSynthesis.cancel();
     const u = new SpeechSynthesisUtterance(text);
     u.rate = this.rate;

@@ -63,6 +63,16 @@ export class PageAgent {
   // ───────────── scan ─────────────
 
   scan(context: string[]): FrameScan {
+    // A child frame smaller than 50×50 (tracking pixels, hidden widgets) has nothing she can use.
+    const win = this.doc.defaultView;
+    if (!this.opts.isTop && win && (win.innerWidth < 50 || win.innerHeight < 50)) {
+      return {
+        frameId: this.opts.frameId,
+        isTop: false,
+        visibleFrames: 0,
+        snapshot: { url: strippedUrl(this.doc.location), title: this.doc.title, heading: "", pageText: "", elements: [], omitted: { count: 0, regions: [] }, surface: "web" },
+      };
+    }
     const recently = this.added;
     const { elements, omitted } = scanDocument(this.doc, {
       getShadowRoot: this.opts.getShadowRoot,
@@ -85,8 +95,8 @@ export class PageAgent {
       snapshot: {
         url: strippedUrl(this.doc.location),
         title: this.doc.title,
-        heading: mainHeading(this.doc),
-        pageText: pageText(this.doc),
+        heading: mainHeading(this.doc, this.opts.getShadowRoot),
+        pageText: pageText(this.doc, undefined, this.opts.getShadowRoot),
         elements: elements.map((e) => e.data),
         omitted,
         surface: "web",

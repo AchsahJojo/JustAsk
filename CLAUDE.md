@@ -7,6 +7,7 @@ Start with `docs/ARCHITECTURE.md`. The current build plan is `docs/refined-plan-
   - `money` / `account_change` / `personal_info` steps ask first. `suspicious` blocks.
   - Never navigate to a URL that Claude produced. Only the recipe's `startUrl`, links on the page, or (on an empty tab) a search for her own words with her default search engine (`chrome.search`).
   - The `sensitive` classification and these gates are deterministic code, never left to Claude.
+  - **Scam check** (`packages/core/src/scam.ts`): a request that looks like a common scam gets one plain question before anything happens. Her answer decides. It never shames her, and nothing she said leaves the device. Plan: `docs/STATUS.md` §5.
 - Claude returns an element **number** for the current `snapshotId`, never a selector.
 - No API keys in extension or web code. Secrets live only in Convex env.
 - No site-specific or app-specific code. Fixtures (`apps/fixtures`, `apps/fixtures/mock-script.json`) and desktop target apps are tests, not special cases.

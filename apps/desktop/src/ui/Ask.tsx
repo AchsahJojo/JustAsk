@@ -113,7 +113,7 @@ export function Ask({ host, hs }: { host: DesktopHost; hs: HostState }) {
               <Orb mode={orbMode} size={phase === "done" ? 132 : 96} />
               <div className="stage-text">
                 {(phase === "guiding" || phase === "acting") && <p className="eyebrow accent">Step {view.stepNo}</p>}
-                {phase === "confirming" && <p className="eyebrow accent">Check first</p>}
+                {phase === "confirming" && <p className="eyebrow accent">{view.scam ? "Safety check" : "Check first"}</p>}
                 <p ref={captionRef} tabIndex={-1} className={`caption ${busy ? "dim" : ""}`} aria-live="assertive">
                   {view.line}
                 </p>
@@ -127,7 +127,18 @@ export function Ask({ host, hs }: { host: DesktopHost; hs: HostState }) {
             )}
             {phase === "done" && <p className="hint big">All done.</p>}
 
-            {phase === "confirming" && (
+            {phase === "confirming" && view.scam && (
+              <div className="choices">
+                <button className="btn primary huge" onClick={() => void host.controller.scamAnswer(true)}>
+                  Yes, someone asked me
+                </button>
+                <button className="btn outline huge" onClick={() => void host.controller.scamAnswer(false)}>
+                  No, it's my own idea
+                </button>
+              </div>
+            )}
+
+            {phase === "confirming" && !view.scam && (
               <div className="choices">
                 <button className="btn primary huge" onClick={() => void host.controller.confirm(true)}>
                   Yes, go ahead

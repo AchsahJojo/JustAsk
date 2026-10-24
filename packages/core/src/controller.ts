@@ -4,6 +4,7 @@ import * as L from "./lines";
 import { parseCommand } from "./commands";
 import { gateAct, herWords } from "./drive";
 import { snapshotSignature } from "./signature";
+import { scamCheck, type ScamKind } from "./scam";
 
 export type Phase = "idle" | "planning" | "confirming" | "acting" | "guiding" | "verifying" | "asking" | "waiting" | "paused" | "done" | "blocked";
 
@@ -25,6 +26,8 @@ export interface SessionView {
   guidedSteps: number;
   /** Steps JustAsk did for her (act steps that succeeded). */
   actions: number;
+  /** Set while JustAsk asks "Did someone ask you to do this?" before a request that looks like a scam. */
+  scam: ScamKind | null;
 }
 
 export interface PageBridge {
@@ -107,6 +110,7 @@ const INITIAL: SessionView = {
   clicks: 0,
   guidedSteps: 0,
   actions: 0,
+  scam: null,
 };
 
 /** What a "yes" in the confirming phase does next. */
@@ -218,7 +222,7 @@ export class SessionController {
 
   /** Restore after the panel or service worker restarts (state came from storage.session). */
   restore(view: SessionView, history: string[], recipe: Recipe | null) {
-    this.view = { ...INITIAL, ...view, guidedSteps: view.guidedSteps ?? view.clicks ?? 0, note: "" };
+    this.view = { ...INITIAL, ...view, guidedSteps: view.guidedSteps ?? view.clicks ?? 0, note: "", scam: view.scam ?? null };
     this.history = history;
     this.recipe = recipe;
     for (const fn of this.listeners) fn(this.view);
@@ -248,11 +252,49 @@ export class SessionController {
     this.recipe = opts.recipe ?? null;
     this.sessionId = opts.sessionId ?? null;
     if (this.deps.prefs?.().showMeInstead) this.history.push(L.SHOW_ME_NOTE);
+    // Her own words first: a request that looks like a common scam gets one plain question
+    // before JustAsk opens, searches or presses anything. Only her answer decides.
+    const flag = scamCheck(text);
+    if (flag) {
+      this.afterScamCheck = opts.prepare ?? null;
+      this.deps.events?.log("scam_check");
+      this.say(`${flag.fact} ${flag.question}`);
+      this.set({ ...INITIAL, request: text, taskId: opts.taskId ?? null, stepNo: 1, phase: "confirming", line: flag.question, note: flag.fact, risk: "suspicious", scam: flag.kind });
+      return;
+    }
     this.set({ ...INITIAL, request: text, taskId: opts.taskId ?? null, stepNo: 1, line: L.FILLER_LINE, phase: "planning" });
-    if (opts.prepare) {
+    return this.begin(gen, opts.prepare ?? null);
+  }
+
+  /** What `start` deferred while the scam question was open. */
+  private afterScamCheck: ((announce: (line: string) => void) => Promise<string | null>) | null = null;
+
+  /**
+   * Her answer to the scam question. Someone asked her: stop, and say what to do instead. Her own
+   * idea: carry on, and tell Claude to be careful (no codes typed, payments always ask first).
+   */
+  async scamAnswer(someoneAsked: boolean) {
+    if (this.view.phase !== "confirming" || !this.view.scam) return;
+    const prepare = this.afterScamCheck;
+    this.afterScamCheck = null;
+    if (someoneAsked) {
+      this.deps.events?.log("scam_stopped");
+      await this.block(L.SCAM_STOP_LINE, false);
+      this.say(`${L.SCAM_STOP_LINE} ${L.SCAM_STOP_TIP}`);
+      this.set({ note: L.SCAM_STOP_TIP, scam: null });
+      return;
+    }
+    this.history.push(L.SCAM_OWN_IDEA_NOTE);
+    this.set({ phase: "planning", line: L.FILLER_LINE, risk: "none", scam: null });
+    return this.begin(this.gen, prepare);
+  }
+
+  /** The part of `start` after any scam question: prepare the tab, then plan. */
+  private async begin(gen: number, prepare: ((announce: (line: string) => void) => Promise<string | null>) | null) {
+    if (prepare) {
       let note: string | null = null;
       try {
-        note = await opts.prepare((line) => {
+        note = await prepare((line) => {
           if (gen !== this.gen) return;
           this.say(line);
           this.set({ line });
@@ -328,6 +370,8 @@ export class SessionController {
   }
 
   async confirm(yes: boolean) {
+    // The scam question is "Did someone ask you to do this?": yes means someone asked.
+    if (this.view.phase === "confirming" && this.view.scam) return this.scamAnswer(yes);
     if (this.view.phase !== "confirming" || !this.step) return;
     const step = this.step;
     const pending = this.pending ?? "guide";
@@ -490,7 +534,9 @@ export class SessionController {
   // ───────────── the loop ─────────────
 
   private async scanPage(): Promise<boolean> {
-    const context = [this.view.request, this.view.line, ...(this.recipe?.steps ?? [])];
+    // Ranking words only (stays on the page): her request, the current line, the recipe, and recent
+    // history, which holds her answers ("Texas"), so a long dropdown includes the option she named.
+    const context = [this.view.request, this.view.line, ...(this.recipe?.steps ?? []), ...this.history.slice(-6)];
     const scans = await this.deps.bridge.scan(context);
     if (!scans.length) return false;
     const id = this.deps.newId?.() ?? Math.random().toString(36).slice(2, 10);
@@ -599,9 +645,11 @@ export class SessionController {
         this.step = s;
         if (s.risk !== "none" && L.RISK_QUESTION[s.risk]) {
           const q = L.RISK_QUESTION[s.risk];
+          // Never a bare "spend money?": say exactly what would be pressed, and on which site.
+          const detail = this.riskDetail(s, next === "guide");
           this.pending = next;
-          this.say(q);
-          this.set({ phase: "confirming", line: q, risk: s.risk, expect: s.expect });
+          this.say(detail ? `${detail} ${q}` : q);
+          this.set({ phase: "confirming", line: q, note: detail, risk: s.risk, expect: s.expect });
           return;
         }
         if (next === "guide") return this.showGuide(s);
@@ -653,7 +701,15 @@ export class SessionController {
     const q = L.typeConfirm(step.text ?? "");
     this.pending = "text";
     this.say(q);
-    this.set({ phase: "confirming", line: q, risk: step.risk, expect: step.expect });
+    this.set({ phase: "confirming", line: q, note: "", risk: step.risk, expect: step.expect });
+  }
+
+  /** "Next, I'd press “Place order” on pharmacy.example." for a risk question, or "" if unknown. */
+  private riskDetail(step: StepResponse, guide: boolean): string {
+    const el = step.target !== null ? this.snapshot?.elements.find((e) => e.n === step.target) : undefined;
+    const what = (el?.text || el?.label || "").trim();
+    if (!what) return "";
+    return L.riskDetail(what, placeOf(this.snapshot), guide);
   }
 
   /** Highlight, announce, wait a beat, then act. Falls back to guiding her when the action fails. */
@@ -864,5 +920,16 @@ function labelFor(expect: StepResponse["expect"]): string {
       return "Press Enter here";
     default:
       return "Click here";
+  }
+}
+
+/** Where she is, in words: the website's name (no "www.") or the desktop app. */
+function placeOf(snapshot: PageSnapshot | null): string {
+  if (!snapshot) return "";
+  if (snapshot.surface === "native") return snapshot.app?.name ?? "";
+  try {
+    return new URL(snapshot.url).hostname.replace(/^www\./, "");
+  } catch {
+    return "";
   }
 }

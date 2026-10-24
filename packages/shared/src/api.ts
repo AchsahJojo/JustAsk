@@ -27,5 +27,5 @@ export const PlanResponse = z.discriminatedUnion("ok", [
 ]);
 export type PlanResponse = z.infer<typeof PlanResponse>;
 
-export const EventType = z.enum(["step_shown", "repeat", "clarify", "stuck", "no_change", "done", "abandoned", "blocked"]);
+export const EventType = z.enum(["step_shown", "repeat", "clarify", "stuck", "no_change", "done", "abandoned", "blocked", "scam_check", "scam_stopped"]);
 export type EventType = z.infer<typeof EventType>;

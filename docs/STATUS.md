@@ -35,8 +35,10 @@ A caregiver is optional. When she has one, the caregiver can set JustAsk up for 
   - it switches to guiding after 3 actions that change nothing
 - **Guide mode:** highlights an element and waits for her click, typing or choice. "I'm done typing" checks that the field really has a value.
 - **Safety:**
-  - money, personal-info and account-change steps ask first
-  - `suspicious` pages block
+  - money, personal-info and account-change steps ask first, and say exactly what would be pressed and where ("Next, I'd press “Place order” on pharmacy.example.")
+  - `suspicious` pages block (fake virus warnings, pay-with-gift-cards, fee-for-a-prize, lookalike sites)
+  - **scam check on her own words** before anything happens (gift card codes, money to someone who called, remote access, sharing a code); see section 5
+  - gift card numbers and claim codes count as sensitive, so JustAsk never types them
   - page text is untrusted and goes inside `<page_content>`
   - field values never leave the page (sentinel leak test)
 - **Setup page:**
@@ -60,6 +62,8 @@ A caregiver is optional. When she has one, the caregiver can set JustAsk up for 
   - If a session lands on an empty tab, the panel offers **Look it up for me** instead of a dead end.
   - When nothing is on her list, the start screen shows example requests.
   - When Chrome opens with tasks waiting, a notification says "You have N things on your list"; clicking it opens the panel.
+- **Plain wording:** "Ask for something else" (not "Start again"), "Say something" (not "Talk to me"). The done screen says "I did 3 steps for you, and you did 2", and never "0 clicks".
+- **Voice:** JustAsk holds its own spoken lines while the mic is open, so recognition never hears it say "stop" or "again".
 - **Dev only:** "Save snapshot" exports a request for the eval harness.
 
 ### Caregiver web app (`apps/caregiver`, Vite + React + Clayzo)
@@ -116,8 +120,8 @@ A caregiver is optional. When she has one, the caregiver can set JustAsk up for 
 ### Tests and tooling
 | Command | What | Status |
 |---|---|---|
-| `npm test` | 325 unit tests (Vitest), including the convex-test backend suites | passing |
-| `npm run test:e2e` | 14 Puppeteer scenarios with the real extension and the mock planner on :8788 | passing |
+| `npm test` | 387 unit tests (Vitest), including the convex-test backend suites | passing |
+| `npm run test:e2e` | 15 Puppeteer scenarios with the real extension and the mock planner on :8788 | passing |
 | `CONVEX_CODE=… npm run test:e2e` | adds pairing, task card, recipe and completion against local Convex | passing |
 | `npm run test:accounts` | accounts against local Convex (auth, merge, helper codes, Show me instead, task list) | passing |
 | `npm run test:convex` | pairing, tasks and the `/plan` route against local Convex | passing |
@@ -212,15 +216,20 @@ Fixed since `docs/possible_bugs.md` was written:
 - `ja:page-changed` never being sent (`watch`)
 - unchecked recipe start URLs (now `https://` only)
 
-Still open, or not yet re-checked:
-- [ ] `/plan` passes the whole request body (page text included) as a Convex action argument. Check whether Convex execution logs keep arguments; if they do, that breaks the "snapshots never logged" rule.
-- [ ] The dev planner's `GET /__received` serves every request body with `Access-Control-Allow-Origin: *`. It's dev only, but should be limited to e2e runs.
-- [ ] Speech recognition isn't muted while JustAsk speaks, so it can hear itself say "stop".
-- [ ] `colorName` only parses `rgb()` / `rgba()`. `oklch()`, `lab()` and `color()` become "no color".
-- [ ] Iframes are merged top frame first up to 150 elements, with no second ranking pass. `visibleFrames` is unused, and `about:blank` / `srcdoc` frames aren't injected.
-- [ ] Shadow DOM: modal detection, headings and page text use light-DOM queries.
-- [ ] Select fields: check how placeholder options (no `value=""`) and clipped option labels (60 characters; lists over 30 send only 10 options) behave.
+Fixed in this pass (2026-10-24):
+- **`/plan` and Convex logs:** the HTTP action now calls the planner in-process (`runPlan` in `convex/plan.ts`) instead of `runAction`, so page text is never a function argument Convex could record.
+- **Dev planner:** it keeps request bodies and serves `GET /__received` only in mock mode (what e2e uses). With Claude it keeps nothing.
+- **Voice:** JustAsk's spoken lines wait while the mic is open (`BrowserSpeech.hold`).
+- **Colors:** `colorName` reads `oklch()`, `oklab()`, `lab()`, `lch()` and `color()`, so "the blue button" works on modern CSS.
+- **Iframes:** over the 150 cap, elements from every frame are ranked together (`crossFrameScore`), so a payment or sign-in iframe's button isn't crowded out. Child frames under 50×50 skip themselves.
+- **Shadow DOM:** dialog detection, page text and the main heading look inside web components (`queryAllComposed`), and a component's button gets the heading around it. The main heading now prefers the h1 over an earlier h2.
+- **Dropdowns:** long lists (over 30 options) send the first 10 plus every option matching her words or answers, so "Texas" can be chosen. Placeholder options with no `value` were already handled.
+- **Empty New Tab:** JustAsk searches her words instead of a dead end (see "Starting from nothing" above).
+
+Still open:
+- [ ] `about:blank` / `srcdoc` iframes aren't injected (`executeScript` can't target them; it would need a registered content script with `matchOriginAsFallback` on every page).
 - [ ] Dock mode (Opera, Safari, popup windows) and Firefox/Safari builds aren't tested.
+- [ ] The scam check runs on her first request only, not on later answers or "Say something" (section 5, phase 2).
 
 ### Caregiver app refinements
 - [ ] The person page has no list of her devices and can't revoke one (her own settings can).
@@ -230,7 +239,73 @@ Still open, or not yet re-checked:
 
 ---
 
-## 5. Running it locally (short version)
+## 5. Scam protection (plan)
+
+**Why it matters.** Older adults lose billions of dollars a year to online and phone fraud. The FBI's 2023 Elder Fraud Report counts over $3.4 billion reported by people over 60 in one year. The biggest losses are tech-support and government-impersonation scams, investment and crypto scams, romance scams, and "grandparent" emergencies. Many of these end with a scammer *talking her through* a payment on her own computer. JustAsk sits at exactly that moment. It hears what she wants to do and sees the page she does it on, so it can notice the pattern and slow things down before money or codes leave.
+
+### Principles
+- **Her choice, not ours.** JustAsk asks one plain question and explains why. It doesn't lecture, shame or silently refuse. The only hard lines are typing passwords, texted codes, card numbers and gift card codes for her, which JustAsk never does anyway.
+- **Ask, then slow down, then stop.** First a question, then a pause with "talk to someone you trust". It blocks outright only on pages that are clearly a trap.
+- **Deterministic first.** Fixed rules in code (like the `sensitive` classifier), with Claude as a second opinion. They are testable, explainable, and work with no network.
+- **Privacy.** The checks on her words and the page run on her device. Anything that needs a lookup sends only the site's domain (or a hash prefix), never the page or what she said. A caregiver is told only with her consent, and only *that* JustAsk stepped in, never the content.
+
+### What we look for
+
+| Pattern | Her words (example) | On the page |
+|---|---|---|
+| Gift-card payment | "email the gift card codes to the IRS" | a request to pay a bill, fine or person with gift cards; a "read the numbers on the back" form |
+| Money to someone who called | "wire $4,000, my grandson's in jail" | wire, Zelle, Cash App, crypto or money order to a person; "urgent", "today only" |
+| Prize, refund or inheritance with a fee | "pay the fee so I get my winnings" | "you won", "release fee", "overpaid refund" |
+| Tech support and remote access | "install AnyDesk so Microsoft can fix it" | full-screen "virus" warnings with a phone number; remote-access downloads |
+| Sharing codes | "tell the bank man the code they texted me" | a field asking for a texted code outside a sign-in she started |
+| Fake or lookalike shop | "buy the cheap iPhone on this site" | the address doesn't match the brand (punycode, misspellings); prices far below normal; only wire, crypto or payment-app checkout; a brand-new domain |
+| Romance and investment | "send money to my boyfriend I met online" | "guaranteed returns", "double your money", crypto ATM instructions |
+
+### How it works, in layers
+1. **Her words: built.** `scamCheck` in `packages/core/src/scam.ts` runs on her request before JustAsk searches, opens or presses anything.
+   - She sees one short question with the fact behind it: "Did someone call, text or email asking you to do this?" Below it: "Real companies, banks and government offices never ask to be paid with gift card numbers."
+   - The buttons are **Yes, someone asked me** and **No, it's my own idea**. Voice "yes" means someone asked.
+   - **Someone asked:** JustAsk stops with "This looks like a scam. Please don't send anything." It says what to do next: hang up, talk to someone you trust, and call the bank right away if she already sent anything.
+   - **Her own idea:** JustAsk carries on, and tells Claude to be careful: no codes typed, and every payment asks first.
+   - Ordinary requests pass, like "buy a gift card for my grandson's birthday" or "send money to my daughter on Venmo". Tests cover 14 scam phrasings and 11 everyday requests.
+2. **The page, Claude's judgment: built.** The prompt marks these as `suspicious`, which blocks: pay-with-gift-cards, wire, crypto or payment-app demands, fee-for-a-prize, stores that only take those, prices far below normal, and addresses that don't match the brand. Gift card and claim-code fields are `sensitive`, so they are never typed.
+3. **The page, deterministic signals: phase 2.** Code checks that don't depend on Claude:
+   - a lookalike or punycode domain, where a top brand in the title or heading doesn't match the hostname
+   - payment-demand phrases next to gift card, wire or crypto words
+   - fake virus pages (fullscreen or keyboard lock, a phone number, "virus" or "locked" words)
+   - downloads of remote-access tools (`downloads.onCreated` in the extension)
+
+   Each one raises the same kind of question, or blocks when it's a clear trap.
+4. **The whole conversation: phase 2.** Run `scamCheck` on her later answers and "Say something", not only the first request. For example, she starts with "help me buy gift cards", then says "the man said to send him the numbers".
+5. **Reputation lookups: phase 3.** These need keys in Convex env, and send only the domain or a hash prefix:
+   - Google Safe Browsing / Web Risk, using hash-prefix lookups so the full address isn't sent
+   - domain age through RDAP, so a store under 90 days old asks before checkout
+   - an optional list of known-good stores
+
+   All of it runs through a Convex action with caching, never from the page.
+6. **Slow down, and a helper: phase 2.**
+   - After "someone asked me": a "Let's wait and talk to someone first" screen, with a call-your-helper prompt if she has one.
+   - A new, separate consent: **"Tell my helper if JustAsk thinks someone is trying to scam me."** The helper gets "JustAsk paused something that looked like a gift card scam", with no page content and nothing she said. It shows in the caregiver app's activity feed.
+
+### Measuring it
+- **A phrase set:** grow `scam.test.ts` into a labelled list of real scam scripts (FTC and AARP examples) and everyday requests.
+  - **Targets:** at least 90% of scams caught, and at most 1% of everyday requests flagged. A false alarm on a normal errand teaches her to ignore the question.
+- **Page fixtures:** a fake store (lookalike domain, crypto-only checkout), a fake virus page, and a gift-card payment form. Each gets an e2e scenario and an eval case (`docs/eval.md`), so Claude's `suspicious` rate is measured too.
+- **Events:** `scam_check` and `scam_stopped` are logged as outcome events, with no content. They show how often it fires and how often she says it was her own idea.
+
+### Phases
+| Phase | What | Size |
+|---|---|---|
+| 1 (done) | request check with plain question and stop screen; page rule in the prompt; gift card fields sensitive; desktop app uses the same buttons; unit + e2e tests | done |
+| 2 | check every answer, not just the first request; deterministic page signals; remote-tool downloads; the "slow down" screen; consented helper alert; fixtures and eval cases | ~2 days |
+| 3 | Safe Browsing / Web Risk, RDAP domain age, trusted-store list, all through a cached Convex action; measured false-alarm rate | ~2 days plus API keys |
+
+### Open questions
+- Should the helper alert be **on by default** when a helper is linked? Our default is **off**: it's her information. Setup and the caregiver's first-run flow would suggest turning it on.
+- After "someone asked me", should JustAsk lock that request for a while (for example, a 24-hour cool-off) or only advise? Our proposal is to advise only, and offer to call her helper.
+- How much page-level blocking is acceptable on a real store with low prices? Our proposal is to ask, never block, unless the address is a lookalike.
+
+## 6. Running it locally (short version)
 
 ```bash
 npm install

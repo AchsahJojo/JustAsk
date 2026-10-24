@@ -176,7 +176,7 @@ const scenarios = {
     await clickText(s.page, "Send my refill request");
     await phase(s.panel, "done");
     const clicks = await s.panel.$eval(".hint.big", (e) => e.textContent);
-    assert.match(clicks, /4 clicks yourself/);
+    assert.match(clicks, /You did 4 steps yourself/);
     await sleep(700);
     await shot(s.panel, "06-panel-done");
     const received = await (await fetch(`${PLANNER}/__received`)).json();
@@ -237,6 +237,8 @@ const scenarios = {
     await shot(s.page, "09-iframe-same-origin");
     await (await same.$("button")).click();
     await caption(s.panel, /spend money/);
+    // No bare "spend money?": it names what would be pressed, and where.
+    assert.match(await s.panel.$eval(".stage-text .soft", (e) => e.textContent), /^Next, I'd (press|show you) “Pay now” on localhost\.$/);
     await shot(s.panel, "10-panel-confirm-money");
     await s.panel.click(".choices .btn.primary");
     await caption(s.panel, /Pay now/);
@@ -361,6 +363,25 @@ const scenarios = {
     await s.panel.waitForSelector(".ideas .idea");
     assert.ok((await s.panel.$$(".ideas .idea")).length >= 3);
     await shot(s.panel, "02b-panel-ideas");
+    await closeSession(s);
+  },
+
+  async "scam check: a gift-card-codes request asks first; someone asked -> stops before any page step"() {
+    await fetch(`${PLANNER}/__reset`, { method: "POST" });
+    const s = await openSession("/");
+    await ask(s.panel, "help me email the gift card codes to the man from the IRS");
+    await phase(s.panel, "confirming");
+    await caption(s.panel, /Did someone call, text or email/);
+    assert.match(await s.panel.$eval(".stage-text .soft", (e) => e.textContent), /never ask to be paid with gift card numbers/);
+    assert.ok(await s.panel.$eval("button.btn.outline.huge", (b) => { const r = b.getBoundingClientRect(); return b.textContent.includes("my own idea") && r.bottom <= document.querySelector("footer").getBoundingClientRect().top; }), "both answers visible above the footer");
+    assert.equal(await s.panel.$eval(".eyebrow", (e) => e.textContent), "Safety check");
+    await shot(s.panel, "21-panel-scam-question");
+    await clickText(s.panel, "Yes, someone asked me");
+    await phase(s.panel, "blocked");
+    await caption(s.panel, /looks like a scam/);
+    assert.match(await s.panel.$eval(".stage-text .soft", (e) => e.textContent), /call your bank/);
+    await shot(s.panel, "22-panel-scam-stopped");
+    assert.deepEqual(await (await fetch(`${PLANNER}/__received`)).json(), [], "nothing was planned or sent");
     await closeSession(s);
   },
 
