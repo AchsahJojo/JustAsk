@@ -2,6 +2,7 @@
 name = "justask-desktop"
 version = "0.1.0"
 edition = "2021"
+default-run = "justask-desktop"
 
 [lib]
 name = "justask_desktop_lib"
