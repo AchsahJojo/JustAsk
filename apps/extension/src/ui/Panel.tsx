@@ -5,9 +5,16 @@ import { SessionHost } from "../lib/session";
 import { BrowserListener } from "../lib/speech";
 import { backend, type PendingTask } from "../lib/backend";
 import { getSettings } from "../lib/config";
+import { pullPrefs } from "../lib/prefsSync";
+import { buildCapture, captureFileName } from "../lib/capture";
 import { Orb, type OrbMode } from "./Orb";
+import { usePendingTasks } from "./usePendingTasks";
 
 const ALL_SITES = { origins: ["<all_urls>"] };
+const DEV = import.meta.env.MODE === "development";
+
+/** Steps JustAsk did for her. `actions` is added to SessionView by the core drive-mode work. */
+const actionsOf = (v: SessionView) => (v as SessionView & { actions?: number }).actions ?? 0;
 
 export function Panel({ pinnedTabId }: { pinnedTabId: number | null }) {
   const host = useMemo(() => new SessionHost({ pinnedTabId }), [pinnedTabId]);
@@ -20,7 +27,7 @@ export function Panel({ pinnedTabId }: { pinnedTabId: number | null }) {
   const [typed, setTyped] = useState("");
   const [answer, setAnswer] = useState("");
   const [name, setName] = useState("");
-  const [tasks, setTasks] = useState<PendingTask[]>([]);
+  const [tasks, setTasks] = usePendingTasks();
   const [resume, setResume] = useState<{ request: string; taskId: string | null } | null>(null);
   const [access, setAccess] = useState(true);
   const captionRef = useRef<HTMLParagraphElement>(null);
@@ -40,19 +47,18 @@ export function Panel({ pinnedTabId }: { pinnedTabId: number | null }) {
   useEffect(() => {
     host.speech.onSpeaking = setSpeaking;
     const off = host.controller.subscribe(setView);
-    void host.init();
+    void host.init().then(async () => {
+      // A handoff claimed by the background (desktop app -> browser) starts right away.
+      if (await browser.permissions.contains(ALL_SITES)) await host.startFromHandoff();
+    });
     void getSettings().then((s) => setName(s.displayName));
+    void backend.heartbeat();
+    void pullPrefs();
     void browser.storage.local.get("resume").then((r) => {
       const res = (r as { resume?: { request: string; taskId: string | null } }).resume;
       if (res && host.controller.state.phase === "idle") setResume(res);
     });
-    const poll = async () => setTasks(await backend.pendingTasks());
-    void poll();
-    const iv = setInterval(poll, 15_000);
-    return () => {
-      off();
-      clearInterval(iv);
-    };
+    return off;
   }, [host]);
 
   // Keep the newest caption in view for screen magnifiers and move focus for screen readers.
@@ -100,6 +106,20 @@ export function Panel({ pinnedTabId }: { pinnedTabId: number | null }) {
     setTyped("");
   };
 
+  /** Dev only: download the current plan request for the eval harness. Never sent anywhere. */
+  const saveSnapshot = () => {
+    const capture = buildCapture({ request: view.request, recipe: host.currentRecipe, snapshot: host.controller.currentSnapshot, history: host.controller.currentHistory });
+    if (!capture) return setNote("No snapshot yet. Ask for something first.");
+    const url = URL.createObjectURL(new Blob([JSON.stringify(capture, null, 2)], { type: "application/json" }));
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = captureFileName(capture);
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  };
+
+  const actions = actionsOf(view);
+
   return (
     <div className="panel" data-phase={phase}>
       <header className="top">
@@ -107,16 +127,23 @@ export function Panel({ pinnedTabId }: { pinnedTabId: number | null }) {
           <span className="brand-dot" />
           JustAsk
         </span>
-        <button className="link" onClick={() => browser.tabs.create({ url: browser.runtime.getURL("/setup.html") })}>
-          Settings
-        </button>
+        <span className="row">
+          {DEV && (
+            <button className="link dev-snap" onClick={saveSnapshot} title="Development builds only">
+              Save snapshot
+            </button>
+          )}
+          <button className="link" onClick={() => browser.tabs.create({ url: browser.runtime.getURL("/setup.html") })}>
+            Settings
+          </button>
+        </span>
       </header>
 
       <main className="body">
         {!access && (
           <section className="card task" role="alert">
             <p className="task-title">JustAsk needs your OK to see web pages.</p>
-            <p className="soft">It reads the page so it can point at the right button. It never reads what you type.</p>
+            <p className="soft">It reads the page so it can find the right button. It never reads what you type.</p>
             {/* This click is the user gesture permissions.request needs. Never asked mid-session. */}
             <button className="btn primary huge" onClick={() => void browser.permissions.request(ALL_SITES).then(setAccess)}>
               Turn JustAsk on
@@ -197,7 +224,7 @@ export function Panel({ pinnedTabId }: { pinnedTabId: number | null }) {
             <div className="stage">
               <Orb mode={orbMode} size={phase === "done" ? 132 : 96} />
               <div className="stage-text">
-                {phase === "guiding" && <p className="eyebrow accent">Step {view.stepNo}</p>}
+                {(phase === "guiding" || phase === "acting") && <p className="eyebrow accent">Step {view.stepNo}</p>}
                 {phase === "confirming" && <p className="eyebrow accent">Check first</p>}
                 <p ref={captionRef} tabIndex={-1} className={`caption ${phase === "planning" || phase === "verifying" ? "dim" : ""}`} aria-live="assertive">
                   {view.line}
@@ -207,7 +234,17 @@ export function Panel({ pinnedTabId }: { pinnedTabId: number | null }) {
             </div>
 
             {phase === "guiding" && <p className="hint">{view.expect === "type" ? "Type in the box with the glowing outline. I can't see what you type." : "Look for the glowing box. Take your time."}</p>}
-            {phase === "done" && <p className="hint big">You made {view.clicks} {view.clicks === 1 ? "click" : "clicks"} yourself.</p>}
+            {phase === "acting" && <p className="hint">I'm doing this step for you. Watch the glowing box. Press Stop at any time.</p>}
+            {phase === "done" &&
+              (actions > 0 ? (
+                <p className="hint big">
+                  I did {actions} {actions === 1 ? "step" : "steps"} for you.
+                </p>
+              ) : (
+                <p className="hint big">
+                  You made {view.clicks} {view.clicks === 1 ? "click" : "clicks"} yourself.
+                </p>
+              ))}
 
             {phase === "confirming" && (
               <div className="choices">
@@ -274,6 +311,11 @@ export function Panel({ pinnedTabId }: { pinnedTabId: number | null }) {
             </button>
           ) : (
             <>
+              {phase === "acting" && (
+                <button className="btn danger huge stop-now" onClick={() => host.controller.stop()} aria-label="Stop. JustAsk will not do anything else.">
+                  <StopIcon /> Stop
+                </button>
+              )}
               {phase === "guiding" && view.expect === "type" && (
                 <button className="btn primary huge" onClick={() => host.controller.doneTyping()}>
                   I'm done typing
@@ -290,14 +332,24 @@ export function Panel({ pinnedTabId }: { pinnedTabId: number | null }) {
                   I'm stuck
                 </button>
               </div>
-              <button className="btn ghost stop" onClick={() => host.controller.stop()}>
-                Stop
-              </button>
+              {phase !== "acting" && (
+                <button className="btn ghost stop" onClick={() => host.controller.stop()}>
+                  Stop
+                </button>
+              )}
             </>
           )}
         </footer>
       )}
     </div>
+  );
+}
+
+function StopIcon() {
+  return (
+    <svg width="26" height="26" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+      <rect x="5" y="5" width="14" height="14" rx="2" />
+    </svg>
   );
 }
 

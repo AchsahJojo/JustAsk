@@ -1,25 +1,35 @@
 import { useEffect, useState } from "react";
 import { browser } from "wxt/browser";
 import { getSettings, saveSettings, type Settings } from "../lib/config";
-import { backend } from "../lib/backend";
+import { pullPrefs } from "../lib/prefsSync";
+import { AccountStep } from "./SetupAccount";
+import { SettingsStep } from "./SetupSettings";
 import { Orb } from "./Orb";
 
 const ALL_SITES = { origins: ["<all_urls>"] };
 
+/** A 6-digit `?link=` code, set when the background saw `#justask-link=` on the link page. */
+function linkCodeFromUrl(): string | null {
+  const v = new URLSearchParams(location.search).get("link");
+  return v && /^\d{6}$/.test(v) ? v : null;
+}
+
 /**
- * One-time setup tab: host access (the gesture lives here, never mid-session), the mic
- * prompt (side panels can't show it reliably), pairing, and consent.
+ * Setup and settings tab: host access (the gesture lives here, never mid-session), the mic
+ * prompt (side panels can't show it reliably), her account, and synced settings.
  */
 export function Setup() {
   const [s, setS] = useState<Settings | null>(null);
   const [access, setAccess] = useState(false);
   const [mic, setMic] = useState<"unknown" | "on" | "off">("unknown");
-  const [code, setCode] = useState("");
-  const [pairMsg, setPairMsg] = useState("");
   const [advanced, setAdvanced] = useState(false);
+  const [linkCode, setLinkCode] = useState<string | null>(linkCodeFromUrl);
 
   useEffect(() => {
-    void getSettings().then(setS);
+    void getSettings().then((x) => {
+      setS(x);
+      if (x.deviceToken) void pullPrefs().then(setS);
+    });
     void browser.permissions.contains(ALL_SITES).then(setAccess);
     navigator.permissions
       ?.query({ name: "microphone" as PermissionName })
@@ -45,22 +55,14 @@ export function Setup() {
     }
   };
 
-  const pair = async () => {
-    setPairMsg("");
-    if (!s.convexUrl) return setPairMsg("Pairing isn't set up on this copy of JustAsk yet.");
-    try {
-      const { token, displayName } = await backend.redeem(s.convexUrl, code.replace(/\D/g, ""));
-      await update({ deviceToken: token, displayName });
-      setPairMsg(`Paired. Hi ${displayName}!`);
-    } catch {
-      setPairMsg("That code didn't work. Ask for a new one.");
-    }
-  };
-
   const finish = async () => {
     await update({ setupDone: true });
-    if (s.deviceToken) await backend.setConsent(s.consent);
     window.close();
+  };
+
+  const linkDone = () => {
+    setLinkCode(null);
+    history.replaceState(null, "", location.pathname);
   };
 
   return (
@@ -69,14 +71,14 @@ export function Setup() {
         <Orb mode="idle" size={96} />
         <div>
           <h1>Set up JustAsk</h1>
-          <p className="soft">Three quick steps. You can do this with your helper.</p>
+          <p className="soft">A few quick steps. You can do this with your helper.</p>
         </div>
       </header>
 
       <ol className="steps">
         <li className={`step ${access ? "ok" : ""}`}>
           <h2>1. Let JustAsk see web pages</h2>
-          <p>JustAsk reads the page you're on so it can point at the right button. It never clicks for you, and it never reads what you type.</p>
+          <p>JustAsk reads the page you're on so it can find the right button and press it for you. It never reads what you have typed, and it never types passwords or card numbers.</p>
           {access ? (
             <p className="done">✓ JustAsk is on</p>
           ) : (
@@ -101,33 +103,8 @@ export function Setup() {
           )}
         </li>
 
-        <li className={`step ${s.deviceToken ? "ok" : ""}`}>
-          <h2>3. Connect to your helper (optional)</h2>
-          <p>If someone helps you, they can send you tasks. Type the 6-digit code they gave you.</p>
-          {s.deviceToken ? (
-            <p className="done">✓ Connected{s.displayName ? ` as ${s.displayName}` : ""}</p>
-          ) : (
-            <div className="row">
-              <input inputMode="numeric" maxLength={7} value={code} onChange={(e) => setCode(e.target.value)} placeholder="123456" aria-label="Pairing code" />
-              <button className="btn dark" onClick={pair} disabled={code.replace(/\D/g, "").length !== 6}>
-                Connect
-              </button>
-            </div>
-          )}
-          {pairMsg && <p className="soft">{pairMsg}</p>}
-          {s.deviceToken && (
-            <div className="toggles">
-              <label className="toggle">
-                <input type="checkbox" checked={s.consent.notifyOnComplete} onChange={(e) => update({ consent: { ...s.consent, notifyOnComplete: e.target.checked } })} />
-                <span>Tell my helper when I finish a task they sent</span>
-              </label>
-              <label className="toggle">
-                <input type="checkbox" checked={s.consent.notifyOnStuck} onChange={(e) => update({ consent: { ...s.consent, notifyOnStuck: e.target.checked } })} />
-                <span>Tell my helper when I get stuck</span>
-              </label>
-            </div>
-          )}
-        </li>
+        <AccountStep s={s} onChange={setS} linkCode={linkCode} onLinkDone={linkDone} />
+        {s.deviceToken && <SettingsStep s={s} onChange={setS} />}
       </ol>
 
       <button className="btn dark huge" onClick={finish}>
@@ -141,7 +118,7 @@ export function Setup() {
         <SavedField label="Convex address" value={s.convexUrl} onSave={(v) => update({ convexUrl: v.trim() })} placeholder="https://your-deployment.convex.cloud" />
         {s.deviceToken && (
           <button className="btn ghost" onClick={() => update({ deviceToken: null, displayName: "" })}>
-            Disconnect from helper
+            Disconnect this browser
           </button>
         )}
       </details>

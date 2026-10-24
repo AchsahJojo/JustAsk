@@ -110,3 +110,13 @@ input:focus { border-color: var(--ink); outline: none; }
 .btn.is-listening { background: var(--accent); color: #fff; }
 @keyframes listen { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.02); } }
 @media (prefers-reduced-motion: reduce) { .is-listening { animation: none; } }
+
+/* Drive mode: a Stop she can't miss while JustAsk acts for her. */
+.btn.danger { background: #b3261e; color: #fff; }
+.btn.stop-now { min-height: 76px; font-size: 26px; letter-spacing: 0.01em; box-shadow: 0 0 0 4px color-mix(in srgb, #b3261e 25%, transparent); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .btn.danger { background: #e5534b; color: #1b1a17; } }
+:root[data-theme="dark"] .btn.danger { background: #e5534b; color: #1b1a17; }
+.panel[data-phase="acting"] .caption { color: var(--ink); }
+
+/* Development builds only (eval capture). */
+.link.dev-snap { font-size: 13px; color: var(--ink-3); }

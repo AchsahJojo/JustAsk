@@ -8,7 +8,7 @@ export default defineConfig({
   modules: ["@wxt-dev/module-react"],
   manifest: ({ browser }) => ({
     name: "JustAsk",
-    description: "Press one button, say what you want to do, and JustAsk shows you where to click. You do every click yourself.",
+    description: "Press one button, say what you want to do, and JustAsk helps you do it, one step at a time.",
     permissions: ["storage", "scripting", "tabs", "webNavigation", "notifications", "alarms", ...(browser === "firefox" ? [] : ["sidePanel"])],
     // Requested once on the setup page (plan: activeTab alone dies on navigation).
     optional_host_permissions: ["<all_urls>"],

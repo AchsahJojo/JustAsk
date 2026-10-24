@@ -10,7 +10,8 @@
     "build:edge": "wxt build -b edge",
     "zip": "wxt zip",
     "animations": "tsx animations/build.ts",
-    "typecheck": "tsc --noEmit -p ."
+    "typecheck": "tsc --noEmit -p .",
+    "postinstall": "wxt prepare"
   },
   "dependencies": {
     "@clayzo/webgl-player": "0.3.18",

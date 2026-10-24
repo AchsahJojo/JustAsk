@@ -7,8 +7,17 @@ import { BrowserSpeech } from "./speech";
 import { getSettings, type Settings } from "./config";
 import { backend } from "./backend";
 import { isInjectable } from "../platform";
+import type { Handoff } from "./prefs";
 
 const FOLLOW_WINDOW_MS = 5000;
+/** A claimed handoff older than this is dropped instead of started. */
+const HANDOFF_TTL_MS = 10 * 60 * 1000;
+
+/** What the background stores in storage.session after claiming a handoff. */
+export interface PendingHandoff extends Handoff {
+  tabId: number | null;
+  at: number;
+}
 
 /**
  * Hosts the SessionController in the side panel: owns the session tab id, relays
@@ -23,6 +32,7 @@ export class SessionHost {
   private lastClickAt = 0;
   private sessionId: string | null = null;
   private pinnedTabId: number | null;
+  private recipe: Recipe | null = null;
 
   constructor(opts: { pinnedTabId?: number | null } = {}) {
     this.pinnedTabId = opts.pinnedTabId ?? null;
@@ -33,6 +43,8 @@ export class SessionHost {
       planner: new HttpPlanner(() => this.settings?.plannerUrl ?? "http://localhost:8787"),
       speech: this.speech,
       deviceToken: () => this.settings?.deviceToken ?? null,
+      // Synced "Show me instead": guide every step rather than acting for her.
+      prefs: () => ({ showMeInstead: this.settings?.showMeInstead ?? false }),
       store: {
         save: (view, extra) => {
           void browser.storage.session.set({ session: { view, ...extra, tabId: this.sessionTabId } }).catch(() => {});
@@ -46,9 +58,12 @@ export class SessionHost {
 
   async init() {
     this.settings = await getSettings();
+    this.speech.rate = this.settings.rate;
     this.speech.muted = false;
     browser.storage.onChanged.addListener(async (changes) => {
-      if (changes.settings) this.settings = await getSettings();
+      if (!changes.settings) return;
+      this.settings = await getSettings();
+      this.speech.rate = this.settings.rate;
     });
     browser.runtime.onMessage.addListener((msg: unknown, sender) => {
       const m = msg as FromContent;
@@ -66,6 +81,7 @@ export class SessionHost {
     const sameTab = prev && (this.pinnedTabId === null || this.pinnedTabId === prev.tabId);
     if (prev && live && sameTab) {
       this.sessionTabId = prev.tabId;
+      this.recipe = prev.recipe;
       this.controller.restore(prev.view, prev.history, prev.recipe);
     }
   }
@@ -79,6 +95,7 @@ export class SessionHost {
   async start(request: string, opts: { recipe?: Recipe | null; taskId?: string | null } = {}) {
     this.sessionTabId = await this.activeTabId();
     const recipe = opts.recipe ?? null;
+    this.recipe = recipe;
     // A recipe startUrl opens in the session tab, never a new one, and only from a caregiver recipe.
     if (recipe?.startUrl && this.sessionTabId !== null) {
       const tab = await browser.tabs.get(this.sessionTabId);
@@ -91,6 +108,29 @@ export class SessionHost {
     this.sessionId = await backend.startSession(request, opts.taskId ?? null);
     if (opts.taskId) void backend.setTaskStatus(opts.taskId, "active");
     await this.controller.start(request, { recipe, taskId: opts.taskId ?? null, sessionId: this.sessionId });
+  }
+
+  /** The recipe of the current session (for the dev snapshot capture). */
+  get currentRecipe(): Recipe | null {
+    return this.recipe;
+  }
+
+  /**
+   * Start the session the background claimed from a `#justask=` handoff link, if any.
+   * The handoff is cleared first so it can never start twice. Returns true if it started.
+   */
+  async startFromHandoff(): Promise<boolean> {
+    const got = (await browser.storage.session.get("pendingHandoff").catch(() => ({}))) as { pendingHandoff?: PendingHandoff };
+    const h = got.pendingHandoff;
+    if (!h) return false;
+    await browser.storage.session.remove("pendingHandoff").catch(() => {});
+    if (Date.now() - h.at > HANDOFF_TTL_MS || this.controller.state.phase !== "idle") return false;
+    if (h.tabId !== null && this.pinnedTabId === null) {
+      // The banner's Start opened this panel on the handoff tab; make sure that tab is the session tab.
+      await browser.tabs.update(h.tabId, { active: true }).catch(() => {});
+    }
+    await this.start(h.request, { recipe: h.recipe, taskId: h.taskId });
+    return true;
   }
 
   /** "Yes, here": move the session to the tab she is on now. */
