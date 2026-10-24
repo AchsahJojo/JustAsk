@@ -30,7 +30,15 @@ export function Account() {
   return (
     <div className="narrow-page">
       <h1>Your account</h1>
-      <form className="card form" onSubmit={save} noValidate>
+      <form
+        className="card form"
+        onSubmit={save}
+        onInput={() => {
+          setError("");
+          setMsg("");
+        }}
+        noValidate
+      >
         <label className="field">
           <span>Your name</span>
           <input value={value} onChange={(e) => setName(e.target.value)} maxLength={60} />

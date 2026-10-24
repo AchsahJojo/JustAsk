@@ -23,8 +23,9 @@ export function Setup() {
   const refreshMe = async () => {
     const me = await backend.me();
     if (!me) return;
-    setHelpers(me.helpers);
+    // Save first, then show the helpers (and their consent boxes), so a quick click isn't overwritten.
     setS(await saveSettings({ displayName: me.displayName || (await getSettings()).displayName, consent: me.consent }));
+    setHelpers(me.helpers);
   };
 
   useEffect(() => {
@@ -40,7 +41,11 @@ export function Setup() {
   }, []);
 
   if (!s) return null;
-  const update = async (patch: Partial<Settings>) => setS(await saveSettings(patch));
+  // Optimistic, so controlled inputs (the consent boxes) don't snap back while storage writes.
+  const update = async (patch: Partial<Settings>) => {
+    setS((prev) => (prev ? { ...prev, ...patch } : prev));
+    setS(await saveSettings(patch));
+  };
   const setConsent = async (consent: Settings["consent"]) => {
     await update({ consent });
     await backend.setConsent(consent);
@@ -74,8 +79,9 @@ export function Setup() {
       if (!res.ok) return setPairMsg(res.error);
       await update({ deviceToken: res.token, displayName: res.displayName || s.displayName });
       setCode("");
-      await refreshMe();
+      // Message first: it must not appear after the consent boxes and push them down mid-click.
       setPairMsg(res.displayName ? `Connected. Hi ${res.displayName}!` : "Connected.");
+      await refreshMe();
     } catch {
       setPairMsg("JustAsk couldn't reach the internet. Check the connection and try again.");
     }

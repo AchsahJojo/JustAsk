@@ -182,7 +182,7 @@ function TaskComposer({ seniorId, displayName, open: startOpen }: { seniorId: Id
     );
 
   return (
-    <form className="card form composer" onSubmit={submit} noValidate>
+    <form className="card form composer" onSubmit={submit} onInput={() => setError("")} noValidate>
       <h2>Send {displayName} a task</h2>
       <div className="chips" aria-label="Ideas">
         {TEMPLATES.map((t) => (
@@ -450,7 +450,7 @@ function Details({ p, connected }: { p: { id: Id<"seniors">; name: string; displ
     <section className="card details">
       <h2>Details</h2>
       {editing ? (
-        <form className="form" onSubmit={save} noValidate>
+        <form className="form" onSubmit={save} onInput={() => setError("")} noValidate>
           <label className="field">
             <span>Their name</span>
             <input value={name} onChange={(e) => setName(e.target.value)} maxLength={60} />

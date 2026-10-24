@@ -81,7 +81,7 @@ export function SignIn() {
       </section>
 
       <section className="auth-form-wrap">
-        <form className="auth-form card" onSubmit={submit} noValidate>
+        <form className="auth-form card" onSubmit={submit} onInput={() => setError("")} noValidate>
           <div className="mobile-brand">
             <Brand />
           </div>

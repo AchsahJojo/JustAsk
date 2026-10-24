@@ -348,7 +348,9 @@ const scenarios = {
     await p.type('input[aria-label="Pairing code"]', process.env.CONVEX_CODE);
     await clickText(p, "Connect");
     await p.waitForFunction(() => document.body.textContent.includes("Connected as Mom"), { timeout: 8000 });
-    await p.click(".toggle input"); // consent: tell my helper when I finish
+    // Consent comes from the server profile (the seed turns "tell my helper when I finish" on).
+    if (!(await p.$eval(".toggle input", (e) => e.checked))) await p.click(".toggle input");
+    await p.waitForFunction(() => document.querySelector(".toggle input")?.checked, { timeout: 3000, polling: 100 });
     await p.screenshot({ path: `${SHOTS}/19-setup-paired.png`, fullPage: true });
     await p.close();
 

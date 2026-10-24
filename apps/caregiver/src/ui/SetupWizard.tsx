@@ -64,7 +64,7 @@ export function SetupWizard() {
         ← People
       </a>
       <Stepper at={1} />
-      <form className="card form" onSubmit={submit} noValidate>
+      <form className="card form" onSubmit={submit} onInput={() => setError("")} noValidate>
         <h1>Who are you setting JustAsk up for?</h1>
         <p className="muted">No account or password for them. Their computer connects to you with a one-time code.</p>
 
