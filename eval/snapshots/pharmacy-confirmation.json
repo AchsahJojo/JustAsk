@@ -10,7 +10,7 @@
       "role": "link",
       "text": "Learn more",
       "label": null,
-      "nearby": "Your refill request was sent",
+      "nearby": "Free delivery on orders over $35 · Flu shots now available, no appointment neede",
       "color": null,
       "big": false,
       "disabled": false,
@@ -33,7 +33,7 @@
     },
     {
       "n": 3,
-      "role": "text box",
+      "role": "search box",
       "text": "Search products, brands, services",
       "label": null,
       "nearby": "Your refill request was sent",

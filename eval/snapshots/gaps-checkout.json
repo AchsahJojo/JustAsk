@@ -1,0 +1,84 @@
+{
+  "snapshotId": "eval-gaps-checkout",
+  "url": "http://localhost:6174/gaps/checkout",
+  "title": "Checkout",
+  "heading": "Checkout",
+  "pageText": "Checkout\nOrder total: $42.10\nCard number\nExpiry\nCVV",
+  "elements": [
+    {
+      "n": 1,
+      "role": "text box",
+      "text": "",
+      "label": "Card number",
+      "nearby": "Card number",
+      "color": null,
+      "big": false,
+      "disabled": false,
+      "inModal": false,
+      "inViewport": true,
+      "region": "main",
+      "field": {
+        "kind": "text",
+        "hasValue": false,
+        "valid": false,
+        "sensitive": true
+      }
+    },
+    {
+      "n": 2,
+      "role": "text box",
+      "text": "MM/YY",
+      "label": "Expiry",
+      "nearby": "Expiry",
+      "color": null,
+      "big": false,
+      "disabled": false,
+      "inModal": false,
+      "inViewport": true,
+      "region": "main",
+      "field": {
+        "kind": "text",
+        "hasValue": false,
+        "valid": false,
+        "sensitive": true
+      }
+    },
+    {
+      "n": 3,
+      "role": "text box",
+      "text": "",
+      "label": "CVV",
+      "nearby": "CVV",
+      "color": null,
+      "big": false,
+      "disabled": false,
+      "inModal": false,
+      "inViewport": true,
+      "region": "main",
+      "field": {
+        "kind": "text",
+        "hasValue": false,
+        "valid": false,
+        "sensitive": true
+      }
+    },
+    {
+      "n": 4,
+      "role": "button",
+      "text": "Place order $42.10",
+      "label": null,
+      "nearby": "Card number Expiry CVV",
+      "color": "green",
+      "big": false,
+      "disabled": false,
+      "inModal": false,
+      "inViewport": true,
+      "region": "main"
+    }
+  ],
+  "omitted": {
+    "count": 0,
+    "regions": []
+  },
+  "surface": "web"
+}

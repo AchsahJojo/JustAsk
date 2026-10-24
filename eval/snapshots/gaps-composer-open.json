@@ -1,0 +1,45 @@
+{
+  "snapshotId": "eval-gaps-composer-open",
+  "url": "http://localhost:6174/gaps/composer",
+  "title": "Composer",
+  "heading": "Home feed",
+  "pageText": "Create post",
+  "elements": [
+    {
+      "n": 1,
+      "role": "text box",
+      "text": "",
+      "label": "What's on your mind?",
+      "nearby": "Create post",
+      "color": null,
+      "big": true,
+      "disabled": false,
+      "inModal": true,
+      "inViewport": true,
+      "region": "modal",
+      "field": {
+        "kind": "contenteditable",
+        "hasValue": false,
+        "valid": true
+      }
+    },
+    {
+      "n": 2,
+      "role": "button",
+      "text": "Post",
+      "label": null,
+      "nearby": "Create post",
+      "color": "blue",
+      "big": false,
+      "disabled": false,
+      "inModal": true,
+      "inViewport": true,
+      "region": "modal"
+    }
+  ],
+  "omitted": {
+    "count": 0,
+    "regions": []
+  },
+  "surface": "web"
+}

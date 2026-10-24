@@ -372,7 +372,6 @@ Solved by drive mode (§11).
 - `type=password`, the one-time-code field kind, or a card-number or CVV field.
 - An `autocomplete` value of `*-password`, `one-time-code` or `cc-*`.
 - A name, id or label that looks like an SSN or bank field (`ssn`, `social security`, `routing`, `account number`, `pin`).
-- Any field inside a payment iframe.
 
 When unsure, it treats the field as sensitive.
 
