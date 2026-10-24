@@ -147,17 +147,21 @@ export const redeemCode = mutation({
     let current: Doc<"devices"> | null = null;
     if (args.token) current = await requireDevice(ctx, args.token).catch(() => null); // a stale token is a new install
 
+    // A code made by the desktop app is typed in a browser on the same computer: that browser takes the
+    // app's machineId, so handoffs between the two match.
+    let machineId = fields.machineId;
+    if (machineId === undefined && row.machineId !== undefined && row.createdByDeviceId) {
+      const creator = await ctx.db.get(row.createdByDeviceId);
+      if (creator && kindOf(creator) === "desktop") machineId = row.machineId;
+    }
+
     if (!args.token || !current) {
-      let machineId = fields.machineId;
-      if (machineId === undefined && row.machineId !== undefined && row.createdByDeviceId) {
-        const creator = await ctx.db.get(row.createdByDeviceId);
-        if (creator && kindOf(creator) === "desktop") machineId = row.machineId;
-      }
       const { token } = await insertDevice(ctx, target, { ...fields, ...(machineId !== undefined ? { machineId } : {}) });
       const senior = await ctx.db.get(target);
       return { token, displayName: senior?.displayName ?? "" };
     }
 
+    if (current.machineId === undefined && machineId !== undefined) await ctx.db.patch(current._id, { machineId });
     const own = await ctx.db.get(current.seniorId);
     const theirs = await ctx.db.get(target);
     if (!own || !theirs) return null;

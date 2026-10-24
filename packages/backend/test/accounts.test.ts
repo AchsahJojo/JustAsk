@@ -88,6 +88,20 @@ describe("link codes", () => {
     expect(mine.machineId).toBe("pc-1");
   });
 
+  test("a browser that already has its own account links to the desktop app: one account, desktop's machineId", async () => {
+    const t = setup();
+    const d = await newAccount(t, "Margaret", desk("pc-1"));
+    const browser = await newAccount(t, "Maggie", ext());
+    const { code } = await t.mutation(api.devices.createLinkCode, { token: d });
+    const res = await t.mutation(api.devices.redeemCode, { code, token: browser });
+    expect(res).toEqual({ token: browser, displayName: "Margaret" }); // joins the app's account, keeps its token
+    const list = await t.query(api.devices.list, { token: browser });
+    expect(list.map((x) => [x.kind, x.machineId]).sort()).toEqual([["desktop", "pc-1"], ["extension", "pc-1"]]);
+    // Handoffs now match: the app can send a session to this browser.
+    const { handoffId } = await t.mutation(api.handoffs.create, { token: d, toKind: "extension", request: "pay my water bill" });
+    expect(await t.mutation(api.handoffs.claim, { token: browser, handoffId })).toMatchObject({ request: "pay my water bill" });
+  });
+
   test("no machineId inheritance from an extension's code", async () => {
     const t = setup();
     const e1 = await newAccount(t, "Margaret", ext("browser-guess"));

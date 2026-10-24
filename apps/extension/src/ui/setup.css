@@ -11,10 +11,6 @@
 .toggle { display: flex; gap: 12px; align-items: center; font-size: 18px; cursor: pointer; }
 .toggle input { flex: none; width: 28px; height: 28px; accent-color: var(--accent); }
 .center { text-align: center; }
-.advanced { color: var(--ink-3); font-size: 15px; }
-.advanced summary { cursor: pointer; }
-.advanced label { display: grid; gap: 4px; margin-top: 10px; }
-.advanced input { font-size: 15px; padding: 8px 10px; }
 
 .choice-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; }
 .choice { display: grid; gap: 8px; align-content: start; background: var(--cream); border: 1.5px solid var(--line); border-radius: var(--radius); padding: 16px; }

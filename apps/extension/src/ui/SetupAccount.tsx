@@ -6,7 +6,7 @@ import { pullPrefs, pushPrefs } from "../lib/prefsSync";
 import { currentDevice } from "../platform/device";
 
 const WRONG_CODE = "That code didn't work. Ask for a new one.";
-const NO_SERVER = "Accounts aren't set up on this copy of JustAsk yet. Your helper can add the server address below.";
+const NO_SERVER = "Accounts aren't set up on this copy of JustAsk yet. JustAsk still works on this computer without one.";
 const digits = (v: string) => v.replace(/\D/g, "");
 
 /**
@@ -133,7 +133,7 @@ function HaveCode({ busy, onRedeem }: { busy: boolean; onRedeem: (code: string) 
       }}
     >
       <h3>I have a code</h3>
-      <label htmlFor="pair-code">The 6-digit code from your helper or your other computer</label>
+      <label htmlFor="pair-code">The 6-digit code from the JustAsk app on your computer, another browser, or your helper</label>
       <div className="row">
         <input id="pair-code" inputMode="numeric" maxLength={7} value={code} onChange={(e) => setCode(e.target.value)} placeholder="123456" aria-label="Pairing code" autoComplete="one-time-code" />
         <button className="btn dark" type="submit" disabled={!ok || busy}>

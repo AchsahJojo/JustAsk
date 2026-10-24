@@ -54,7 +54,7 @@ Run these in a real, headed Chrome with the production build (`apps/extension/.o
 
 ### Voice
 - [ ] The microphone works in the side panel after it was allowed on the setup page. Say "help me refill my prescription".
-- [ ] While she speaks, the orb shows the listening ripples. "Say that again", "stop" and "I'm stuck" work by voice.
+- [ ] While the user speaks, the orb shows the listening ripples. "Say that again", "stop" and "I'm stuck" work by voice.
 - [ ] Text-to-speech uses a clear US English voice at a slow rate. Pick a voice on the senior's actual machine. The choice logic is in `apps/extension/src/lib/speech.ts`.
 - [ ] Recognition is not muted while JustAsk speaks yet (planned). Check whether JustAsk hears itself on laptop speakers.
 
@@ -62,7 +62,7 @@ Run these in a real, headed Chrome with the production build (`apps/extension/.o
 - [ ] In the real side panel (not the pinned test window): switch to another tab mid-session. The panel asks **Keep helping on this tab?** Check that **Yes, here** and **Go back** both work.
 - [ ] Close the session tab mid-session. The panel pauses.
 - [ ] A sign-in **popup window** (`/gaps/newtab` → "Sign in with popup"). Side panels don't show in popups, and dock mode isn't built, so expect this to be unsupported for now.
-- [ ] Open the built-in PDF viewer or a Chrome Web Store page mid-session. JustAsk says it can't see the page and resumes when she goes back.
+- [ ] Open the built-in PDF viewer or a Chrome Web Store page mid-session. JustAsk says it can't see the page and resumes when the user goes back.
 
 ### Real sites (CP3)
 - [ ] Two real tasks end to end with no code changes, for example Gmail settings and joining a Zoom meeting on the web. Log failures in the prompt or scanner, not as site-specific code.
@@ -101,18 +101,18 @@ Run these in a real, headed Chrome with the production build (`apps/extension/.o
 
 ## 5b. Accounts (how they work)
 
-- **Seniors never get a password.** In setup, "I'm new: create my JustAsk" makes her account (`accounts:createSelf`) and the install keeps a device token. Everything works with no caregiver. More installs join with "Add another device" codes (`devices:createLinkCode`).
+- **Seniors never get a password.** In setup, "I'm new: create my JustAsk" makes the user's account (`accounts:createSelf`) and the install keeps a device token. Everything works with no caregiver. More installs join with "Add another device" codes (`devices:createLinkCode`).
 - **Caregivers** sign in with email + password (Convex Auth). A `caregivers` row is made on first sign-in (`caregivers:ensureProfile`).
 - **Connecting** works two ways (6-digit codes, 15 minutes, one use):
-  - The caregiver makes her profile in the web app and she types their code in setup ("I have a code"). On an install that already has her own account she uses "I have a code from my helper" in settings: the two profiles merge and her own name, settings and history are kept (the caregiver's page follows via `seniorAliases`).
-  - She presses "Share with my helper" in settings and the caregiver types that code under "Do they already use JustAsk?" in the web app (`careLinks:redeemHelperCode`).
+  - The caregiver makes the user's profile in the web app, and the user types the caregiver's code in setup ("I have a code"). On an install that already has its own account, the user types it under "I have a code" in settings: the two profiles merge, and the user's own name, settings and history are kept (the caregiver's page follows via `seniorAliases`). The same box takes a code from the JustAsk desktop app or another browser.
+  - The user presses "Share with my helper" in settings and the caregiver types that code under "Do they already use JustAsk?" in the web app (`careLinks:redeemHelperCode`).
 - **Leaving.** The senior can stop working with any helper in setup (`devices:leaveHelpers`). A caregiver can **Stop helping** (`people:remove`). Either way the senior's JustAsk keeps working.
-- **Privacy.** Caregivers see task status and stats only if the senior turned on "Tell my helper when I finish". They never see sessions the senior started on her own.
+- **Privacy.** Caregivers see task status and stats only if the senior turned on "Tell my helper when I finish". They never see sessions the senior started on their own.
 - **Abuse caps.** `@convex-dev/rate-limiter` (`convex/rateLimits.ts`): account creation, and failed codes per code prefix, globally and per caregiver. Wrong codes return `null` so the failure count commits. Per-IP limits need an HTTP action in front; not done.
 - **Migration.** Old seed rows had `caregivers.tokenIdentifier`. Run `npx convex run migrations:caregiversToAuth` once per deployment, then the field can be removed from the schema.
 
-- **Drive mode or Show me instead.** JustAsk clicks and types for her by default (never sensitive fields; it asks first before money or account changes). "Show me instead" in her settings makes it guide her instead. A linked caregiver can change it under **How JustAsk helps** (`people:setShowMe`); her settings say when a helper set it.
-- **Task list.** Tasks stay in her panel until she finishes or removes them (`tasks:listForDevice`). Started tasks show **Keep going**; **I did it** marks one done and sends the consent-gated note.
+- **Drive mode or Show me instead.** JustAsk clicks and types for the user by default (never sensitive fields; it asks first before money or account changes). "Show me instead" in the user's settings makes it guide them instead. A linked caregiver can change it under **How JustAsk helps** (`people:setShowMe`); the user's settings say when a helper set it.
+- **Task list.** Tasks stay in the user's panel until they finish or remove them (`tasks:listForDevice`). Started tasks show **Keep going**; **I did it** marks one done and sends the consent-gated note.
 
 ### Manual checks for the scam check
 - [ ] Say (out loud) "I need to send the gift card codes to the IRS". JustAsk asks "Did someone call, text or email asking you to do this?" Answer "yes" by voice, and check that it stops with the advice.
@@ -137,5 +137,5 @@ Run these in a real, headed Chrome with the production build (`apps/extension/.o
 - `npm run test:e2e` — 15 Puppeteer scenarios (mock planner on :8788, so a dev planner on :8787 never answers them) in Chrome for Testing with the real extension: the full pharmacy refill (4 clicks, wrong click, done), 500 ms rerenders, open + closed shadow roots, same- and cross-origin iframes plus the money confirmation, typing + password + select with the **sentinel leak test against the planner's received requests**, the `<dialog>` modal-only rule, new-tab follow, 1,000 links, `chrome://` pages, the setup page, and the production build (no pre-granted host access). Screenshots land in `e2e/screenshots/`.
 - `CONVEX_CODE=<code> node e2e/run.mjs accounts` — pairing through the setup page against local Convex, the task card, the recipe `startUrl`, a completed task, and the completion note in Convex.
 - `npm run test:convex` — pairing (one use only), device token checks, pending tasks, events closing a task, and the `/plan` HTTP route.
-- `npm run test:accounts` — against local Convex: caregiver sign-up/sign-in (wrong password, duplicate email, short password, bad email), standalone seniors (`accounts:createSelf`), helper codes from her settings, Show me instead set by a caregiver, pairing (spaces, one use, replaced codes, stale tokens), merging a standalone senior with a caregiver profile (and the page redirect), second computers, task validation (`javascript:` and credential URLs, step limits), consent-gated status and stats, isolation between caregivers, disconnect and remove.
+- `npm run test:accounts` — against local Convex: caregiver sign-up/sign-in (wrong password, duplicate email, short password, bad email), standalone seniors (`accounts:createSelf`), helper codes from the user's settings, Show me instead set by a caregiver, pairing (spaces, one use, replaced codes, stale tokens), merging a standalone senior with a caregiver profile (and the page redirect), second computers, task validation (`javascript:` and credential URLs, step limits), consent-gated status and stats, isolation between caregivers, disconnect and remove.
 - `npm run test:caregiver` — Puppeteer against the caregiver app (`npm run caregiver` running): sign-up validation, setup wizard, code countdown and replacement, live "connected" when the senior redeems, sending a task with a recipe, Done + stats after consent, take back, activity feed, not-found page, phone width (no horizontal scroll), dark mode, sign out/in, duplicate sign-up. Screenshots land in `e2e/screenshots/caregiver/`.

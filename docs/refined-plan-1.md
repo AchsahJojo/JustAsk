@@ -9,7 +9,7 @@ This document builds on `docs/initial-plan.md` and does not repeat it. It change
 3. **The `planStep` Claude call is corrected** against the current API docs. The fallback feature is beta-only and breaks the loop without its header (§4).
 4. **The desktop app has a direction:** first a companion tray app, then guidance for native apps (§5).
 
-Rules from the initial plan that still hold: guide mode only (she always clicks), no site-specific code, no keys in clients, never capture or send field values, and page text is untrusted.
+Rules from the initial plan that still hold: guide mode only (the user always clicks), no site-specific code, no keys in clients, never capture or send field values, and page text is untrusted.
 
 ## Changes to the initial plan
 
@@ -76,7 +76,7 @@ Text-to-speech (`speechSynthesis`) works everywhere. Cartesia Sonic is the same 
 - **WXT builds every target:** `wxt build -b chrome|edge|firefox|safari|opera`. Per-browser manifest differences go in `wxt.config.ts` keyed by `browser`: `side_panel` vs `sidebar_action`, `browser_specific_settings.gecko.id`, and background type. Use WXT's `browser` global, not `chrome.*` directly, outside `src/platform/`.
 - **Feature detection beats browser sniffing.** For example: `if (browser.sidePanel) … else if (browser.sidebarAction) … else dock`. Opera and Arc then fall into the right path automatically.
 - **Firefox:** MV3 background is an event page, so no `chrome.offscreen`. Host permissions are user-revocable. Request them in setup and re-check before every session. AMO needs the readable source uploaded with each version, because WXT output is bundled. Check AMO's current rules on data-collection consent, since JustAsk sends page text to a server and must say so in the manifest and listing.
-- **Safari:** package with Xcode's Safari web extension packager. The containing macOS app is required, and it later becomes the macOS companion app (§5). This needs a paid Apple Developer account. Safari asks per site for host access, so the setup copy must walk her (or the caregiver) through "Always allow on every website." There are no closed shadow roots, so some web components will be invisible and get a `blocked` reply.
+- **Safari:** package with Xcode's Safari web extension packager. The containing macOS app is required, and it later becomes the macOS companion app (§5). This needs a paid Apple Developer account. Safari asks per site for host access, so the setup copy must walk the user (or the caregiver) through "Always allow on every website." There are no closed shadow roots, so some web components will be invisible and get a `blocked` reply.
 - **Dock mode:** the content script inserts a fixed host on the right edge with Shadow DOM. Inside is an `<iframe src=chrome-extension://…/panel.html>` listed in `web_accessible_resources`, so the panel runs as an extension page with extension permissions. The dock is rebuilt after every navigation and rehydrates from `storage.session`. Mic in the iframe: *verify*. The page's Permissions-Policy may block it. Typed input and the big buttons always work.
 
 ## 3. Gaps closed
@@ -134,17 +134,17 @@ Form fields in the form that holds focus are always kept.
   1. The WeakRef is alive and `isConnected`. Use it.
   2. Otherwise rescan the frame. If exactly one element has the same fingerprint, rebind silently, with no new Claude call.
   3. Otherwise, if exactly one element has the same role and text, rebind.
-  4. Otherwise re-plan with the history note "the page changed before she could click."
+  4. Otherwise re-plan with the history note "the page changed before the click."
 - **Overlay:** a MutationObserver on the target's subtree, plus a 250 ms check, triggers resolve when the target disconnects.
 - **Click check:** listen on `window` in the capture phase for both `pointerdown` and `click`, so we hear the click before page handlers can call `stopPropagation`. Success if `composedPath()` contains the current target **or** a node with the target's fingerprint. React may swap the node between pointerdown and click. Some sites act on `pointerdown` and cancel the click, so either event counts. The page-change check still confirms progress.
 
 ### 3.5 New tabs and windows
 
 - **Follow automatically** when a tab is created with `openerTabId === sessionTabId` (or via `webNavigation.onCreatedNavigationTarget`) within 5 s after a click in the session tab. Move the session there, inject the content script, and say "That opened a new tab. I'll keep helping you there."
-- **She switches tabs on her own:** pause. The panel asks "Keep helping on this tab?" with **Yes, here** and **Go back** buttons. "Go back" calls `tabs.update(sessionTabId, {active: true})`.
+- **The user switches tabs on their own:** pause. The panel asks "Keep helping on this tab?" with **Yes, here** and **Go back** buttons. "Go back" calls `tabs.update(sessionTabId, {active: true})`.
 - **Session tab closed:** pause. If a followed child tab exists, offer to continue there.
 - **Popup windows** (`window.open` with window features, such as sign-in popups): side panels don't show in popup windows, so use dock mode in that window. When the popup closes, return focus to the opener tab and rescan.
-- **Pages we can't inject into** (`chrome://`, store pages, the built-in PDF viewer, `file://`): say "I can't see this kind of page. Let's go back to the last page." and wait until she does.
+- **Pages we can't inject into** (`chrome://`, store pages, the built-in PDF viewer, `file://`): say "I can't see this kind of page. Let's go back to the last page." and wait until the user does.
 - A recipe `startUrl` opens in the session tab, not a new one.
 
 ### 3.6 User gestures
@@ -171,7 +171,7 @@ Never ask for permissions in the middle of a session. If host access was revoked
 - **Top-layer elements** (`<dialog>.showModal()`, popovers) render above any z-index. Put the overlay host in the top layer too (`popover="manual"` + `showPopover()`). Call it again whenever the page opens a new top-layer element, because the newest one wins.
 - **Strict CSP sites** (Gmail, GitHub): apply overlay styles with `adoptedStyleSheets` or `scripting.insertCSS`, not `<style>` tags. *Verify* on both sites.
 - **Hover menus:** `expect: "hover"` ("Move your mouse over Account"). Advance on `pointerenter`, then rescan after 300 ms.
-- **Waiting steps:** `kind: "wait"` covers "Check your phone for a code" and "the page is loading." There is no timeout, the mic stays available, and it resumes on a page change or her voice.
+- **Waiting steps:** `kind: "wait"` covers "Check your phone for a code" and "the page is loading." There is no timeout, the mic stays available, and it resumes on a page change or the user's voice.
 - **Money and personal-info steps:** Claude flags `risk: money|personal_info|account_change`. The panel then asks "This step will spend money. Do you want to go ahead?" with big **Yes** / **No** buttons before highlighting.
 - **Scam signals** (gift cards, remote-access downloads, "call this number now," urgency): `risk: "suspicious"`. JustAsk says "This page might be a trick. Let's stop and check with Sam." The session ends `blocked`, and a stuck note goes to the caregiver if `consent.notifyOnStuck` is on.
 - **Cookie banners:** this is a choice, so `clarify`. Either answer is fine.
@@ -249,10 +249,10 @@ const res = await client.beta.messages.create({
 ### 4.4 Prompt additions (on top of the initial plan's rules)
 
 - Pick `expect` to match the control. For a native select, return the exact option text.
-- Set `risk` honestly. Use `suspicious` for gift cards, remote-access software, urgent "call now" pages, or requests for passwords outside a sign-in she asked for.
-- Never ask her to read a code, password or number out loud.
-- Use `wait` when she has to do something away from the page.
-- The snapshot's `omitted` count means more controls exist. Prefer guiding her to scroll or open a menu over guessing.
+- Set `risk` honestly. Use `suspicious` for gift cards, remote-access software, urgent "call now" pages, or requests for passwords outside a sign-in the user asked for.
+- Never ask the user to read a code, password or number out loud.
+- Use `wait` when the user has to do something away from the page.
+- The snapshot's `omitted` count means more controls exist. Prefer guiding the user to scroll or open a menu over guessing.
 
 ## 5. Mac and Windows apps
 
@@ -261,7 +261,7 @@ const res = await client.beta.messages.create({
 Tauri is chosen over Electron for small signed installers and Rust access to OS APIs. Speech recognition doesn't work in either webview, so voice uses Cartesia either way.
 
 - **Tray / menu-bar icon** with a big **Ask** window. It starts at login.
-- **Task alerts with the browser closed:** the app holds the Convex subscription and shows OS notifications for "Sam sent you a task." Clicking **Start** opens her default browser to the recipe `startUrl`, or to the last page.
+- **Task alerts with the browser closed:** the app holds the Convex subscription and shows OS notifications for "Sam sent you a task." Clicking **Start** opens the user's default browser to the recipe `startUrl`, or to the last page.
 - **Pairing once:** the app pairs with the 6-digit code and hands the device token to the extension over **native messaging** (`runtime.connectNative`). The installer registers the host manifest in each browser's location: registry keys on Windows for Chrome and Edge, JSON files in each browser's NativeMessagingHosts folder on macOS, and Firefox's own location.
 - **On macOS the Safari extension's containing app *is* this app,** so Phase 3 and Phase 4 share one Xcode target.
 - **Voice in the app** (optional): a steadier mic than browser panels. The extension still owns highlighting.
@@ -349,6 +349,6 @@ Not in the hackathon: dock mode, Firefox, Safari, desktop, screenshot fallback.
 
 ## Open questions
 
-- Should a `risk: money` step also notify the caregiver (with consent), or only ask her?
+- Should a `risk: money` step also notify the caregiver (with consent), or only ask the user?
 - Who owns Apple Developer and Windows code-signing accounts after the hackathon?
 - Should the screenshot fallback (§3.7) be allowed at all, given the privacy promise? It defaults to off and is caregiver-enabled.

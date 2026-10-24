@@ -402,13 +402,13 @@ const scenarios = {
     const p = await browser.newPage();
     await p.setViewport({ width: 900, height: 1100 });
     await p.emulateMediaFeatures([{ name: "prefers-color-scheme", value: "light" }]);
+    // The server address is a build setting (VITE_CONVEX_URL); e2e builds leave it empty, so set it here.
+    await sw.evaluate(async (url) => {
+      const { settings = {} } = await chrome.storage.local.get("settings");
+      await chrome.storage.local.set({ settings: { ...settings, convexUrl: url } });
+    }, process.env.CONVEX_URL ?? "http://127.0.0.1:3210");
     await p.goto(`chrome-extension://${EXT_ID}/setup.html`);
-    await p.waitForSelector(".advanced summary");
-    await p.click(".advanced summary");
-    const convexInput = (await p.$$(".advanced input"))[1];
-    await convexInput.click({ clickCount: 3 });
-    await convexInput.type(process.env.CONVEX_URL ?? "http://127.0.0.1:3210");
-    await p.keyboard.press("Tab"); // saved on blur
+    await p.waitForSelector('input[aria-label="Pairing code"]');
     await p.type('input[aria-label="Pairing code"]', process.env.CONVEX_CODE);
     await clickText(p, "Connect");
     await p.waitForFunction(() => document.body.textContent.includes("Connected as Mom"), { timeout: 8000 });
@@ -432,6 +432,24 @@ const scenarios = {
     }
     await phase(s.panel, "done", 20000);
     await closeSession(s);
+
+    // The JustAsk desktop app makes a link code; this already-connected browser types it under "I have a code".
+    const { ConvexHttpClient } = await import("convex/browser");
+    const cx = new ConvexHttpClient(process.env.CONVEX_URL ?? "http://127.0.0.1:3210");
+    const { token: deskToken } = await cx.mutation("accounts:createSelf", { displayName: "Joan", device: { kind: "desktop", platform: "test", label: "Joan's PC", machineId: "pc-e2e" } });
+    const { code: deskCode } = await cx.mutation("devices:createLinkCode", { token: deskToken });
+    const st = await browser.newPage();
+    await st.goto(`chrome-extension://${EXT_ID}/setup.html`);
+    await st.waitForSelector('input[aria-label="Code"]');
+    await st.type('input[aria-label="Code"]', deskCode);
+    await clickText(st, "Next");
+    await st.waitForFunction(() => document.body.textContent.includes("Link this browser to Joan's JustAsk?"), { timeout: 8000 });
+    await st.screenshot({ path: `${SHOTS}/19b-setup-link-desktop.png`, fullPage: true });
+    await clickText(st, "Yes, link it");
+    await st.waitForFunction(() => document.body.textContent.includes("Linked."), { timeout: 8000 });
+    const devices = await cx.query("devices:list", { token: deskToken });
+    assert.deepEqual(devices.map((d) => [d.kind, d.machineId]).sort(), [["desktop", "pc-e2e"], ["extension", "pc-e2e"]], "one account; the browser has the app's machine id");
+    await st.close();
   },
 
   async "setup page renders"() {

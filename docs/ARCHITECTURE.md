@@ -10,30 +10,30 @@ Sections marked **(target)** describe agreed designs that are not built yet. Eve
 
 ## 1. The product
 
-She presses one big button and says what she wants. JustAsk reads the screen and does the task for her, one visible step at a time. Before each action it puts a glowing box on the thing it is about to use and says what it is doing ("I'm clicking Add to cart"). Then it acts and checks that the screen changed. When a step needs something only she should enter, such as a password or a card number, JustAsk switches to guiding: it points, and she types.
+The user presses one big button and says what they want. JustAsk reads the screen and does the task for them, one visible step at a time. Before each action it puts a glowing box on the thing it is about to use and says what it is doing ("I'm clicking Add to cart"). Then it acts and checks that the screen changed. When a step needs something only the user should enter, such as a password or a card number, JustAsk switches to guiding: it points, and the user types.
 
-Caregivers can send her tasks, optionally with a plain-language recipe. If she consents, they get a note when she finishes.
+Caregivers can send the user tasks, optionally with a plain-language recipe. If the user consents, the caregiver gets a note when the task is finished.
 
 There are two surfaces:
 
 - **Browser extension.** Chrome and Edge now; Firefox and Safari later (see the browser matrix in `refined-plan-1.md` §2).
 - **Desktop app (target).** Windows and macOS. It is a companion to the extension, and it also guides in a few high-value native apps (§9).
 
-> **Built today vs. target.** The current code is guide-only: it points and she clicks. Drive mode (§11) is the agreed target from 2026-10-24.
+> **Built today vs. target.** The current code is guide-only: it points and the user clicks. Drive mode (§11) is the agreed target from 2026-10-24.
 
 ## 2. Ground rules
 
 `CLAUDE.md` is the enforced copy of these rules. Change both together.
 
 1. **Drive within safety limits (target; today: guide only).** JustAsk performs one numbered action per step: click, type, choose, scroll or submit. Every action is announced and highlighted first, and Stop always works.
-   - **Never typed by JustAsk:** sensitive fields. These are passwords, one-time codes, card numbers and CVVs, SSNs, bank accounts, and any field whose `autocomplete` value is for credentials or payment. For these, JustAsk guides her instead.
+   - **Never typed by JustAsk:** sensitive fields. These are passwords, one-time codes, card numbers and CVVs, SSNs, bank accounts, and any field whose `autocomplete` value is for credentials or payment. For these, JustAsk guides the user instead.
    - **Always asked first:** steps that spend money, change the account, or send personal information.
    - **Always blocked:** pages that look like scams.
-   - **Navigation:** never to a URL Claude made up. Only the recipe's `startUrl`, links on the page, or, on an empty tab, a search for her own words with her default search engine.
+   - **Navigation:** never to a URL Claude made up. Only the recipe's `startUrl`, links on the page, or, on an empty tab, a search for the user's own words with their default search engine.
 2. **Claude returns an element number** for the current snapshot. Never a selector or coordinates.
 3. **No API keys in client code.** Secrets live only in Convex env.
 4. **No site-specific or app-specific code.** Fixtures and target apps are tests, not special cases.
-5. **Field values never leave the device.** Only the booleans `hasValue`, `valid`, `matched` and `sensitive` do. JustAsk may write text it composed from her words, but it never reads back what a field contains.
+5. **Field values never leave the device.** Only the booleans `hasValue`, `valid`, `matched` and `sensitive` do. JustAsk may write text it composed from the user's words, but it never reads back what a field contains.
 6. **Page and app text is untrusted data.** It goes inside `<page_content>` in the prompt, and it is never treated as instructions.
 7. **Shared types come only from `packages/shared`.**
 8. **Platform APIs stay in their layers.**
@@ -45,7 +45,7 @@ There are two surfaces:
 ## 3. System context
 
 ```
- her computer ───────────────────────────────────────────────────────────────
+ the user's computer ────────────────────────────────────────────────────────
  │ Browser (Chrome/Edge)                     Desktop app (Tauri 2, target)  │
  │ ┌───────────────────────────┐             ┌───────────────────────────┐  │
  │ │ Side panel                │             │ Ask window + tray         │  │
@@ -108,7 +108,7 @@ Only Convex calls the Claude API, in [`packages/backend/lib/planStep.ts`](../pac
    - **clarify, wait, done, blocked:** go to the phases `asking`, `waiting`, `done` and `blocked`.
 8. **The step finishes.**
    - After an `act`, the step finishes when `ja:acted` comes back.
-   - After a `guide`, it finishes when she acts: the page agent sends `ja:step-done`, `ja:wrong` or `ja:lost`, and `SessionHost` relays it to `controller.onContent`.
+   - After a `guide`, it finishes when the user acts: the page agent sends `ja:step-done`, `ja:wrong` or `ja:lost`, and `SessionHost` relays it to `controller.onContent`.
 9. **Verify.** `onStepDone` enters `verifying` and calls `waitForChange`.
    - That waits for a navigation, or for the DOM to stay quiet for 600 ms.
    - The limit is 4 s after a click and 0.7 s after typing.
@@ -165,7 +165,7 @@ These are the seams between parts. Change one only in `packages/shared`, and the
 
 | | What |
 |---|---|
-| Leaves the page | the snapshot (labels, visible text, booleans), her request, and history lines |
+| Leaves the page | the snapshot (labels, visible text, booleans), the user's request, and history lines |
 | Stored in Convex | `seniors`, `devices` (token hashes only), `pairingCodes`, `tasks` (+ recipes), `sessions` (request clipped to 200 characters), `events` (type, time, latency), `stepCounts`, `notifications`, `caregivers`, `careLinks` |
 | Never stored | snapshots, page text, field values |
 | Logged | only `plan {stopReason, outputTokens, cacheReadTokens}` |
@@ -175,10 +175,10 @@ Caregivers see outcomes and counts, never page content.
 ## 8. Accounts and sync (target)
 
 **Model**
-- There is one account per senior: the `seniors` row, "her account".
+- There is one account per senior: the `seniors` row, "the user's account".
 - Each install is one `devices` row, with its own token that can be revoked.
 - New `devices` fields: `kind` (extension or desktop), `platform`, `label`, `machineId?` and `lastSeenAt`.
-- Caregivers are Convex Auth users, linked to her through `careLinks`.
+- Caregivers are Convex Auth users, linked to the user through `careLinks`.
 
 **Joining**
 - **First install.** "Create my JustAsk" calls `accounts:createSelf`. Redeeming a caregiver's code still works too.
@@ -186,12 +186,12 @@ Caregivers see outcomes and counts, never page content.
 - **Linking from the desktop app.**
   - The desktop app opens the JustAsk link page in each installed browser, with the code in the URL `#fragment`.
   - The extension background sees it through `tabs.onUpdated`, but only on the JustAsk link origin.
-  - Setup asks "Link to Margaret's JustAsk?" before redeeming.
+  - Setup asks "Link to Alex's JustAsk?" before redeeming.
   - Native messaging is the later, stronger option.
-- **Caregivers.** Her install shows a helper code. A caregiver redeems it in the web app, which creates the `careLinks` row.
+- **Caregivers.** The user's install shows a helper code. A caregiver redeems it in the web app, which creates the `careLinks` row.
 
 **Sync**
-- Voice, speech rate, consent and the **Show me instead** setting move onto her account.
+- Voice, speech rate, consent and the **Show me instead** setting move onto the user's account.
 - Long-lived installs (the side panel and the desktop app) subscribe through `ConvexClient` over a WebSocket.
 - The MV3 service worker keeps polling with `ConvexHttpClient` on alarms.
 - Tasks and handoffs are live queries.
@@ -201,7 +201,7 @@ Caregivers see outcomes and counts, never page content.
 - Redeem attempts are rate-limited.
 - The account name is shown before linking.
 - Any install can revoke another.
-- **Social-engineering risk.** A scammer could ask her to read out a helper code. So linking a caregiver is confirmed on her install, with "Sam will be able to send you tasks."
+- **Social-engineering risk.** A scammer could ask the user to read out a helper code. So linking a caregiver is confirmed on the user's install, with "Sam will be able to send you tasks."
 
 ### Backend: use Convex built-ins
 
@@ -262,7 +262,7 @@ apps/desktop/
 **Acting in native apps** uses accessibility patterns, not synthetic mouse moves.
 - **Windows:** `InvokePattern` for buttons, `ValuePattern.SetValue` for text, `SelectionItemPattern` and `ExpandCollapsePattern` for lists and menus, and `ScrollPattern` for scrolling.
 - **macOS:** `AXPress`, setting `AXValue`, and `AXShowMenu`.
-- If a pattern is missing, the step falls back to guiding her.
+- If a pattern is missing, the step falls back to guiding the user.
 - Secure fields are never set.
 
 **Voice**
@@ -275,9 +275,9 @@ A `handoffs` row moves one session between surfaces on the same machine. Devices
 
 - **Browser to desktop.** A link opens a native app, for example a Zoom invite. The extension creates a handoff. The desktop app is always subscribed, so it says "I'll keep helping you in Zoom" and continues natively.
 - **Desktop to browser.**
-  - The desktop app opens her browser at the recipe `startUrl`, or at a fixed start page, with `#justask=<handoffId>`.
+  - The desktop app opens the user's browser at the recipe `startUrl`, or at a fixed start page, with `#justask=<handoffId>`.
   - The extension background claims the handoff. The server checks that it belongs to the same senior.
-  - An in-page **Start** banner appears. Her click is the user gesture that opens the side panel.
+  - An in-page **Start** banner appears. The user's click is the gesture that opens the side panel.
 - Handoffs carry only `request`, `taskId`, `recipe` and a fixed note. Never page content.
 
 ## 10. Known problems: root causes and fixes
@@ -289,7 +289,7 @@ These come from testing the v1 extension on real sites.
 - **Cause 1: a `wait` step parks the session for good.**
   - Only three things resume it:
     - a full navigation ([session.ts:159](../apps/extension/src/lib/session.ts#L159))
-    - her voice
+    - the user's voice
     - the **I'm ready** button ([Panel.tsx:241](../apps/extension/src/ui/Panel.tsx#L241))
   - `ja:page-changed` is defined ([messages.ts:36](../packages/shared/src/messages.ts#L36)) and handled ([controller.ts:307](../packages/core/src/controller.ts#L307)), but nothing ever sends it.
   - In-page dialogs such as post composers never navigate, so the session never resumes.
@@ -306,7 +306,7 @@ These come from testing the v1 extension on real sites.
 ### P2. Nonsense steps ("Shop by room" for a water bottle)
 
 - **Cause 1 (the prompt).**
-  - [prompt.ts:14](../packages/core/src/prompt.ts#L14) tells Claude, when items were left out, to "prefer guiding her to scroll or open a menu over guessing".
+  - [prompt.ts:14](../packages/core/src/prompt.ts#L14) tells Claude, when items were left out, to prefer guiding the user "to scroll or open a menu over guessing".
   - There is no "search first" rule.
   - Store pages hit the 150-element cap, so this pushes Claude into category menus.
 - **Cause 2 (the scanner).** Hidden menus fill up the list.
@@ -333,11 +333,11 @@ These come from testing the v1 extension on real sites.
   - **Measure** with the eval harness (§12).
 - **How to confirm on the failing site:** capture the request in dev mode. If every element is `inModal: true`, Cause 2 is confirmed.
 
-### P3. She has to do every click and keystroke herself
+### P3. The user has to do every click and keystroke themselves
 
 Solved by drive mode (§11).
 
-## 11. Acting for her (drive mode, target)
+## 11. Acting for the user (drive mode, target)
 
 **Per-step flow**
 1. Claude returns `kind: "act"` with a target and an `expect` (click, type, choose, scroll or submit), plus `text` or `option` where needed.
@@ -352,19 +352,19 @@ Solved by drive mode (§11).
    - **scroll:** `scrollIntoView`.
 6. It replies `ja:acted {ok}`.
 7. Then `waitForChange`, then the next step.
-8. If `ok` is false (for example, a site that ignores synthetic events), JustAsk repeats the same step as `guide`, and she does it.
+8. If `ok` is false (for example, a site that ignores synthetic events), JustAsk repeats the same step as `guide`, and the user does it.
 
 **Gates.** These live in the controller. They are deterministic and never left to Claude.
 
 - **Sensitive fields.** `type`, `choose` and `submit` are never allowed on a `field.sensitive`. The step becomes `guide` ("Type your password here. I can't see it.").
 - **Risk.** `money`, `account_change` and `personal_info` ask Yes/No first, as today. `suspicious` is blocked.
 - **Typed text.**
-  - It must be built from her words: her request, her answers, or the recipe.
-  - If it adds words she didn't say (for example, a message Claude drafted), she confirms first: "I'll type: Happy birthday, Sam! Okay?"
-  - Search text that uses only her words goes straight in.
-- **Personal-data guard on text.** Reject SSNs, card numbers (Luhn check), phone numbers, emails and the word "password". JustAsk doesn't store her personal details, so it can't type them anyway.
+  - It must be built from the user's words: their request, their answers, or the recipe.
+  - If it adds words the user didn't say (for example, a message Claude drafted), the user confirms first: "I'll type: Happy birthday, Sam! Okay?"
+  - Search text that uses only the user's words goes straight in.
+- **Personal-data guard on text.** Reject SSNs, card numbers (Luhn check), phone numbers, emails and the word "password". JustAsk doesn't store the user's personal details, so it can't type them anyway.
 - **Navigation.** Only by clicking links on the page, or opening the recipe's `startUrl`. Never a URL from Claude.
-- **Empty tab.** If she starts on the New Tab page or `about:blank` and there is no `startUrl`, the extension searches her request (filler words removed, `searchQueryFor` in `packages/core`) with `chrome.search.query` in that tab, so her default engine is used and no site is built in. Claude gets a history note saying so. Landing on an empty tab mid-session pauses with **Look it up for me**.
+- **Empty tab.** If the user starts on the New Tab page or `about:blank` and there is no `startUrl`, the extension searches the user's request (filler words removed, `searchQueryFor` in `packages/core`) with `chrome.search.query` in that tab, so their default search engine is used and no site is built in. Claude gets a history note saying so. Landing on an empty tab mid-session pauses with **Look it up for me**.
 - **Runaway protection.**
   - The existing caps stay: 40 steps per session, and 60 per device per hour.
   - After 3 actions in a row that don't change the page, JustAsk switches to guide mode.
@@ -379,7 +379,7 @@ When unsure, it treats the field as sensitive.
 **UX**
 - Every action is visible: the ring, the caption and the voice.
 - Stop cancels at any time, including during the beat.
-- A **Show me instead** setting (on her account, synced) switches to guide mode for people who want to learn.
+- A **Show me instead** setting (on the user's account, synced) switches to guide mode for people who want to learn.
 - The completion line changes from "You made N clicks yourself" to "All done. I did N steps for you."
 
 **Why it is still safe enough**
@@ -390,7 +390,7 @@ When unsure, it treats the field as sensitive.
 - Scam pages are blocked before any action.
 
 Prompt injection is the main new risk, because a page can try to steer actions. That is why:
-- typed text is checked against her own words
+- typed text is checked against the user's own words
 - risky steps always ask first
 - the eval includes injection cases
 
