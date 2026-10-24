@@ -102,6 +102,7 @@ code { background: var(--sand); padding: 1px 6px; border-radius: 6px; font-size:
 /* Cards, pills */
 .card { background: var(--paper); border: 1px solid var(--line); border-radius: var(--radius); padding: 22px; box-shadow: var(--shadow); display: grid; gap: 12px; align-content: start; }
 .card.narrow { max-width: 460px; }
+.card > .btn { justify-self: start; }
 .center-block { margin: 40px auto; text-align: center; justify-items: center; }
 .pill { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 650; padding: 3px 10px; border-radius: 99px; background: var(--sand); color: var(--ink-2); white-space: nowrap; }
 .pill.ok { background: var(--sage-soft); color: var(--sage); }
@@ -118,6 +119,7 @@ code { background: var(--sand); padding: 1px 6px; border-radius: 6px; font-size:
 .field > span, .field legend { font-weight: 650; font-size: 14px; color: var(--ink-2); padding: 0; margin-bottom: 0; }
 .field legend { margin-bottom: 6px; }
 .field small { color: var(--ink-3); font-size: 13px; }
+.field .linkbtn { justify-self: start; }
 input:not([type="checkbox"]) { width: 100%; min-width: 0; background: var(--paper); border: 1.5px solid var(--line); border-radius: 11px; padding: 11px 13px; font-size: 16px; transition: border-color 0.15s, box-shadow 0.15s; }
 input:not([type="checkbox"]):hover { border-color: color-mix(in srgb, var(--ink-3) 60%, var(--line)); }
 input:not([type="checkbox"]):focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 18%, transparent); }
@@ -256,7 +258,7 @@ input::placeholder { color: color-mix(in srgb, var(--ink-3) 70%, transparent); }
 .task-title { font-weight: 650; }
 .task-side { display: grid; justify-items: end; gap: 4px; }
 .share { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; font-size: 14px; color: var(--ink-2); }
-.share li { display: flex; gap: 10px; align-items: center; }
+.share li { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 10px; align-items: center; }
 .sw { width: 30px; height: 18px; flex: none; border-radius: 99px; background: var(--line); position: relative; }
 .sw::after { content: ""; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%; background: var(--paper); transition: left 0.15s; }
 .sw.on { background: var(--sage); }
@@ -297,3 +299,5 @@ input::placeholder { color: color-mix(in srgb, var(--ink-3) 70%, transparent); }
   .composer-closed { grid-template-columns: 1fr; }
   .stepper li { font-size: 13px; }
 }
+.empty-feed { max-width: 640px; margin: 0 auto; }
+.empty-feed .feed { position: static; }

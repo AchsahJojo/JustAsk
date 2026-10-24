@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { useAuthActions } from "@convex-dev/auth/react";
 import { api, errorText } from "../api";
+import { go } from "../router";
 
 export function Account() {
   const me = useQuery(api.caregivers.me);
@@ -58,7 +59,13 @@ export function Account() {
       <section className="card">
         <h2>Sign out</h2>
         <p className="muted small">The people you help keep using JustAsk while you're signed out. Tasks you sent stay on their computer.</p>
-        <button className="btn ghost" onClick={() => void signOut()}>
+        <button
+          className="btn ghost"
+          onClick={() => {
+            go({ name: "home" });
+            void signOut();
+          }}
+        >
           Sign out
         </button>
       </section>

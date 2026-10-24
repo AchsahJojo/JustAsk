@@ -36,22 +36,27 @@ class NotFoundBoundary extends Component<{ children: ReactNode }, { failed: bool
 }
 
 function PersonPage({ id }: { id: Id<"seniors"> }) {
-  const p = useQuery(api.people.get, { seniorId: id });
+  const got = useQuery(api.people.get, { seniorId: id });
+  const p = got && !got.moved ? got : undefined;
   const [addComputer, setAddComputer] = useState(false);
-  const [justConnected, setJustConnected] = useState(false);
   const prevDevices = useRef<number | null>(null);
 
   useEffect(() => {
     if (!p) return;
-    if (prevDevices.current === 0 && p.devices > 0) setJustConnected(true);
     if (addComputer && prevDevices.current !== null && p.devices > prevDevices.current) setAddComputer(false);
     prevDevices.current = p.devices;
   }, [p, addComputer]);
 
+  const movedTo = got?.moved ? got.movedTo : null;
+  useEffect(() => {
+    if (movedTo) location.replace(href({ name: "person", id: movedTo }));
+  }, [movedTo]);
+
   if (p === undefined) return <Spinner label="Loading" />;
 
   const connected = p.devices > 0;
-  const firstRun = !connected || (justConnected && p.tasks.length === 0);
+  // Until the first task is sent, the page keeps walking them through setup.
+  const firstRun = !connected || p.tasks.length === 0;
 
   return (
     <div className="person">
@@ -370,15 +375,17 @@ function Sharing({
 }) {
   return (
     <section className="card">
-      <h2>What {displayName} shares</h2>
+      <h2>What {displayName} shares with you</h2>
       <ul className="share">
         <li>
           <span className={`sw ${consent.notifyOnComplete ? "on" : ""}`} aria-hidden="true" />
-          When they finish a task you sent: <strong>{consent.notifyOnComplete ? "On" : "Off"}</strong>
+          <span>Finishes a task you sent</span>
+          <strong>{consent.notifyOnComplete ? "On" : "Off"}</strong>
         </li>
         <li>
           <span className={`sw ${consent.notifyOnStuck ? "on" : ""}`} aria-hidden="true" />
-          When they get stuck: <strong>{consent.notifyOnStuck ? "On" : "Off"}</strong>
+          <span>Gets stuck</span>
+          <strong>{consent.notifyOnStuck ? "On" : "Off"}</strong>
         </li>
       </ul>
       <p className="muted small">Only {displayName} can change this, on their computer. You never see their screen, what they type, or what they ask JustAsk themselves.</p>

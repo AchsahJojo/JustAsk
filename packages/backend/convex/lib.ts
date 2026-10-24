@@ -136,7 +136,19 @@ export async function mergeSenior(ctx: MutationCtx, from: Id<"seniors">, into: I
   }
   for (const s of await ctx.db.query("sessions").withIndex("by_senior", (q) => q.eq("seniorId", from)).collect()) await ctx.db.patch(s._id, { seniorId: into });
   for (const c of await ctx.db.query("pairingCodes").withIndex("by_senior", (q) => q.eq("seniorId", from)).collect()) await ctx.db.delete(c._id);
+  for (const a of await ctx.db.query("seniorAliases").withIndex("by_to", (q) => q.eq("to", from)).collect()) await ctx.db.patch(a._id, { to: into });
+  await ctx.db.insert("seniorAliases", { from, to: into });
   await ctx.db.delete(from);
 }
 
 export const clean = (s: string, max: number) => s.replace(/\s+/g, " ").trim().slice(0, max);
+
+/** Follow merge aliases from a senior id that no longer exists. */
+export async function resolveSenior(ctx: QueryCtx | MutationCtx, id: Id<"seniors">): Promise<Id<"seniors"> | null> {
+  if (await ctx.db.get(id)) return id;
+  const alias = await ctx.db
+    .query("seniorAliases")
+    .withIndex("by_from", (q) => q.eq("from", id))
+    .first();
+  return alias && (await ctx.db.get(alias.to)) ? alias.to : null;
+}

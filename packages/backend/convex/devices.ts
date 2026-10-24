@@ -74,7 +74,8 @@ export const newCode = mutation({
 export const activeCode = query({
   args: { seniorId: v.id("seniors") },
   handler: async (ctx, { seniorId }) => {
-    await requireLink(ctx, seniorId);
+    // Null rather than an error if the profile just merged away; the page follows `people:get`.
+    if (!(await requireLink(ctx, seniorId).catch(() => null))) return null;
     const row = await ctx.db
       .query("pairingCodes")
       .withIndex("by_senior", (q) => q.eq("seniorId", seniorId))

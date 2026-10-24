@@ -3,7 +3,7 @@ import { mutation, query } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import type { QueryCtx } from "./_generated/server";
 import type { CaregiverTaskStatus } from "@justask/shared";
-import { clean, requireCaregiver, requireLink } from "./lib";
+import { clean, requireCaregiver, requireLink, resolveSenior } from "./lib";
 
 async function deviceCount(ctx: QueryCtx, seniorId: Id<"seniors">) {
   return (await ctx.db.query("devices").withIndex("by_senior", (q) => q.eq("seniorId", seniorId)).collect()).length;
@@ -48,6 +48,12 @@ export const list = query({
 export const get = query({
   args: { seniorId: v.id("seniors") },
   handler: async (ctx, { seniorId }) => {
+    // Her own profile was kept when she connected: send the caregiver's page to it.
+    const resolved = await resolveSenior(ctx, seniorId);
+    if (resolved && resolved !== seniorId) {
+      await requireLink(ctx, resolved);
+      return { moved: true as const, movedTo: resolved };
+    }
     const { cg, link } = await requireLink(ctx, seniorId);
     const s = await ctx.db.get(seniorId);
     if (!s) throw new Error("not your senior");
@@ -82,6 +88,7 @@ export const get = query({
     }
 
     return {
+      moved: false as const,
       id: s._id,
       name: s.name || s.displayName,
       displayName: s.displayName,
@@ -116,6 +123,12 @@ export const update = mutation({
 export const remove = mutation({
   args: { seniorId: v.id("seniors") },
   handler: async (ctx, { seniorId }) => {
+    // Her own profile was kept when she connected: send the caregiver's page to it.
+    const resolved = await resolveSenior(ctx, seniorId);
+    if (resolved && resolved !== seniorId) {
+      await requireLink(ctx, resolved);
+      return { moved: true as const, movedTo: resolved };
+    }
     const { cg, link } = await requireLink(ctx, seniorId);
     await ctx.db.delete(link._id);
     for (const t of await ctx.db.query("tasks").withIndex("by_senior_status", (q) => q.eq("seniorId", seniorId).eq("status", "pending")).collect()) {

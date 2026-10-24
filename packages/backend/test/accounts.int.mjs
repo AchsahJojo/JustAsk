@@ -127,6 +127,8 @@ assert.equal(anaList[0].connected, true);
 assert.equal(anaList[0].name, "Alice Park");
 const aliceNewId = anaList[0].id;
 assert.notEqual(aliceNewId, aliceId, "caregiver's empty placeholder merged into her profile");
+assert.deepEqual(await ana.c.query("people:get", { seniorId: aliceId }), { moved: true, movedTo: aliceNewId }, "old page id redirects");
+await assert.rejects(sam.c.query("people:get", { seniorId: aliceId }), /not your senior/, "redirect doesn't leak to other caregivers");
 ok("standalone senior + caregiver code: one profile, same token, her name kept, task carried over");
 
 // --- A second caregiver joins the same senior; a second computer joins an in-use profile ---

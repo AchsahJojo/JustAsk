@@ -26,6 +26,10 @@ export default defineSchema({
   careLinks: defineTable({ caregiverId: v.id("caregivers"), seniorId: v.id("seniors"), relation: v.string(), linkedAt: v.optional(v.number()) })
     .index("by_caregiver", ["caregiverId"])
     .index("by_senior", ["seniorId"]),
+  // When two profiles merge (see lib.mergeSenior), the deleted id points at the one that was kept,
+  // so a caregiver's open page can follow it.
+  seniorAliases: defineTable({ from: v.string(), to: v.id("seniors") }).index("by_from", ["from"])
+    .index("by_to", ["to"]),
   pairingCodes: defineTable({ seniorId: v.id("seniors"), code: v.string(), expiresAt: v.number() })
     .index("by_code", ["code"])
     .index("by_senior", ["seniorId"]),
