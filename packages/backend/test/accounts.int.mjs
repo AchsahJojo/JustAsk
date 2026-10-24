@@ -89,7 +89,7 @@ ok("task validation (blank title, javascript:, credentials in URL, too many step
 // --- Consent gates what the caregiver sees ---
 let mom = await sam.c.query("people:get", { seniorId: momId });
 assert.equal(mom.stats, null, "no stats without consent");
-await anon.mutation("tasks:setStatus", { token: fresh.token, taskId: t1, status: "active" }); // she pressed Start
+await anon.mutation("tasks:setStatus", { token: fresh.token, taskId: t1, status: "active" }); // the user pressed Start
 const s1 = await anon.mutation("sessions:start", { token: fresh.token, request: "refill", taskId: t1 });
 await anon.mutation("sessions:logEvent", { token: fresh.token, sessionId: s1, type: "step_shown", latencyMs: 800 });
 await anon.mutation("sessions:logEvent", { token: fresh.token, sessionId: s1, type: "done" });
@@ -114,13 +114,13 @@ await assert.rejects(ana.c.mutation("tasks:cancel", { taskId: t1 }), /not found/
 assert.deepEqual(await ana.c.query("people:list", {}), []);
 ok("another caregiver can't see, task, re-code or cancel");
 
-// --- Standalone senior connects to a caregiver later: profiles merge, her own is kept ---
+// --- Standalone senior connects to a caregiver later: profiles merge, the user's own is kept ---
 const { seniorId: aliceId, code: aliceCode } = await ana.c.mutation("devices:createSeniorWithCode", { name: "Alice Park", displayName: "Grandma", relation: "Grandmother" });
 await ana.c.mutation("tasks:assign", { seniorId: aliceId, title: "Video call Ana" });
 const merged = await anon.mutation("devices:redeemCode", { code: aliceCode, token: solo });
 assert.ok(merged);
 assert.equal(merged.token, solo, "keeps the same device token");
-assert.equal(merged.displayName, "Margaret", "her own name wins");
+assert.equal(merged.displayName, "Margaret", "the user's own name wins");
 const meMerged = await anon.query("devices:me", { token: solo });
 assert.deepEqual(meMerged.helpers.map((h) => h.name), ["Ana"]);
 assert.equal((await anon.query("tasks:pendingForDevice", { token: solo }))[0].title, "Video call Ana", "task sent before pairing arrives");
@@ -129,10 +129,10 @@ assert.equal(anaList.length, 1);
 assert.equal(anaList[0].connected, true);
 assert.equal(anaList[0].name, "Alice Park");
 const aliceNewId = anaList[0].id;
-assert.notEqual(aliceNewId, aliceId, "caregiver's empty placeholder merged into her profile");
+assert.notEqual(aliceNewId, aliceId, "caregiver's empty placeholder merged into the user's profile");
 assert.deepEqual(await ana.c.query("people:get", { seniorId: aliceId }), { moved: true, movedTo: aliceNewId }, "old page id redirects");
 await assert.rejects(sam.c.query("people:get", { seniorId: aliceId }), /not your senior/, "redirect doesn't leak to other caregivers");
-ok("standalone senior + caregiver code: one profile, same token, her name kept, task carried over");
+ok("standalone senior + caregiver code: one profile, same token, the user's name kept, task carried over");
 
 // --- A second caregiver joins the same senior; a second computer joins an in-use profile ---
 const { code: momCode2 } = await sam.c.mutation("devices:newCode", { seniorId: momId });
@@ -184,7 +184,7 @@ await ana.c.mutation("activity:markAllRead", {});
 assert.equal((await ana.c.query("activity:feed", {})).every((n) => n.read), true);
 ok("activity mark-all-read");
 
-// --- Her task list persists: started tasks stay open, "I did it" moves them to done ---
+// --- The user's task list persists: started tasks stay open, "I did it" moves them to done ---
 {
   const kim = await caregiver("Kim");
   const { seniorId, code } = await kim.c.mutation("devices:createSeniorWithCode", { name: "Lee Park", displayName: "Dad", relation: "Father" });
@@ -206,11 +206,11 @@ ok("activity mark-all-read");
   ok("task list: started task stays open after closing; I did it → done + note; removed tasks leave");
 }
 
-// --- Show me instead: she or a linked caregiver can change it; the caregiver's choice carries over ---
+// --- Show me instead: the user or a linked caregiver can change it; the caregiver's choice carries over ---
 {
   const jo = await caregiver("Jo");
   const { seniorId, code } = await jo.c.mutation("devices:createSeniorWithCode", { name: "Ruth Ng", displayName: "Gran", relation: "Grandmother" });
-  await jo.c.mutation("people:setShowMe", { seniorId, on: true }); // set while setting up, before she connects
+  await jo.c.mutation("people:setShowMe", { seniorId, on: true }); // set while setting up, before the user connects
   const { token: solo3 } = await createSelf("Ruth");
   assert.equal((await anon.query("prefs:get", { token: solo3 })).showMeInstead, false, "drive mode by default");
   assert.ok(await anon.mutation("devices:redeemCode", { code, token: solo3 }));
@@ -222,25 +222,25 @@ ok("activity mark-all-read");
   assert.deepEqual([p.showMeInstead, p.showMeSetBy], [false, "self"]);
   const other = await caregiver("Stranger");
   await assert.rejects(other.c.mutation("people:setShowMe", { seniorId: id, on: true }), /not your senior/);
-  ok("show me instead: off by default, caregiver choice carries over, she can change it, strangers can't");
+  ok("show me instead: off by default, caregiver choice carries over, the user can change it, strangers can't");
 }
 
-// --- She shares a helper code from her Settings; the caregiver types it in the web app ---
+// --- The user shares a helper code from the user's Settings; the caregiver types it in the web app ---
 {
   const lu = await caregiver("Lu");
-  const { token: her } = await createSelf("Bea");
-  const { code } = await anon.mutation("careLinks:createHelperCode", { token: her });
+  const { token: seniorToken } = await createSelf("Bea");
+  const { code } = await anon.mutation("careLinks:createHelperCode", { token: seniorToken });
   assert.equal(await lu.c.mutation("careLinks:redeemHelperCode", { code: "000000" }), null);
   const r = await lu.c.mutation("careLinks:redeemHelperCode", { code });
   assert.equal(r.displayName, "Bea");
-  assert.deepEqual((await anon.query("devices:me", { token: her })).helpers.map((h) => h.name), ["Lu"]);
+  assert.deepEqual((await anon.query("devices:me", { token: seniorToken })).helpers.map((h) => h.name), ["Lu"]);
   const people = await lu.c.query("people:list", {});
   assert.deepEqual(people.map((x) => [x.name, x.connected]), [["Bea", true]]);
   assert.equal(await lu.c.mutation("careLinks:redeemHelperCode", { code }), null, "helper code works once");
   // A helper code is not a device code, and the other way round.
-  const { code: dev } = await anon.mutation("devices:createLinkCode", { token: her });
+  const { code: dev } = await anon.mutation("devices:createLinkCode", { token: seniorToken });
   assert.equal(await lu.c.mutation("careLinks:redeemHelperCode", { code: dev }), null);
-  ok("helper code from her Settings links the caregiver once; device codes don't work as helper codes");
+  ok("helper code from the user's Settings links the caregiver once; device codes don't work as helper codes");
 }
 
 console.log("\nall account checks passed");

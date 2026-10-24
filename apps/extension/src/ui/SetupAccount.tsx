@@ -10,7 +10,7 @@ const NO_SERVER = "Accounts aren't set up on this copy of JustAsk yet. JustAsk s
 const digits = (v: string) => v.replace(/\D/g, "");
 
 /**
- * Setup step 3: join her account. "I'm new" creates it (accounts:createSelf); "I have a code"
+ * Setup step 3: join the user's account. "I'm new" creates it (accounts:createSelf); "I have a code"
  * redeems a 6-digit code (devices:redeemCode). A `?link=` code from the link page asks first.
  */
 export function AccountStep({ s, onChange, linkCode, onLinkDone }: { s: Settings; onChange: (s: Settings) => void; linkCode: string | null; onLinkDone: () => void }) {
@@ -45,7 +45,7 @@ export function AccountStep({ s, onChange, linkCode, onLinkDone }: { s: Settings
     try {
       const { token } = await backend.createSelf(s.convexUrl, name, currentDevice());
       await connected(token, name);
-      // Her account starts with what she already chose on this browser.
+      // The user's account starts with what they already chose on this browser.
       await pushPrefs({ voice: s.voice, rate: s.rate, consent: s.consent, showMeInstead: s.showMeInstead });
     } catch (e) {
       setMsg(friendlyError(e));

@@ -24,7 +24,7 @@ export default defineBackground(() => {
     browser.alarms.create("tasks", { periodInMinutes: 1 });
   });
 
-  // She opened Chrome. If tasks are waiting, say so, because she may not know what to do next.
+  // The user opened Chrome. If tasks are waiting, say so, because the user may not know what to do next.
   // Clicking the note opens the panel (a click carries the gesture sidePanel.open needs).
   browser.runtime.onStartup.addListener(async () => {
     browser.alarms.create("tasks", { periodInMinutes: 1 });

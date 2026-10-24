@@ -16,7 +16,7 @@ function linkCodeFromUrl(): string | null {
 
 /**
  * Setup and settings tab: host access (the gesture lives here, never mid-session), the mic
- * prompt (side panels can't show it reliably), her account, and synced settings.
+ * prompt (side panels can't show it reliably), the user's account, and synced settings.
  */
 export function Setup() {
   const [s, setS] = useState<Settings | null>(null);

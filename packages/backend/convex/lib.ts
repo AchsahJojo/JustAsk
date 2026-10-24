@@ -131,7 +131,7 @@ export async function findLiveCode(ctx: QueryCtx | MutationCtx, code: string, pu
   return rows.find((r) => r.expiresAt > now && (r.purpose ?? "device") === purpose) ?? null;
 }
 
-/** A device code a caregiver made from the web app (not "Add another device" on one of her installs). */
+/** A device code a caregiver made from the web app (not "Add another device" on one of the user's installs). */
 export const isCaregiverCode = (r: Doc<"pairingCodes">) => (r.purpose ?? "device") === "device" && r.createdByDeviceId === undefined;
 
 /** Replace any caregiver-made codes for this senior with one new, unused 6-digit code. */

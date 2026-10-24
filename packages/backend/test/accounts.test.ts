@@ -6,7 +6,7 @@ beforeEach(() => vi.useFakeTimers());
 afterEach(() => vi.useRealTimers());
 
 describe("accounts:createSelf", () => {
-  test("creates her account and this install", async () => {
+  test("creates the user's account and this install", async () => {
     const t = setup();
     const res = await t.mutation(api.accounts.createSelf, { displayName: "  Margaret ", device: ext() });
     expect(res.token).toMatch(/^[0-9a-f]{64}$/);

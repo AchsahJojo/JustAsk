@@ -43,7 +43,7 @@ export class SessionHost {
       planner: new HttpPlanner(() => this.settings?.plannerUrl ?? "http://localhost:8787"),
       speech: this.speech,
       deviceToken: () => this.settings?.deviceToken ?? null,
-      // Synced "Show me instead": guide every step rather than acting for her.
+      // Synced "Show me instead": guide every step rather than acting for the user.
       prefs: () => ({ showMeInstead: this.settings?.showMeInstead ?? false }),
       blankTab: () => this.onBlankTab(),
       store: {
@@ -110,8 +110,8 @@ export class SessionHost {
   /**
    * Get the session tab ready before the first scan.
    * - A caregiver recipe's startUrl opens in the session tab (never a new one).
-   * - On an empty tab (New Tab page, about:blank), her words are searched with her default search
-   *   engine, so she never has to find the right website first.
+   * - On an empty tab (New Tab page, about:blank), the user's words are searched with their default search
+   *   engine, so the user never has to find the right website first.
    */
   private async prepareTab(request: string, recipe: Recipe | null, announce: (line: string) => void): Promise<string | null> {
     const tabId = this.sessionTabId;
@@ -129,7 +129,7 @@ export class SessionHost {
     return this.searchHere(tabId, request, announce);
   }
 
-  /** Search her words in this tab and wait for the results. Returns the history note, or null if it couldn't. */
+  /** Search the user's words in this tab and wait for the results. Returns the history note, or null if it couldn't. */
   private async searchHere(tabId: number, request: string, announce: (line: string) => void): Promise<string | null> {
     const q = searchQueryFor(request);
     announce(lines.SEARCH_LINE);
@@ -162,11 +162,11 @@ export class SessionHost {
     return true;
   }
 
-  /** "Yes, here": move the session to the tab she is on now. An empty tab gets her request searched first. */
+  /** "Yes, here": move the session to the tab the user is on now. An empty tab gets the user's request searched first. */
   async continueHere() {
     this.sessionTabId = await this.activeTabId();
     if (await this.onBlankTab()) return this.lookItUp();
-    await this.controller.resume("She moved to a different tab and wants help there");
+    await this.controller.resume("The user moved to a different tab and wants help there");
   }
 
   private async onBlankTab(): Promise<boolean> {
@@ -175,7 +175,7 @@ export class SessionHost {
     return !!tab && isBlankTab(tab.url);
   }
 
-  /** "Look it up": the session tab is empty, so search her request there and keep going. */
+  /** "Look it up": the session tab is empty, so search the user's request there and keep going. */
   async lookItUp() {
     const tabId = this.sessionTabId;
     const request = this.controller.state.request;
@@ -233,13 +233,13 @@ export class SessionHost {
       if (tabId !== this.sessionTabId || !active()) return;
       if (info.status === "complete") {
         if (!isInjectable(tab.url)) {
-          // She went to an empty tab (New Tab, Home): offer to look it up instead of a dead end.
+          // The user went to an empty tab (New Tab, Home): offer to look it up instead of a dead end.
           this.controller.pause(isBlankTab(tab.url) ? "blank-tab" : "cant-see");
           return;
         }
         const reason = this.controller.state.pauseReason;
         if (this.controller.state.phase === "paused" && (reason === "cant-see" || reason === "blank-tab")) {
-          void this.controller.resume("She went back to a page I can see");
+          void this.controller.resume("The user went back to a page I can see");
           return;
         }
         // Full navigation while guiding (the content script and overlay are gone).

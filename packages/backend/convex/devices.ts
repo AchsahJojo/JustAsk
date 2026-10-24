@@ -119,10 +119,10 @@ export const peekCode = mutation({
 });
 
 /**
- * Redeem a device code once (from a caregiver, or "Add another device" on her other install).
+ * Redeem a device code once (from a caregiver, or "Add another device" on the user's other install).
  * - New install (no `token`): this install joins that account and gets a device token.
- * - An install that already has her own account (`token`): the two profiles become one, so nothing
- *   she set up is lost, and the install keeps its token.
+ * - An install that already has the user's own account (`token`): the two profiles become one, so nothing
+ *   the user set up is lost, and the install keeps its token.
  * Returns `null` for a wrong or expired code instead of throwing, so the failure is recorded.
  * Throws only while rate limited ("Too many tries...").
  * The new device inherits the code's machineId when the code was made on a desktop install
@@ -173,13 +173,13 @@ export const redeemCode = mutation({
         await mergeSenior(ctx, own._id, theirs._id);
         kept = theirs._id;
       } else {
-        // Keep her own profile (name, settings, history) and bring the caregiver over.
+        // Keep the user's own profile (name, settings, history) and bring the caregiver over.
         await mergeSenior(ctx, theirs._id, own._id);
-        // Her display name wins (it's what JustAsk calls her). A self-made profile has no full name, so take the caregiver's.
+        // The user's display name wins (it's what JustAsk calls the user). A self-made profile has no full name, so take the caregiver's.
         await ctx.db.patch(own._id, {
           name: own.createdBy === "self" ? theirs.name || own.name : own.name || theirs.name,
           displayName: own.displayName || theirs.displayName,
-          // A Show me instead choice the caregiver made while setting up carries over unless she already chose.
+          // A Show me instead choice the caregiver made while setting up carries over unless the user already chose.
           ...(own.showMeSetBy === undefined && theirs.prefs ? { prefs: { ...(own.prefs ?? theirs.prefs), showMeInstead: theirs.prefs.showMeInstead }, showMeSetBy: theirs.showMeSetBy } : {}),
         });
       }
@@ -189,7 +189,7 @@ export const redeemCode = mutation({
   },
 });
 
-/** Her install: who am I, and which helpers can send me tasks. */
+/** The user's install: who am I, and which helpers can send me tasks. */
 export const me = query({
   args: { token: v.string() },
   returns: v.union(
@@ -240,7 +240,7 @@ export const setConsent = mutation({
 });
 
 /**
- * Her install: stop working with one helper (or all). JustAsk keeps working on its own; only the link
+ * The user's install: stop working with one helper (or all). JustAsk keeps working on its own; only the link
  * and that helper's waiting tasks go away. The helper gets a short note so they aren't left guessing.
  */
 export const leaveHelpers = mutation({
@@ -279,7 +279,7 @@ const deviceSummary = v.object({
   isThisDevice: v.boolean(),
 });
 
-/** Her installs (not revoked). Never returns token hashes. */
+/** The user's installs (not revoked). Never returns token hashes. */
 export const list = query({
   args: { token: v.string() },
   returns: v.array(deviceSummary),

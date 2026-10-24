@@ -26,7 +26,7 @@ export interface ActSpec {
   option: string | null;
 }
 
-/** Reply to `ja:act`. `ok: false` means the step falls back to guiding her. */
+/** Reply to `ja:act`. `ok: false` means the step falls back to guiding the user. */
 export interface ActResult {
   ok: boolean;
 }

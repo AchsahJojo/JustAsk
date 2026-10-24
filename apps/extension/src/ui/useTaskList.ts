@@ -9,7 +9,7 @@ const POLL_MS = 15_000;
 const EMPTY: TaskList = { open: [], done: [] };
 
 /**
- * Her task list (open tasks stay until she finishes or removes them, plus recently done) and
+ * The user's task list (open tasks stay until the user finishes or removes them, plus recently done) and
  * settings, live over one ConvexClient subscription. Falls back to polling every 15 s if either
  * subscription fails. Restarts when the account or server changes. When offline, the last list stays.
  */

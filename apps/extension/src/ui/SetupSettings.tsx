@@ -203,7 +203,7 @@ function Devices({ onSelfRemoved }: { onSelfRemoved: () => void }) {
   );
 }
 
-/** The helpers who can send her tasks. Stopping one keeps JustAsk working on its own. */
+/** The helpers who can send the user tasks. Stopping one keeps JustAsk working on its own. */
 function Helpers({ helpers, onChanged }: { helpers: Helper[] | null; onChanged: () => Promise<void> }) {
   const [confirming, setConfirming] = useState<string | null>(null);
   const [msg, setMsg] = useState("");

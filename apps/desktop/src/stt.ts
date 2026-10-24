@@ -7,7 +7,7 @@ export const CARTESIA_STT_WS = "wss://api.cartesia.ai/stt/websocket";
 export const CARTESIA_VERSION = "2026-08-14";
 export const STT_SAMPLE_RATE = 16_000;
 
-/** Spoken-to-her messages. Short and plain. */
+/** Messages spoken to the user. Short and plain. */
 export const STT_MESSAGES = {
   unavailable: "Voice isn't working right now. Please type instead.",
   micOff: "The microphone is off. You can type instead.",

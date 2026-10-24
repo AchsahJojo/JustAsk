@@ -2,7 +2,7 @@ import { checkStep, type ActResult, type ActSpec, type EventType, type FrameScan
 import { mergeScans, type TargetRef } from "./merge";
 import * as L from "./lines";
 import { parseCommand } from "./commands";
-import { gateAct, herWords } from "./drive";
+import { gateAct, userWords } from "./drive";
 import { snapshotSignature } from "./signature";
 import { scamCheck, type ScamKind } from "./scam";
 
@@ -20,11 +20,11 @@ export interface SessionView {
   note: string;
   pauseReason: "other-tab" | "tab-closed" | "cant-see" | "blank-tab" | "no-access" | null;
   taskId: string | null;
-  /** Click events she completed herself (guide steps). */
+  /** Click events the user completed themselves (guide steps). */
   clicks: number;
-  /** All guide steps she completed, including typing, choosing, hovering and file selection. */
+  /** All guide steps the user completed, including typing, choosing, hovering and file selection. */
   guidedSteps: number;
-  /** Steps JustAsk did for her (act steps that succeeded). */
+  /** Steps JustAsk did for the user (act steps that succeeded). */
   actions: number;
   /** Set while JustAsk asks "Did someone ask you to do this?" before a request that looks like a scam. */
   scam: ScamKind | null;
@@ -38,7 +38,7 @@ export interface PageBridge {
   pulse(ref: TargetRef): Promise<void>;
   /** Resolves true when the page navigated or the DOM settled after changing. */
   waitForChange(timeoutMs: number): Promise<boolean>;
-  /** Perform one action for her (drive mode). Resolves `{ok: false}` when it could not, so the step falls back to guide. */
+  /** Perform one action for the user (drive mode). Resolves `{ok: false}` when it could not, so the step falls back to guide. */
   act(ref: TargetRef, spec: ActSpec): Promise<ActResult>;
   /** While on, report settled page changes as `ja:page-changed` (used in the waiting phase). */
   watch(on: boolean): void;
@@ -233,7 +233,7 @@ export class SessionController {
 
   /**
    * Start a session. `prepare` runs first, while the panel already shows "planning": the host uses it
-   * to open a recipe's start page, or to search her words when she starts on an empty tab. It can
+   * to open a recipe's start page, or to search the user's words when the user starts on an empty tab. It can
    * `announce` a line, and returns a history note for Claude (or null). Stop during `prepare` wins.
    */
   async start(
@@ -252,8 +252,8 @@ export class SessionController {
     this.recipe = opts.recipe ?? null;
     this.sessionId = opts.sessionId ?? null;
     if (this.deps.prefs?.().showMeInstead) this.history.push(L.SHOW_ME_NOTE);
-    // Her own words first: a request that looks like a common scam gets one plain question
-    // before JustAsk opens, searches or presses anything. Only her answer decides.
+    // The user's own words first: a request that looks like a common scam gets one plain question
+    // before JustAsk opens, searches or presses anything. Only the user's answer decides.
     const flag = scamCheck(text);
     if (flag) {
       this.afterScamCheck = opts.prepare ?? null;
@@ -270,7 +270,7 @@ export class SessionController {
   private afterScamCheck: ((announce: (line: string) => void) => Promise<string | null>) | null = null;
 
   /**
-   * Her answer to the scam question. Someone asked her: stop, and say what to do instead. Her own
+   * The user's answer to the scam question. Someone asked the user: stop, and say what to do instead. The user's own
    * idea: carry on, and tell Claude to be careful (no codes typed, payments always ask first).
    */
   async scamAnswer(someoneAsked: boolean) {
@@ -356,7 +356,7 @@ export class SessionController {
   async stuck() {
     if (this.view.phase === "idle") return;
     this.deps.events?.log("stuck");
-    this.history.push("She said she is stuck or can't find it");
+    this.history.push("The user said they are stuck or can't find it");
     this.say(L.STUCK_LINE);
     await this.deps.bridge.clear();
     this.set({ phase: "planning", line: L.STUCK_LINE });
@@ -364,7 +364,7 @@ export class SessionController {
   }
 
   async answer(text: string) {
-    this.history.push(`She answered: ${JSON.stringify(text.slice(0, 200))}`);
+    this.history.push(`The user answered: ${JSON.stringify(text.slice(0, 200))}`);
     this.set({ phase: "planning", line: L.FILLER_LINE });
     await this.plan();
   }
@@ -378,11 +378,11 @@ export class SessionController {
     this.pending = null;
     if (!yes) {
       if (pending === "text") {
-        // She doesn't want that text typed: she types it herself instead.
+        // The user doesn't want that text typed: the user types it themselves instead.
         this.history.push(this.onPage(L.TEXT_DECLINED_NOTE));
         return this.showGuide(this.asGuide(step, false));
       }
-      this.history.push("She chose not to do that step");
+      this.history.push("The user chose not to do that step");
       this.say("Okay, we won't do that.");
       await this.deps.bridge.clear();
       this.deps.events?.log("abandoned");
@@ -464,12 +464,12 @@ export class SessionController {
   /** A full navigation happened in the session tab (content script is gone and re-injected). */
   async navigated() {
     if (this.view.phase === "guiding") {
-      // She navigated somehow without completing the target (back button, link elsewhere).
-      this.history.push("The page changed before she clicked the highlighted thing");
+      // The user navigated somehow without completing the target (back button, link elsewhere).
+      this.history.push("The page changed before the user clicked the highlighted thing");
       this.set({ phase: "planning", line: L.FILLER_LINE });
       await this.plan();
     } else if (this.view.phase === "waiting") {
-      await this.resume("The page changed while she was waiting");
+      await this.resume("The page changed while the user was waiting");
     }
   }
 
@@ -488,7 +488,7 @@ export class SessionController {
         return this.onWrong(e.what);
       case "ja:lost":
         if (this.view.phase !== "guiding") return;
-        this.history.push("The page changed before she could click");
+        this.history.push("The page changed before the user could click");
         this.set({ phase: "planning", line: L.LOST_LINE, note: "" });
         return this.plan();
       case "ja:page-changed":
@@ -514,13 +514,13 @@ export class SessionController {
     const did = this.step.say;
     const clicks = this.view.clicks + (how === "click" ? 1 : 0);
     const guidedSteps = this.view.guidedSteps + 1;
-    this.history.push(this.onPage(`She did: ${JSON.stringify(did)} (${how})`));
+    this.history.push(this.onPage(`The user did: ${JSON.stringify(did)} (${how})`));
     const p = L.praise(this.history.length);
     this.say(p);
     await this.deps.bridge.clear();
     this.target = null;
     this.set({ phase: "verifying", line: `${p} ${L.LOOKING_NEXT}`, clicks, guidedSteps, note: "" });
-    // Clicks usually change the page; typing and choosing usually don't, so don't make her wait.
+    // Clicks usually change the page; typing and choosing usually don't, so don't make the user wait.
     const changed = await this.deps.bridge.waitForChange(how === "click" ? this.t.changeTimeoutMs : this.t.quietChangeMs);
     if (gen !== this.gen) return;
     if (!changed && how === "click") {
@@ -534,8 +534,8 @@ export class SessionController {
   // ───────────── the loop ─────────────
 
   private async scanPage(): Promise<boolean> {
-    // Ranking words only (stays on the page): her request, the current line, the recipe, and recent
-    // history, which holds her answers ("Texas"), so a long dropdown includes the option she named.
+    // Ranking words only (stays on the page): the user's request, the current line, the recipe, and recent
+    // history, which holds the user's answers ("Texas"), so a long dropdown includes the option the user named.
     const context = [this.view.request, this.view.line, ...(this.recipe?.steps ?? []), ...this.history.slice(-6)];
     const scans = await this.deps.bridge.scan(context);
     if (!scans.length) return false;
@@ -637,7 +637,7 @@ export class SessionController {
           const gate = gateAct(step, this.element(step.target), {
             showMeInstead: this.deps.prefs?.().showMeInstead ?? false,
             guideMode: this.guideMode,
-            her: herWords(this.view.request, this.history, this.recipe),
+            said: userWords(this.view.request, this.history, this.recipe),
           });
           if (gate.mode === "guide") s = this.asGuide(step, gate.reason !== "personal-data");
           else next = gate.mode === "act" ? "act" : "risk-text";
@@ -681,8 +681,8 @@ export class SessionController {
   // ───────────── drive mode (docs/ARCHITECTURE.md §11) ─────────────
 
   /**
-   * The same step, for her to do. A first-person act line ("I'm clicking…") becomes a fixed guide
-   * line. With `keepText` false (personal data, or she declined), the text is never said.
+   * The same step, for the user to do. A first-person act line ("I'm clicking…") becomes a fixed guide
+   * line. With `keepText` false (personal data, or the user declined), the text is never said.
    */
   private asGuide(step: StepResponse, keepText: boolean): StepResponse {
     if (step.kind === "guide") return step;
@@ -696,7 +696,7 @@ export class SessionController {
     return { ...step, kind: "guide", say, text: null };
   }
 
-  /** Typed text with words she didn't say: ask first. */
+  /** Typed text with words the user didn't say: ask first. */
   private askText(step: StepResponse) {
     const q = L.typeConfirm(step.text ?? "");
     this.pending = "text";
@@ -712,7 +712,7 @@ export class SessionController {
     return L.riskDetail(what, placeOf(this.snapshot), guide);
   }
 
-  /** Highlight, announce, wait a beat, then act. Falls back to guiding her when the action fails. */
+  /** Highlight, announce, wait a beat, then act. Falls back to guiding the user when the action fails. */
   private async doAct(step: StepResponse) {
     const gen = this.gen;
     const ref = this.map.get(step.target!);
@@ -874,7 +874,7 @@ export class SessionController {
 
   /** Resolve failed (rerender with no unique fingerprint match): re-plan once, then block. */
   private lost() {
-    this.history.push("The page changed before she could click");
+    this.history.push("The page changed before the user could click");
     if (this.lostCount++ < 1) {
       this.set({ phase: "planning", line: L.LOST_LINE });
       return this.plan();
@@ -923,7 +923,7 @@ function labelFor(expect: StepResponse["expect"]): string {
   }
 }
 
-/** Where she is, in words: the website's name (no "www.") or the desktop app. */
+/** Where the user is, in words: the website's name (no "www.") or the desktop app. */
 function placeOf(snapshot: PageSnapshot | null): string {
   if (!snapshot) return "";
   if (snapshot.surface === "native") return snapshot.app?.name ?? "";

@@ -9,7 +9,7 @@ export interface Settings {
   consent: { notifyOnComplete: boolean; notifyOnStuck: boolean };
   voice: "browser" | "cartesia";
   rate: number;
-  /** Synced. When on, JustAsk shows her where to click instead of doing it. */
+  /** Synced. When on, JustAsk shows the user where to click instead of doing it. */
   showMeInstead: boolean;
 }
 

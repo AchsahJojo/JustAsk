@@ -72,7 +72,7 @@ export function isBlankTab(url: string | undefined): boolean {
 }
 
 /**
- * Search `text` in this tab with her own default search engine (chrome.search / browser.search).
+ * Search `text` in this tab with the user's own default search engine (chrome.search / browser.search).
  * No search site is built in. False when the browser has no search API.
  */
 export async function searchInTab(tabId: number, text: string): Promise<boolean> {

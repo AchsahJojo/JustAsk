@@ -1,4 +1,4 @@
-// Deterministic `sensitive` classifier (ARCHITECTURE §11). JustAsk never types into these; she does.
+// Deterministic `sensitive` classifier (ARCHITECTURE §11). JustAsk never types into these; the user does.
 // Reads only attributes and label text, never the field's value.
 
 const AUTOCOMPLETE_SECRET = new Set(["current-password", "new-password", "one-time-code"]);

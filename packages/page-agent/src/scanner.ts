@@ -246,7 +246,7 @@ function dateHint(kind: FieldKind): string | undefined {
   return DATE_HINTS.date;
 }
 
-/** Most options sent for one long dropdown: the first few, plus every one that matches her words. */
+/** Most options sent for one long dropdown: the first few, plus every one that matches the user's words. */
 const LONG_LIST = 30;
 const LONG_LIST_HEAD = 10;
 
@@ -261,8 +261,8 @@ export function fieldInfo(el: Element, ctxWords?: Set<string>): FieldInfo | unde
   if (el instanceof HTMLSelectElement) {
     const labels = Array.from(el.options).map((o) => normalize(o.label || o.text));
     info.optionCount = labels.length;
-    // A long list (states, countries) sends the first few options plus any that match words from her
-    // request, the current step or her answers, so the option she wants (for example "Texas") is there.
+    // A long list (states, countries) sends the first few options plus any that match words from the user's
+    // request, the current step or the user's answers, so the option the user wants (for example "Texas") is there.
     info.options =
       labels.length > LONG_LIST
         ? labels.filter((l, i) => i < LONG_LIST_HEAD || (!!ctxWords && [...words(l)].some((w) => ctxWords.has(w)))).slice(0, LONG_LIST)
@@ -435,7 +435,7 @@ export function pageText(doc: Document, max = 1400, getShadowRoot?: ShadowGetter
   const seen = new Set<string>();
   const out: string[] = [];
   const root = pickModal(doc, getShadowRoot) ?? doc; // same modal choice as scanDocument
-  // Composed: words inside web components (shadow roots) are part of the page she sees.
+  // Composed: words inside web components (shadow roots) are part of the page the user sees.
   for (const e of queryAllComposed(root, "h1,h2,h3,p,li,label,legend,[role=alert],[role=status]", getShadowRoot)) {
     if (!isVisible(e)) continue;
     if (e.closest("script,style,noscript")) continue;

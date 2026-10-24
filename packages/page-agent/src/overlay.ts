@@ -30,7 +30,7 @@ const CSS_TEXT = `
   box-shadow: 0 2px 8px rgba(0,0,0,.25);
 }
 .ring.below .tag { bottom: auto; top: 100%; margin-bottom: 0; margin-top: 6px; }
-/* Beside the target when there's room, so the tag never covers the label she needs to read. */
+/* Beside the target when there's room, so the tag never covers the label the user needs to read. */
 .ring.side .tag { left: 100%; bottom: auto; top: 50%; transform: translateY(-50%); margin: 0 0 0 10px; }
 .ring.side .tag::before { content: ""; position: absolute; left: -6px; top: 50%; margin-top: -6px; border: 6px solid transparent; border-left: 0; border-right-color: ${ACCENT}; }
 .banner {
@@ -242,7 +242,7 @@ export class Overlay {
       this.raf = requestAnimationFrame(loop);
     };
     this.raf = requestAnimationFrame(loop);
-    // rAF pauses in background tabs; the timer keeps position right when she comes back.
+    // rAF pauses in background tabs; the timer keeps position right when the user comes back.
     this.timer = setInterval(() => this.place(), 250);
   }
 

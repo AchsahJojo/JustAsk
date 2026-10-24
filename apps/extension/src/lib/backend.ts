@@ -12,7 +12,7 @@ export interface PendingTask {
   from: string;
 }
 
-/** One row of her task list. Open tasks stay until she finishes or removes them. */
+/** One row of the user's task list. Open tasks stay until the user finishes or removes them. */
 export interface Task extends PendingTask {
   status: "pending" | "active" | "done" | "dismissed";
   createdAt: number;
@@ -67,7 +67,7 @@ export class Backend {
     return client.query(name as never, args as never) as Promise<T>;
   }
 
-  /** "I'm new": create her account with this install as its first device. */
+  /** "I'm new": create the user's account with this install as its first device. */
   async createSelf(convexUrl: string, displayName: string, device: DeviceInfo): Promise<{ token: string }> {
     const client = new ConvexHttpClient(convexUrl, { skipConvexDeploymentUrlCheck: true });
     const r = await this.mutation<{ token?: unknown } | null>(client, "accounts:createSelf", { displayName, device });
@@ -101,8 +101,8 @@ export class Backend {
   }
 
   /**
-   * A caregiver's code typed on an install that already has her account: the caregiver joins it,
-   * and nothing she set up is lost. Resolves null for a wrong or expired code.
+   * A caregiver's code typed on an install that already has the user's account: the caregiver joins it,
+   * and nothing the user set up is lost. Resolves null for a wrong or expired code.
    */
   async joinWithCode(code: string): Promise<{ displayName: string } | null> {
     const c = await this.must();
@@ -111,7 +111,7 @@ export class Backend {
     return { displayName: typeof r.displayName === "string" ? r.displayName : "" };
   }
 
-  /** Her name, consent, the helpers who can send her tasks, and who last set Show me instead. Null when unavailable. */
+  /** The user's name, consent, the helpers who can send the user tasks, and who last set Show me instead. Null when unavailable. */
   async me(): Promise<{ displayName: string; consent: { notifyOnComplete: boolean; notifyOnStuck: boolean }; helpers: Helper[]; showMeSetBy: "self" | "caregiver" | null } | null> {
     const c = await this.c();
     if (!c) return null;
@@ -138,7 +138,7 @@ export class Backend {
     return { code, expiresAt: typeof expiresAt === "number" ? expiresAt : null };
   }
 
-  /** Every install linked to her account. */
+  /** Every install linked to the user's account. */
   async listDevices(): Promise<DeviceRow[]> {
     const c = await this.must();
     return parseDevices(await this.query<unknown>(c.client, "devices:list", { token: c.token }));
@@ -165,7 +165,7 @@ export class Backend {
     await this.mutation(c.client, "devices:heartbeat", { token: c.token }).catch(() => {});
   }
 
-  /** Her synced preferences, unvalidated (see `mergePrefs`). Null when unavailable. */
+  /** The user's synced preferences, unvalidated (see `mergePrefs`). Null when unavailable. */
   async getPrefs(): Promise<unknown> {
     const c = await this.c();
     if (!c) return null;
@@ -209,7 +209,7 @@ export class Backend {
     }
   }
 
-  /** Her open tasks plus the ones she finished recently. Null when offline, so callers keep the last list. */
+  /** The user's open tasks plus the ones the user finished recently. Null when offline, so callers keep the last list. */
   async taskList(): Promise<TaskList | null> {
     const c = await this.c();
     if (!c) return { open: [], done: [] };

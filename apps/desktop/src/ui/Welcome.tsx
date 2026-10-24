@@ -3,7 +3,7 @@ import type { DesktopHost } from "../host";
 
 type Mode = "choose" | "new" | "code";
 
-/** First run: create her JustAsk, or join it with a 6-digit code from another device or a helper. */
+/** First run: create the user's JustAsk, or join it with a 6-digit code from another device or a helper. */
 export function Welcome({ host }: { host: DesktopHost }) {
   const [mode, setMode] = useState<Mode>("choose");
   const [name, setName] = useState("");

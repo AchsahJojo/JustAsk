@@ -20,7 +20,7 @@ console.log("✓ pending task visible to device:", tasks[0].title);
 await assert.rejects(c.query("tasks:pendingForDevice", { token: "nope" }), /not paired/);
 console.log("✓ bad token rejected");
 
-await c.mutation("tasks:setStatus", { token, taskId: tasks[0].id, status: "active" }); // she pressed Start
+await c.mutation("tasks:setStatus", { token, taskId: tasks[0].id, status: "active" }); // the user pressed Start
 const sessionId = await c.mutation("sessions:start", { token, request: tasks[0].spokenPrompt, taskId: tasks[0].id });
 await c.mutation("sessions:logEvent", { token, sessionId, type: "step_shown", latencyMs: 900 });
 await c.mutation("sessions:logEvent", { token, sessionId, type: "done" });

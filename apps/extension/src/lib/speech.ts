@@ -9,7 +9,7 @@ export class BrowserSpeech implements SpeechOut {
   private holding = false;
   private held: string | null = null;
 
-  /** Speaking rate; the panel applies her synced setting. */
+  /** Speaking rate; the panel applies the user's synced setting. */
   constructor(public rate = 0.9) {
     const pick = () => {
       const vs = speechSynthesis.getVoices();
@@ -22,8 +22,8 @@ export class BrowserSpeech implements SpeechOut {
   }
 
   /**
-   * Hold lines while she is talking; when she stops, say the newest held line. `drop` skips it
-   * (she said something, and JustAsk's answer to that replaces it).
+   * Hold lines while the user is talking; when the user stops, say the newest held line. `drop` skips it
+   * (the user said something, and JustAsk's answer to that replaces it).
    */
   hold(on: boolean, drop = false) {
     this.holding = on;

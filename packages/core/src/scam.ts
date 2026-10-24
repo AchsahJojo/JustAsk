@@ -1,6 +1,6 @@
-// Scam check on her own words, before JustAsk does anything (docs/STATUS.md, "Scam protection").
-// Deterministic and local: no Claude call, nothing leaves the device. It never blocks her on its
-// own; it asks one plain question, and only her answer decides.
+// Scam check on the user's own words, before JustAsk does anything (docs/STATUS.md, "Scam protection").
+// Deterministic and local: no Claude call, nothing leaves the device. It never blocks the user on its
+// own; it asks one plain question, and only the user's answer decides.
 
 export type ScamKind = "gift-card" | "send-money" | "remote-access" | "share-code";
 
@@ -18,7 +18,7 @@ const CARD_CODE = /\b(codes?|numbers?|pins?|scratch|back of|photos?|pictures?|re
 const OFFICIAL_DEBT = /\b(irs|tax(es)?|fines?|bail|warrant|police|sheriff|court|social security|medicare|utility|electric(ity)? bill|refund|fees?|owe|overdue|arrest(ed)?|lawyer|attorney)\b/;
 
 const MONEY_RAIL = /\b(wire|wiring|western union|moneygram|zelle|venmo|cash ?app|paypal|bitcoin|crypto(currency)?|btc|gold bars?|send (cash|money)|transfer money|money order)\b/;
-/** Who's asking and how: someone she hasn't met, an urgent call, an official, a prize or an investment. */
+/** Who's asking and how: someone the user hasn't met, an urgent call, an official, a prize or an investment. */
 const PRESSURE =
   /\b(stranger|someone i (met|don'?t know|haven'?t met)|met (online|on facebook|on a dating)|online (friend|boyfriend|girlfriend)|he said|she said|they said|told me|asked me|called me|caller|urgent(ly)?|right away|immediately|today or|in jail|bail|lawyer|attorney|arrested|accident|hospital|irs|tax(es)?|warrant|police|fine|refund|overpaid|prize|lottery|sweepstakes|won|winnings|inheritance|customs|release fee|investment|invest|double (my|your) money|guaranteed)\b/;
 
@@ -48,7 +48,7 @@ export const SCAM_QUESTIONS: Record<ScamKind, { question: string; fact: string }
   },
 };
 
-/** A likely scam in what she asked for, or null. Plain requests ("buy a gift card for my grandson") pass. */
+/** A likely scam in what the user asked for, or null. Plain requests ("buy a gift card for my grandson") pass. */
 export function scamCheck(request: string): ScamFlag | null {
   const s = request.toLowerCase().replace(/[’']/g, "'").replace(/\s+/g, " ");
   const flag = (kind: ScamKind): ScamFlag => ({ kind, ...SCAM_QUESTIONS[kind] });

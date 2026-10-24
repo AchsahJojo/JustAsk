@@ -61,8 +61,8 @@ export const pendingForDevice = query({
 });
 
 /**
- * Extension: her task list. Open tasks (waiting or started) stay until she finishes or removes them,
- * so closing the panel never loses one. Plus what she finished in the last two weeks.
+ * Extension: the user's task list. Open tasks (waiting or started) stay until the user finishes or removes them,
+ * so closing the panel never loses one. Plus what the user finished in the last two weeks.
  */
 export const listForDevice = query({
   args: { token: v.string() },
@@ -94,7 +94,7 @@ export const setStatus = mutation({
     const task = await ctx.db.get(taskId);
     if (!task || task.seniorId !== device.seniorId) throw new Error("not found");
     await ctx.db.patch(taskId, { status });
-    // "I did it" from her task list: the same consent-gated note as finishing with JustAsk.
+    // "I did it" from the user's task list: the same consent-gated note as finishing with JustAsk.
     if (status === "done" && task.status !== "done") {
       const senior = await ctx.db.get(device.seniorId);
       const linked = (await ctx.db.query("careLinks").withIndex("by_senior", (q) => q.eq("seniorId", device.seniorId)).collect()).some((l) => l.caregiverId === task.assignedBy);

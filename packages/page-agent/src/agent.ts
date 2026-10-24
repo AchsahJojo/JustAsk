@@ -63,7 +63,7 @@ export class PageAgent {
   // ───────────── scan ─────────────
 
   scan(context: string[]): FrameScan {
-    // A child frame smaller than 50×50 (tracking pixels, hidden widgets) has nothing she can use.
+    // A child frame smaller than 50×50 (tracking pixels, hidden widgets) has nothing the user can use.
     const win = this.doc.defaultView;
     if (!this.opts.isTop && win && (win.innerWidth < 50 || win.innerHeight < 50)) {
       return {

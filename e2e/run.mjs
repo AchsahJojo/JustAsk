@@ -324,11 +324,11 @@ const scenarios = {
     await closeSession(s);
   },
 
-  async "empty New Tab: JustAsk searches her words in that tab, then keeps going"() {
+  async "empty New Tab: JustAsk searches the user's words in that tab, then keeps going"() {
     await fetch(`${PLANNER}/__reset`, { method: "POST" });
     const s = await openSession("/");
     await s.page.goto("chrome://newtab");
-    // Stand-in for her default search engine (real engines can't be intercepted from the New Tab page):
+    // Stand-in for the user's default search engine (real engines can't be intercepted from the New Tab page):
     // record the words and open the local results fixture in the same tab.
     await s.panel.evaluate((site) => {
       window.__searched = [];
@@ -339,13 +339,13 @@ const scenarios = {
     }, SITE);
     await ask(s.panel, "help me refill my prescription please");
     await caption(s.panel, /Click the one that says/, 20000);
-    assert.deepEqual(await s.panel.evaluate(() => window.__searched), ["refill my prescription"], "searched her words, without the filler");
+    assert.deepEqual(await s.panel.evaluate(() => window.__searched), ["refill my prescription"], "searched the user's words, without the filler");
     assert.match(s.page.url(), /\/gaps\/results/, "in the same tab");
     const history = JSON.parse((await (await fetch(`${PLANNER}/__received`)).json()).at(-1)).history.join("\n");
     assert.match(history, /tab was empty, so JustAsk searched the web for "refill my prescription"/);
     await shot(s.panel, "16b-panel-searched-from-new-tab");
 
-    // Mid-session she ends up on an empty tab: no dead end, "Look it up for me" searches again.
+    // Mid-session the user ends up on an empty tab: no dead end, "Look it up for me" searches again.
     await s.page.goto("chrome://newtab");
     await phase(s.panel, "paused");
     await caption(s.panel, /This tab is empty/);
@@ -356,7 +356,7 @@ const scenarios = {
     await closeSession(s);
   },
 
-  async "start screen: example requests when nothing is on her list"() {
+  async "start screen: example requests when nothing is on the user's list"() {
     // A session left mid-way shows "Keep going?" instead of the examples.
     await sw.evaluate(() => chrome.storage.local.remove("resume"));
     const s = await openSession("/");

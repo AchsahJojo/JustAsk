@@ -1,4 +1,4 @@
-// URLs the desktop app opens in her default browser.
+// URLs the desktop app opens in the user's default browser.
 
 /** Desktop -> browser handoff: the recipe start page with `#justask=<handoffId>` (replaces any existing hash). */
 export function handoffUrl(startUrl: string, handoffId: string): string {

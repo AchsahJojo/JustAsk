@@ -5,7 +5,7 @@ import { rateLimiter, TOO_MANY_TRIES } from "./rateLimits";
 import { deviceInfo } from "./validators";
 
 /**
- * First install: "Create my JustAsk". Creates her account (a `seniors` row, createdBy "self")
+ * First install: "Create my JustAsk". Creates the user's account (a `seniors` row, createdBy "self")
  * and this install's device. Returns the device token once; only its hash is stored.
  * Abuse guard: length checks plus a global creation rate limit.
  */

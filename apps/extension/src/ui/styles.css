@@ -123,7 +123,7 @@ input:focus { border-color: var(--ink); outline: none; }
 .soft.small, .small { font-size: 15px; }
 .btn.small { font-size: 16px; padding: 8px 14px; }
 
-/* Drive mode: a Stop she can't miss while JustAsk acts for her. */
+/* Drive mode: a Stop the user can't miss while JustAsk acts for the user. */
 .btn.danger { background: #b3261e; color: #fff; }
 .btn.stop-now { min-height: 76px; font-size: 26px; letter-spacing: 0.01em; box-shadow: 0 0 0 4px color-mix(in srgb, #b3261e 25%, transparent); }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .btn.danger { background: #e5534b; color: #1b1a17; } }

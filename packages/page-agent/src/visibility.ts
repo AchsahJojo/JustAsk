@@ -82,7 +82,7 @@ const SCROLLS = new Set(["auto", "scroll", "overlay"]);
 
 /**
  * True when an overflow hidden/clip ancestor cuts the element away entirely (collapsed mega-menus).
- * Stops at <body>, at scroll containers (she can scroll to it) and at position:fixed boxes.
+ * Stops at <body>, at scroll containers (the user can scroll to it) and at position:fixed boxes.
  */
 export function isClipped(el: Element, r: DOMRect): boolean {
   const doc = el.ownerDocument;
@@ -104,7 +104,7 @@ export function isClipped(el: Element, r: DOMRect): boolean {
 
 const CHECK_VIS = { opacityProperty: true, visibilityProperty: true, checkOpacity: true, checkVisibilityCSS: true };
 
-/** Can she see it? Size, CSS (via checkVisibility when present), aria-hidden/inert, clipping and off-canvas. */
+/** Can the user see it? Size, CSS (via checkVisibility when present), aria-hidden/inert, clipping and off-canvas. */
 export function isVisible(el: Element): boolean {
   if (inHiddenSubtree(el)) return false;
   const r = el.getBoundingClientRect();

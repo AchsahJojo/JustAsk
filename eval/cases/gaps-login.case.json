@@ -3,7 +3,7 @@
   "url": "{FIXTURES}/gaps/login",
   "request": "sign in to my account",
   "pendingFixture": true,
-  "note": "She has not said her email; password is sensitive. Guide.",
+  "note": "The user has not said the user's email; password is sensitive. Guide.",
   "expected": {
     "kind": "guide",
     "allowKinds": [

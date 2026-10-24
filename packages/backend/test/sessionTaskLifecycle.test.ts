@@ -7,7 +7,7 @@ async function activeTask(t: T) {
   const token = await newAccount(t);
   const { caregiverId } = await caregiver(t);
   const seniorId = await t.run(async (ctx) => (await ctx.db.query("seniors").first())!._id);
-  // Only a linked helper hears about her tasks.
+  // Only a linked helper hears about the user's tasks.
   await t.run((ctx) => ctx.db.insert("careLinks", { caregiverId, seniorId, relation: "son" }));
   const taskId = await t.run((ctx) =>
     ctx.db.insert("tasks", {

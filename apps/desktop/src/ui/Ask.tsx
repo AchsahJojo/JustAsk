@@ -30,7 +30,7 @@ export function Ask({ host, hs }: { host: DesktopHost; hs: HostState }) {
   const busy = phase === "planning" || phase === "verifying";
   const orbMode: OrbMode = listening ? "listening" : phase === "done" ? "done" : busy || phase === "acting" ? "thinking" : speaking ? "speaking" : "idle";
 
-  /** Press-to-talk. Any voice failure leaves her at the typed box. */
+  /** Press-to-talk. Any voice failure leaves the user at the typed box. */
   const talk = (onText: (t: string) => void) => {
     if (host.listener.listening) return host.listener.stop();
     host.speech.stop();
@@ -168,13 +168,13 @@ export function Ask({ host, hs }: { host: DesktopHost; hs: HostState }) {
             )}
 
             {phase === "waiting" && (
-              <button className="btn primary huge" onClick={() => void host.controller.resume("She said she is ready")}>
+              <button className="btn primary huge" onClick={() => void host.controller.resume("The user said they are ready")}>
                 I'm ready
               </button>
             )}
 
             {phase === "paused" && (
-              <button className="btn primary huge" onClick={() => void host.controller.resume("She asked to try again")}>
+              <button className="btn primary huge" onClick={() => void host.controller.resume("The user asked to try again")}>
                 Try again
               </button>
             )}

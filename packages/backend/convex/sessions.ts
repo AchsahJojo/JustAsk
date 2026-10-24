@@ -39,7 +39,7 @@ export const logEvent = mutation({
           const senior = await ctx.db.get(session.seniorId);
           if (senior) {
             const allowed = type === "done" ? senior.consent.notifyOnComplete : senior.consent.notifyOnStuck;
-            // Only a helper she is still connected to hears about it.
+            // Only a helper the user is still connected to hears about it.
             const linked = (await ctx.db.query("careLinks").withIndex("by_senior", (q) => q.eq("seniorId", senior._id)).collect()).some((l) => l.caregiverId === task.assignedBy);
             if (allowed && linked) {
               const text = type === "done" ? `${senior.displayName} finished "${task.title}" on their own.` : `${senior.displayName} got stuck on "${task.title}".`;

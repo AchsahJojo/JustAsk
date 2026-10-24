@@ -12,11 +12,11 @@ import { useTaskList } from "./useTaskList";
 import { focusCaptionUnlessAsking } from "./focusCaption";
 
 const ALL_SITES = { origins: ["<all_urls>"] };
-/** Example requests for when she opens JustAsk and isn't sure what to ask. Plain words, no sites. */
+/** Example requests for when the user opens JustAsk and isn't sure what to ask. Plain words, no sites. */
 const IDEAS = ["What's the weather today?", "Find a recipe for chicken soup", "Read today's news"];
 const DEV = import.meta.env.MODE === "development";
 
-/** Steps JustAsk did for her. `actions` is added to SessionView by the core drive-mode work. */
+/** Steps JustAsk did for the user. `actions` is added to SessionView by the core drive-mode work. */
 const actionsOf = (v: SessionView) => (v as SessionView & { actions?: number }).actions ?? 0;
 
 export function Panel({ pinnedTabId }: { pinnedTabId: number | null }) {
@@ -78,7 +78,7 @@ export function Panel({ pinnedTabId }: { pinnedTabId: number | null }) {
     host.speech.stop();
     setNote("");
     setHeard("");
-    // The mic never hears JustAsk: lines wait until she stops talking.
+    // The mic never hears JustAsk: lines wait until the user stops talking.
     host.speech.hold(true);
     let said = false;
     listener.listen({
@@ -290,7 +290,7 @@ export function Panel({ pinnedTabId }: { pinnedTabId: number | null }) {
             )}
 
             {phase === "waiting" && (
-              <button className="btn primary huge" onClick={() => host.controller.resume("She said she is ready")}>
+              <button className="btn primary huge" onClick={() => host.controller.resume("The user said they are ready")}>
                 I'm ready
               </button>
             )}

@@ -123,7 +123,7 @@ describe("SessionController", () => {
     expect(h.c.state.line).toBe("Click A.");
     await h.c.onContent({ type: "ja:step-done", how: "click" }, 0);
     expect(h.c.state.line).toBe("Click B.");
-    expect(h.plans[1].history[0]).toBe('On "Page": She did: "Click A." (click)');
+    expect(h.plans[1].history[0]).toBe('On "Page": The user did: "Click A." (click)');
     await h.c.onContent({ type: "ja:step-done", how: "click" }, 0);
     expect(h.c.state.phase).toBe("done");
     expect(h.c.state.clicks).toBe(2);
@@ -242,7 +242,7 @@ describe("prompt", () => {
     expect(SYSTEM_PROMPT).toContain('"act" is the usual choice');
     expect(SYSTEM_PROMPT).toContain('role "search box"');
     expect(SYSTEM_PROMPT).toContain("don't open category menus to find a specific item");
-    expect(SYSTEM_PROMPT).not.toContain("prefer guiding her to scroll or open a menu");
+    expect(SYSTEM_PROMPT).not.toContain("prefer guiding the user to scroll or open a menu");
     expect(SYSTEM_PROMPT).toContain("Desktop apps:");
     expect(SYSTEM_PROMPT).toContain('"kind":"guide","say":"Type your password here. I can\'t see it."');
     expect(SYSTEM_PROMPT).toContain('"text":"water bottle"');
@@ -286,7 +286,7 @@ describe("drive mode", () => {
     expect(h.spoken.some((t) => /^(Good|Nice work|That's it)/.test(t))).toBe(false);
   });
 
-  it("types her words straight in and waits only briefly after typing", async () => {
+  it("types the user's words straight in and waits only briefly after typing", async () => {
     const h = harness([act(1, "I'm typing water bottle in the search box.", { expect: "type", text: "water bottle" }), done], undefined, { actOk: true });
     await h.c.start("find a water bottle");
     expect(h.bridge.act).toHaveBeenCalledWith(expect.anything(), { localId: 1, expect: "type", text: "water bottle", option: null });
@@ -304,20 +304,20 @@ describe("drive mode", () => {
     expect(h.c.state.phase).toBe("idle");
   });
 
-  it("falls back to guiding her when the action fails", async () => {
+  it("falls back to guiding the user when the action fails", async () => {
     const h = harness([act(1, "I'm clicking A."), done], undefined, { actOk: false });
     await h.c.start("x");
     expect(h.c.state.phase).toBe("guiding");
     expect(h.c.state.line).toBe("Please click the one that says A. It has the glowing box.");
     expect((h.highlights[1] as any).spec.label).toBe("Click here");
     await h.c.onContent({ type: "ja:step-done", how: "click" }, 0);
-    expect(h.plans[1].history[0]).toBe('On "Page": JustAsk couldn\'t do that, so she will');
-    expect(h.plans[1].history[1]).toMatch(/^On "Page": She did:/);
+    expect(h.plans[1].history[0]).toBe('On "Page": JustAsk couldn\'t do that, so the user will');
+    expect(h.plans[1].history[1]).toMatch(/^On "Page": The user did:/);
     expect(h.c.state.clicks).toBe(1);
     expect(h.c.state.actions).toBe(0);
   });
 
-  it("asks before typing words she didn't say; yes types them", async () => {
+  it("asks before typing words the user didn't say; yes types them", async () => {
     const h = harness([act(1, "I'm typing your message.", { expect: "type", text: "Happy birthday Sam" }), done], undefined, { actOk: true });
     await h.c.start("write to Sam");
     expect(h.c.state.phase).toBe("confirming");
@@ -327,7 +327,7 @@ describe("drive mode", () => {
     expect(h.bridge.act).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ text: "Happy birthday Sam" }));
   });
 
-  it("no to the typed text guides her instead", async () => {
+  it("no to the typed text guides the user instead", async () => {
     const h = harness([act(1, "I'm typing your message.", { expect: "type", text: "Happy birthday Sam" })], undefined, { actOk: true });
     await h.c.start("write to Sam");
     await h.c.input("no");
@@ -373,7 +373,7 @@ describe("drive mode", () => {
     expect(h.c.state.line).toBe("All done. I did 1 step for you, and you did 1 step.");
   });
 
-  it("an answer counts as her words", async () => {
+  it("an answer counts as the user's words", async () => {
     const h = harness([step("clarify", "What should it say?"), act(1, "I'm typing it.", { expect: "type", text: "Happy birthday" }), done], undefined, { actOk: true });
     await h.c.start("write to Sam");
     await h.c.input("happy birthday");
@@ -410,7 +410,7 @@ describe("drive mode", () => {
     await h.c.start("x");
     expect(h.bridge.act).toHaveBeenCalledTimes(3);
     expect(h.c.state.phase).toBe("guiding");
-    expect(h.plans[3].history.join("\n")).toMatch(/from now on she does the steps herself/);
+    expect(h.plans[3].history.join("\n")).toMatch(/from now on the user does the steps themselves/);
     expect(h.events.filter((e) => e === "no_change").length).toBe(3);
   });
 
@@ -461,7 +461,7 @@ describe("waiting (P1)", () => {
     expect(h.c.state.line).toBe("Do you see it now?");
     expect(h.bridge.watch).toHaveBeenLastCalledWith(false);
     // "I'm ready" still resumes.
-    await h.c.resume("She said she is ready");
+    await h.c.resume("The user said they are ready");
     expect(h.plans.length).toBe(4);
   });
 
@@ -565,7 +565,7 @@ describe("clear risk questions", () => {
   });
 });
 
-describe("scam check on her request", () => {
+describe("scam check on the user's request", () => {
   it("asks before doing anything; someone asked -> stops with what to do, nothing planned", async () => {
     const h = harness([guide(1)]);
     const prepare = vi.fn(async () => null);
@@ -585,14 +585,14 @@ describe("scam check on her request", () => {
     expect(h.events).toEqual(["scam_check", "scam_stopped"]);
   });
 
-  it("her own idea -> carries on carefully, and Claude is told", async () => {
+  it("their own idea -> carries on carefully, and Claude is told", async () => {
     const h = harness([guide(1)]);
     const prepare = vi.fn(async () => null);
     await h.c.start("wire $3,000 to my grandson, he's in jail", { prepare });
     await h.c.scamAnswer(false);
     expect(prepare).toHaveBeenCalledOnce();
     expect(h.c.state.phase).toBe("guiding");
-    expect(h.plans[0].history.join("\n")).toMatch(/her own idea/);
+    expect(h.plans[0].history.join("\n")).toMatch(/their own idea/);
   });
 
   it("an ordinary request is not asked", async () => {

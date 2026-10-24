@@ -37,7 +37,7 @@ export const FieldInfo = z.object({
   formatHint: z.string().optional(),
   /**
    * Passwords, one-time codes, card/CVV, SSN, bank fields. Decided by deterministic page-agent
-   * rules (never by Claude). JustAsk never types into these; she does.
+   * rules (never by Claude). JustAsk never types into these; the user does.
    */
   sensitive: z.boolean().optional(),
 });

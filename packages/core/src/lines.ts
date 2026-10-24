@@ -26,9 +26,9 @@ export const riskDetail = (what: string, place: string, guide: boolean) =>
 // Scam check (scam.ts). Plain, warm, and specific about what to do next.
 export const SCAM_STOP_LINE = "This looks like a scam. Please don't send anything.";
 export const SCAM_STOP_TIP = "Hang up or stop replying, and talk to someone you trust. If you already sent money or codes, call your bank or card company right away. They may be able to stop it.";
-/** History note for Claude when she says it's her own idea. */
+/** History note for Claude when the user says it's their own idea. */
 export const SCAM_OWN_IDEA_NOTE =
-  "JustAsk asked whether someone told her to do this (it looked like a common scam) and she said it is her own idea. Still never type gift card numbers, passwords or texted codes for her, and mark any payment step risk money";
+  "JustAsk asked whether someone told the user to do this (it looked like a common scam) and the user said it is their own idea. Still never type gift card numbers, passwords or texted codes for the user, and mark any payment step risk money";
 
 export const RISK_QUESTION: Record<string, string> = {
   money: "This step will spend money. Do you want to go ahead?",
@@ -51,12 +51,12 @@ export const ACT_LABEL = "Doing this";
 export const LOOKING_NEXT = "Let me look at the next page…";
 export const SEE_IT_NOW = "Do you see it now?";
 /** History notes (for Claude, not spoken). */
-export const ACT_FAILED_NOTE = "JustAsk couldn't do that, so she will";
-export const GUIDE_MODE_NOTE = "JustAsk's last 3 actions did not change the page, so from now on she does the steps herself (use guide steps)";
-export const SHOW_ME_NOTE = "She chose Show me instead: she does every step herself (use guide steps)";
-export const TEXT_DECLINED_NOTE = "She did not want JustAsk to type that, so she will type it herself";
+export const ACT_FAILED_NOTE = "JustAsk couldn't do that, so the user will";
+export const GUIDE_MODE_NOTE = "JustAsk's last 3 actions did not change the page, so from now on the user does the steps themselves (use guide steps)";
+export const SHOW_ME_NOTE = "The user chose Show me instead: the user does every step themselves (use guide steps)";
+export const TEXT_DECLINED_NOTE = "The user did not want JustAsk to type that, so the user will type it themselves";
 
-/** Asked before typing text that has words she didn't say. */
+/** Asked before typing text that has words the user didn't say. */
 export function typeConfirm(text: string) {
   return `I'll type: ${text}. Okay?`;
 }
@@ -68,7 +68,7 @@ export function doneActed(actions: number, guidedSteps = 0) {
 }
 
 /**
- * A guide line for an act step that she does herself instead (Show me instead, a sensitive
+ * A guide line for an act step that the user does themselves instead (Show me instead, a sensitive
  * field, a failed action). `text` is only passed when it is safe to say out loud.
  */
 export function guideInstead(expect: string | null, name: string, opts: { text?: string | null; option?: string | null; sensitive?: boolean } = {}) {

@@ -1,9 +1,9 @@
-// Preference sync: storage.local is the cache, her account (prefs:get / prefs:set) is the source.
+// Preference sync: storage.local is the cache, the user's account (prefs:get / prefs:set) is the source.
 import { backend } from "./backend";
 import { getSettings, saveSettings, type Settings } from "./config";
 import { mergePrefs, type SyncedPrefs } from "./prefs";
 
-/** Fetch her synced prefs and update the local cache. Returns the (possibly unchanged) settings. */
+/** Fetch the user's synced prefs and update the local cache. Returns the (possibly unchanged) settings. */
 export async function pullPrefs(): Promise<Settings> {
   return applyPrefs(await backend.getPrefs());
 }
@@ -16,7 +16,7 @@ export async function applyPrefs(remote: unknown): Promise<Settings> {
   return Object.keys(patch).length ? saveSettings(patch) : s;
 }
 
-/** Save prefs locally first (so the UI never waits), then write them to her account. */
+/** Save prefs locally first (so the UI never waits), then write them to the user's account. */
 export async function pushPrefs(patch: Partial<SyncedPrefs>): Promise<Settings> {
   const next = await saveSettings(patch);
   if (next.deviceToken) {

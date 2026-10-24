@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { extraWords, gateAct, herWords, looksPersonal, luhn, sameStem, words } from "../src/drive";
+import { extraWords, gateAct, userWords, looksPersonal, luhn, sameStem, words } from "../src/drive";
 import { snapshotSignature } from "../src/signature";
 import type { PageSnapshot, SnapshotElement, StepResponse } from "@justask/shared";
 
@@ -7,7 +7,7 @@ const act = (extra: Partial<StepResponse> = {}): StepResponse => ({ kind: "act",
 const box = (field: SnapshotElement["field"] = { kind: "search", hasValue: false, valid: true }): SnapshotElement => ({
   n: 1, role: "search box", text: "", label: "Search", nearby: null, color: null, big: false, disabled: false, inModal: false, inViewport: true, region: "main", field,
 });
-const ctx = (her: string[] = ["water", "bottle"], extra = {}) => ({ showMeInstead: false, guideMode: false, her, ...extra });
+const ctx = (said: string[] = ["water", "bottle"], extra = {}) => ({ showMeInstead: false, guideMode: false, said, ...extra });
 
 describe("words and stems", () => {
   it("keeps lowercased words longer than 2 characters", () => {
@@ -21,13 +21,13 @@ describe("words and stems", () => {
   });
 });
 
-describe("herWords / extraWords", () => {
-  it("collects the request, her answers and the recipe", () => {
-    const her = herWords("buy a water bottle", ['She answered: "the blue one"', 'On "Store": She did: "Click it." (click)'], { steps: ["Use Amazon"] });
-    expect(her).toEqual(expect.arrayContaining(["buy", "water", "bottle", "the", "blue", "one", "use", "amazon"]));
-    expect(her).not.toContain("click");
+describe("userWords / extraWords", () => {
+  it("collects the request, the user's answers and the recipe", () => {
+    const said = userWords("buy a water bottle", ['The user answered: "the blue one"', 'On "Store": The user did: "Click it." (click)'], { steps: ["Use Amazon"] });
+    expect(said).toEqual(expect.arrayContaining(["buy", "water", "bottle", "the", "blue", "one", "use", "amazon"]));
+    expect(said).not.toContain("click");
   });
-  it("finds words she never said", () => {
+  it("finds words the user never said", () => {
     expect(extraWords("water bottles", ["water", "bottle"])).toEqual([]);
     expect(extraWords("Happy birthday, Sam!", ["sam"])).toEqual(["happy", "birthday"]);
   });
@@ -51,7 +51,7 @@ describe("looksPersonal", () => {
 });
 
 describe("gateAct", () => {
-  it("acts when the text is her words", () => {
+  it("acts when the text is the user's words", () => {
     expect(gateAct(act(), box(), ctx())).toEqual({ mode: "act" });
   });
   it("Show me instead and guide mode turn acts into guides", () => {
@@ -64,7 +64,7 @@ describe("gateAct", () => {
     expect(gateAct(act({ expect: "submit", text: null }), pw, ctx())).toEqual({ mode: "guide", reason: "sensitive" });
     expect(gateAct(act({ expect: "click", text: null }), pw, ctx())).toEqual({ mode: "act" });
   });
-  it("guards personal data even when she said it", () => {
+  it("guards personal data even when the user said it", () => {
     expect(gateAct(act({ text: "602 555 0142" }), box(), ctx(["602", "555", "0142"]))).toEqual({ mode: "guide", reason: "personal-data" });
   });
   it("asks before typing extra words", () => {
