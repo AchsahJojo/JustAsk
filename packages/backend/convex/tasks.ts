@@ -50,7 +50,7 @@ export const pendingForDevice = query({
     const rows = await ctx.db
       .query("tasks")
       .withIndex("by_senior_status", (q) => q.eq("seniorId", device.seniorId).eq("status", "pending"))
-      .collect();
+      .take(100);
     return Promise.all(
       rows.map(async (t) => {
         const cg = await ctx.db.get(t.assignedBy);

@@ -40,7 +40,7 @@ async function waitFor(url, ms = 15000) {
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 start("node", ["apps/fixtures/serve.mjs"]);
-start("npx", ["tsx", "packages/backend/dev/server.ts"], { JUSTASK_MOCK: "1", PLANNER_PORT: "8788" });
+start("node", ["--import", "tsx", "packages/backend/dev/server.ts"], { JUSTASK_MOCK: "1", PLANNER_PORT: "8788" });
 await waitFor(`${SITE}/`);
 await waitFor(`${PLANNER}/health`);
 
@@ -277,25 +277,6 @@ const scenarios = {
     assert.ok(!all.includes(SENTINEL), "sentinel never reaches the planner");
     assert.ok(!all.includes("validationMessage"));
     assert.ok(!/"selected"/.test(all));
-    await closeSession(s);
-  },
-
-  async "type it for me: asks once, fills only the search box, she presses Search"() {
-    await fetch(`${PLANNER}/__reset`, { method: "POST" });
-    const s = await openSession("/gaps/search");
-    await ask(s.panel, "find a cheaper air fryer");
-    await caption(s.panel, /search box/);
-    await s.panel.waitForSelector(".assist-ask");
-    await shot(s.panel, "23-panel-assist-ask");
-    await clickText(s.panel, "Yes, type for me");
-    await caption(s.panel, /Search button/, 15000);
-    assert.equal(await s.page.$eval('input[name="q"]', (e) => e.value), "air fryer");
-    assert.equal(await s.page.$eval('input[name="postal"]', (e) => e.value), "", "never touches other boxes");
-    assert.equal(await s.page.title(), "Price Finder | Search", "never submits");
-    const received = (await (await fetch(`${PLANNER}/__received`)).json()).join("\n");
-    assert.ok(!received.includes('"value"'), "the filled text is not sent back as a field value");
-    await clickText(s.page, "Search");
-    await phase(s.panel, "done");
     await closeSession(s);
   },
 

@@ -94,9 +94,9 @@ describe("typing (hasValue state machine)", () => {
 });
 
 describe("select matched logic", () => {
-  it("matches the exact option label, reports a mismatch otherwise", () => {
+  it("matches the option label case-insensitively and reports a mismatch without sending the value", () => {
     const { agent, sent, n } = setup(`<label for="s">State</label><select id="s"><option value="">Choose…</option><option value="az">Arizona</option><option value="tx">Texas</option></select>`);
-    agent.highlight({ localId: n("State"), expect: "choose", option: "Arizona", label: "Pick here" });
+    agent.highlight({ localId: n("State"), expect: "choose", option: "arizona", label: "Pick here" });
     const s = document.getElementById("s") as HTMLSelectElement;
     s.value = "tx";
     s.dispatchEvent(new Event("change", { bubbles: true }));
@@ -105,6 +105,40 @@ describe("select matched logic", () => {
     s.dispatchEvent(new Event("change", { bubbles: true }));
     expect(sent.at(-1)).toEqual({ type: "ja:step-done", how: "chose" });
     expect(JSON.stringify(sent)).not.toMatch(/tx|az|Texas/);
+    agent.destroy();
+  });
+
+  it("matches a full option label longer than 60 characters", () => {
+    const label = `North Phoenix pharmacy (${"near the community center ".repeat(4)})`;
+    const { agent, sent, n, scan } = setup(`<label for="s">Pharmacy</label><select id="s"><option value="">Choose…</option><option>${label}</option></select>`);
+    expect(scan.snapshot.elements.find((e) => e.label === "Pharmacy")?.field?.options?.[1]).toBe(label);
+    agent.highlight({ localId: n("Pharmacy"), expect: "choose", option: label, label: "Pick here" });
+    const s = document.getElementById("s") as HTMLSelectElement;
+    s.selectedIndex = 1;
+    s.dispatchEvent(new Event("change", { bubbles: true }));
+    expect(sent.at(-1)).toEqual({ type: "ja:step-done", how: "chose" });
+    expect(JSON.stringify(sent)).not.toContain(label);
+    agent.destroy();
+  });
+});
+
+describe("hover dwell", () => {
+  it("cancels when the pointer leaves before the dwell finishes", () => {
+    vi.useFakeTimers();
+    const { agent, sent, n } = setup(`<main><button id="target"><span>Help</span></button><button id="other">Other</button></main>`);
+    const target = document.getElementById("target")!;
+    const span = target.querySelector("span")!;
+    agent.highlight({ localId: n("Help"), expect: "hover", option: null, label: "Hover here" });
+    span.dispatchEvent(new MouseEvent("pointerover", { bubbles: true, relatedTarget: document.body }));
+    vi.advanceTimersByTime(250);
+    span.dispatchEvent(new MouseEvent("pointerout", { bubbles: true, relatedTarget: document.getElementById("other") }));
+    vi.advanceTimersByTime(100);
+    expect(sent).toEqual([]);
+
+    target.dispatchEvent(new MouseEvent("pointerover", { bubbles: true, relatedTarget: document.body }));
+    vi.advanceTimersByTime(300);
+    expect(sent).toEqual([{ type: "ja:step-done", how: "hovered" }]);
+    vi.useRealTimers();
     agent.destroy();
   });
 });
@@ -120,32 +154,5 @@ describe("lost target", () => {
     await flush();
     expect(sent.at(-1)).toEqual({ type: "ja:lost" });
     agent.destroy();
-  });
-});
-
-describe("fill (Type it for me)", () => {
-  it("fills the highlighted search box, finishes the step as typed, and never submits", async () => {
-    const { agent, sent, scan } = setup(`<main><form><input type="search" aria-label="Search" name="q"><button>Go</button></form></main>`);
-    let submitted = false;
-    document.querySelector("form")!.addEventListener("submit", () => (submitted = true));
-    const n = scan.snapshot.elements.find((e) => e.field?.kind === "search")!.n;
-    agent.highlight({ localId: n, expect: "type", option: null, label: "Type here" });
-    expect(agent.fill("  air   fryer ")).toBe(true);
-    await flush();
-    expect((document.querySelector("input") as HTMLInputElement).value).toBe("air fryer");
-    expect(sent).toContainEqual({ type: "ja:step-done", how: "typed" });
-    expect(submitted).toBe(false);
-  });
-
-  it("refuses non-search boxes, click steps, and when nothing is highlighted", () => {
-    const { agent, scan } = setup(`<main><label>Email <input type="email" name="email"></label><input type="search" aria-label="Search"></main>`);
-    expect(agent.fill("x")).toBe(false);
-    const email = scan.snapshot.elements.find((e) => e.field?.kind === "email")!.n;
-    agent.highlight({ localId: email, expect: "type", option: null, label: "Type here" });
-    expect(agent.fill("me@example.com")).toBe(false);
-    expect((document.querySelector('input[type="email"]') as HTMLInputElement).value).toBe("");
-    const search = scan.snapshot.elements.find((e) => e.field?.kind === "search")!.n;
-    agent.highlight({ localId: search, expect: "click", option: null, label: "Click here" });
-    expect(agent.fill("x")).toBe(false);
   });
 });

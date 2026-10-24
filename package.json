@@ -19,7 +19,9 @@
     "test:convex": "node packages/backend/test/convex.int.mjs",
     "test:accounts": "node packages/backend/test/accounts.int.mjs",
     "test:caregiver": "node e2e/caregiver.mjs",
-    "caregiver": "npm run dev -w @justask/caregiver"
+    "caregiver": "npm run dev -w @justask/caregiver",
+    "eval": "tsx eval/run.ts",
+    "eval:capture": "node eval/capture.mjs"
   },
   "devDependencies": {
     "happy-dom": "^21.0.4",
@@ -27,5 +29,8 @@
     "tsx": "^4.23.15",
     "typescript": "~5.9.3",
     "vitest": "^5.0.5"
+  },
+  "allowScripts": {
+    "puppeteer@25.16.0": true
   }
 }

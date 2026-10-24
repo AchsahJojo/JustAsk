@@ -1,0 +1,64 @@
+{
+  "snapshotId": "eval-gaps-login",
+  "url": "http://localhost:6174/gaps/login",
+  "title": "Sign in",
+  "heading": "Sign in",
+  "pageText": "Sign in\nEmail\nPassword",
+  "elements": [
+    {
+      "n": 1,
+      "role": "text box",
+      "text": "",
+      "label": "Email",
+      "nearby": "Email",
+      "color": null,
+      "big": false,
+      "disabled": false,
+      "inModal": false,
+      "inViewport": true,
+      "region": "main",
+      "field": {
+        "kind": "email",
+        "hasValue": false,
+        "valid": false
+      }
+    },
+    {
+      "n": 2,
+      "role": "text box",
+      "text": "",
+      "label": "Password",
+      "nearby": "Password",
+      "color": null,
+      "big": false,
+      "disabled": false,
+      "inModal": false,
+      "inViewport": true,
+      "region": "main",
+      "field": {
+        "kind": "password",
+        "hasValue": false,
+        "valid": false,
+        "sensitive": true
+      }
+    },
+    {
+      "n": 3,
+      "role": "button",
+      "text": "Sign in",
+      "label": null,
+      "nearby": "Email Password",
+      "color": "blue",
+      "big": false,
+      "disabled": false,
+      "inModal": false,
+      "inViewport": true,
+      "region": "main"
+    }
+  ],
+  "omitted": {
+    "count": 0,
+    "regions": []
+  },
+  "surface": "web"
+}

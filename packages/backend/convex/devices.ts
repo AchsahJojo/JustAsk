@@ -2,57 +2,43 @@ import { v } from "convex/values";
 import { internalMutation, mutation, query } from "./_generated/server";
 import type { Doc } from "./_generated/dataModel";
 import {
-  BAD_CODES_PER_HOUR,
-  bumpHourly,
+  CODE_TTL_MS,
   clean,
-  hourlyCount,
-  issueDevice,
+  cleanDevice,
+  findLiveCode,
+  insertDevice,
+  isCaregiverCode,
+  kindOf,
   mergeSenior,
+  newCode as freshCode,
   newPairingCode,
   requireCaregiver,
   requireDevice,
   requireLink,
-  SIGNUPS_PER_HOUR,
   STEPS_PER_HOUR,
 } from "./lib";
+import { assertCodeAttemptAllowed, normalizeCode, recordCodeFailure } from "./rateLimits";
+import { consentValidator, deviceInfo, deviceKind } from "./validators";
 
+const HEARTBEAT_MIN_MS = 60 * 1000;
 const MAX_SENIORS_PER_CAREGIVER = 20;
-
-/**
- * Extension: a standalone account for someone using JustAsk on their own. No caregiver, no
- * password: the extension keeps the returned token. A caregiver can be connected later with a code.
- */
-export const registerStandalone = mutation({
-  args: { displayName: v.optional(v.string()) },
-  handler: async (ctx, { displayName }) => {
-    await bumpHourly(ctx, "signup", SIGNUPS_PER_HOUR);
-    const dn = clean(displayName ?? "", 40);
-    const seniorId = await ctx.db.insert("seniors", {
-      name: dn,
-      displayName: dn,
-      consent: { notifyOnComplete: false, notifyOnStuck: false },
-      origin: "self",
-      createdAt: Date.now(),
-    });
-    return { token: await issueDevice(ctx, seniorId) };
-  },
-});
 
 /** Caregiver: create a profile for someone they help, plus a 6-digit pairing code. */
 export const createSeniorWithCode = mutation({
   args: { name: v.string(), displayName: v.string(), relation: v.string() },
+  returns: v.object({ seniorId: v.id("seniors"), code: v.string(), expiresAt: v.number() }),
   handler: async (ctx, args) => {
     const cg = await requireCaregiver(ctx);
     const name = clean(args.name, 60);
     const displayName = clean(args.displayName, 40) || name.split(" ")[0];
     if (!name) throw new Error("Add their name.");
-    const links = await ctx.db.query("careLinks").withIndex("by_caregiver", (q) => q.eq("caregiverId", cg._id)).collect();
+    const links = await ctx.db.query("careLinks").withIndex("by_caregiver", (q) => q.eq("caregiverId", cg._id)).take(MAX_SENIORS_PER_CAREGIVER);
     if (links.length >= MAX_SENIORS_PER_CAREGIVER) throw new Error(`You can help up to ${MAX_SENIORS_PER_CAREGIVER} people.`);
     const seniorId = await ctx.db.insert("seniors", {
       name,
       displayName,
       consent: { notifyOnComplete: false, notifyOnStuck: false },
-      origin: "caregiver",
+      createdBy: "caregiver",
       createdAt: Date.now(),
     });
     await ctx.db.insert("careLinks", { caregiverId: cg._id, seniorId, relation: clean(args.relation, 40), linkedAt: Date.now() });
@@ -64,6 +50,7 @@ export const createSeniorWithCode = mutation({
 /** Caregiver: a fresh code for someone they already help (expired code, or another computer). */
 export const newCode = mutation({
   args: { seniorId: v.id("seniors") },
+  returns: v.object({ code: v.string(), expiresAt: v.number() }),
   handler: async (ctx, { seniorId }) => {
     await requireLink(ctx, seniorId);
     return newPairingCode(ctx, seniorId);
@@ -73,135 +60,196 @@ export const newCode = mutation({
 /** Caregiver: the live code for this senior, if one is still valid. */
 export const activeCode = query({
   args: { seniorId: v.id("seniors") },
+  returns: v.union(v.object({ code: v.string(), expiresAt: v.number() }), v.null()),
   handler: async (ctx, { seniorId }) => {
     // Null rather than an error if the profile just merged away; the page follows `people:get`.
     if (!(await requireLink(ctx, seniorId).catch(() => null))) return null;
-    const row = await ctx.db
+    const rows = await ctx.db
       .query("pairingCodes")
       .withIndex("by_senior", (q) => q.eq("seniorId", seniorId))
-      .first();
-    return row && row.expiresAt > Date.now() ? { code: row.code, expiresAt: row.expiresAt } : null;
+      .take(20);
+    const row = rows.find((r) => isCaregiverCode(r) && r.expiresAt > Date.now());
+    return row ? { code: row.code, expiresAt: row.expiresAt } : null;
   },
 });
 
 /**
- * Extension: redeem a caregiver's 6-digit code once.
- * - New install (no token): this computer joins the profile the caregiver made.
- * - Already using JustAsk on their own (token): the two profiles become one, so nothing she set up is lost.
- * Returns `{ ok: false }` instead of throwing so the failed-try counter is committed.
+ * A linked install: "Add another device". A 6-digit code, single use, 15 minutes.
+ * Records the creating device and its machineId (used for desktop-to-browser linking).
+ */
+export const createLinkCode = mutation({
+  args: { token: v.string() },
+  returns: v.object({ code: v.string(), expiresAt: v.number() }),
+  handler: async (ctx, { token }) => {
+    const device = await requireDevice(ctx, token);
+    const code = await freshCode(ctx);
+    const expiresAt = Date.now() + CODE_TTL_MS;
+    await ctx.db.insert("pairingCodes", {
+      seniorId: device.seniorId,
+      code,
+      expiresAt,
+      purpose: "device",
+      createdByDeviceId: device._id,
+      ...(device.machineId !== undefined ? { machineId: device.machineId } : {}),
+    });
+    return { code, expiresAt };
+  },
+});
+
+/**
+ * Before linking: "Link to Margaret's JustAsk?". Returns the account's display name for a live
+ * device code, without consuming it. Wrong codes count against the same rate limit as redeem.
+ * A mutation (not a query) so failed peeks can be recorded.
+ */
+export const peekCode = mutation({
+  args: { code: v.string() },
+  returns: v.union(v.object({ displayName: v.string() }), v.null()),
+  handler: async (ctx, args) => {
+    const code = normalizeCode(args.code);
+    if (!code) return null;
+    await assertCodeAttemptAllowed(ctx, code);
+    const row = await findLiveCode(ctx, code, "device");
+    if (!row) {
+      await recordCodeFailure(ctx, code);
+      return null;
+    }
+    const senior = await ctx.db.get(row.seniorId);
+    return { displayName: senior?.displayName ?? "" };
+  },
+});
+
+/**
+ * Redeem a device code once (from a caregiver, or "Add another device" on her other install).
+ * - New install (no `token`): this install joins that account and gets a device token.
+ * - An install that already has her own account (`token`): the two profiles become one, so nothing
+ *   she set up is lost, and the install keeps its token.
+ * Returns `null` for a wrong or expired code instead of throwing, so the failure is recorded.
+ * Throws only while rate limited ("Too many tries...").
+ * The new device inherits the code's machineId when the code was made on a desktop install
+ * (the desktop opens the link page in browsers on the same machine).
  */
 export const redeemCode = mutation({
-  args: { code: v.string(), token: v.optional(v.string()) },
-  handler: async (ctx, { code, token }): Promise<{ ok: true; token: string; displayName: string } | { ok: false; error: string }> => {
-    if ((await hourlyCount(ctx, "badCode")) >= BAD_CODES_PER_HOUR) return { ok: false, error: "Too many tries. Wait a little and try again." };
-    const row = await ctx.db
-      .query("pairingCodes")
-      .withIndex("by_code", (q) => q.eq("code", code.replace(/\D/g, "")))
-      .first();
-    if (!row || row.expiresAt < Date.now()) {
-      if (row) await ctx.db.delete(row._id);
-      await bumpHourly(ctx, "badCode", Number.MAX_SAFE_INTEGER);
-      return { ok: false, error: "That code didn't work. Ask for a new one." };
+  args: { code: v.string(), device: v.optional(deviceInfo), token: v.optional(v.string()) },
+  returns: v.union(v.object({ token: v.string(), displayName: v.string() }), v.null()),
+  handler: async (ctx, args) => {
+    const code = normalizeCode(args.code.replace(/\s/g, ""));
+    if (!code) return null;
+    const fields: { kind?: "extension" | "desktop"; platform?: string; label?: string; machineId?: string } = args.device ? cleanDevice(args.device) : {};
+    await assertCodeAttemptAllowed(ctx, code);
+    const row = await findLiveCode(ctx, code, "device");
+    if (!row) {
+      await recordCodeFailure(ctx, code);
+      return null;
     }
     await ctx.db.delete(row._id);
     const target = row.seniorId;
 
     let current: Doc<"devices"> | null = null;
-    if (token) current = await requireDevice(ctx, token).catch(() => null); // a stale token is a new install
+    if (args.token) current = await requireDevice(ctx, args.token).catch(() => null); // a stale token is a new install
 
-    if (!token || !current) {
-      const fresh = await issueDevice(ctx, target);
+    if (!args.token || !current) {
+      let machineId = fields.machineId;
+      if (machineId === undefined && row.machineId !== undefined && row.createdByDeviceId) {
+        const creator = await ctx.db.get(row.createdByDeviceId);
+        if (creator && kindOf(creator) === "desktop") machineId = row.machineId;
+      }
+      const { token } = await insertDevice(ctx, target, { ...fields, ...(machineId !== undefined ? { machineId } : {}) });
       const senior = await ctx.db.get(target);
-      return { ok: true, token: fresh, displayName: senior?.displayName ?? "" };
+      return { token, displayName: senior?.displayName ?? "" };
     }
 
     const own = await ctx.db.get(current.seniorId);
     const theirs = await ctx.db.get(target);
-    if (!own || !theirs) return { ok: false, error: "That code didn't work. Ask for a new one." };
+    if (!own || !theirs) return null;
     let kept = own._id;
     if (own._id !== theirs._id) {
-      const targetHasDevices = !!(await ctx.db.query("devices").withIndex("by_senior", (q) => q.eq("seniorId", target)).first());
+      const targetHasDevices = (await ctx.db.query("devices").withIndex("by_senior", (q) => q.eq("seniorId", target)).take(50)).some((d) => d.revokedAt === undefined);
       if (targetHasDevices) {
-        // The caregiver's profile is already in use on another computer: this one joins it.
+        // That account is already in use on another computer: this one joins it.
         await mergeSenior(ctx, own._id, theirs._id);
         kept = theirs._id;
       } else {
-        // Keep her own profile (name, consent choices, history) and bring the caregiver over.
+        // Keep her own profile (name, settings, history) and bring the caregiver over.
         await mergeSenior(ctx, theirs._id, own._id);
         // Her display name wins (it's what JustAsk calls her). A self-made profile has no full name, so take the caregiver's.
         await ctx.db.patch(own._id, {
-          name: own.origin === "self" ? theirs.name || own.name : own.name || theirs.name,
+          name: own.createdBy === "self" ? theirs.name || own.name : own.name || theirs.name,
           displayName: own.displayName || theirs.displayName,
-          // A choice the caregiver made while setting up carries over unless she already chose.
-          ...(own.assistTyping === undefined && theirs.assistTyping !== undefined ? { assistTyping: theirs.assistTyping, assistSetBy: theirs.assistSetBy } : {}),
+          // A Show me instead choice the caregiver made while setting up carries over unless she already chose.
+          ...(own.showMeSetBy === undefined && theirs.prefs ? { prefs: { ...(own.prefs ?? theirs.prefs), showMeInstead: theirs.prefs.showMeInstead }, showMeSetBy: theirs.showMeSetBy } : {}),
         });
       }
     }
     const senior = await ctx.db.get(kept);
-    return { ok: true, token, displayName: senior?.displayName ?? "" };
+    return { token: args.token, displayName: senior?.displayName ?? "" };
   },
 });
 
-/** Extension: who am I, and which helpers can send me tasks. */
+/** Her install: who am I, and which helpers can send me tasks. */
 export const me = query({
   args: { token: v.string() },
+  returns: v.union(
+    v.object({
+      displayName: v.string(),
+      consent: consentValidator,
+      helpers: v.array(v.object({ id: v.id("caregivers"), name: v.string() })),
+      showMeSetBy: v.union(v.literal("self"), v.literal("caregiver"), v.null()),
+    }),
+    v.null(),
+  ),
   handler: async (ctx, { token }) => {
     const device = await requireDevice(ctx, token);
     const senior = await ctx.db.get(device.seniorId);
     if (!senior) return null;
-    const links = await ctx.db.query("careLinks").withIndex("by_senior", (q) => q.eq("seniorId", senior._id)).collect();
+    const links = await ctx.db.query("careLinks").withIndex("by_senior", (q) => q.eq("seniorId", senior._id)).take(50);
     const helpers = await Promise.all(
       links.map(async (l) => {
         const cg = await ctx.db.get(l.caregiverId);
         return { id: l.caregiverId, name: cg?.name ?? "Your helper" };
       }),
     );
-    return { displayName: senior.displayName, consent: senior.consent, helpers, assistTyping: senior.assistTyping ?? null, assistSetBy: senior.assistSetBy ?? null };
+    return { displayName: senior.displayName, consent: senior.consent, helpers, showMeSetBy: senior.showMeSetBy ?? null };
   },
 });
 
 export const setDisplayName = mutation({
   args: { token: v.string(), displayName: v.string() },
+  returns: v.null(),
   handler: async (ctx, { token, displayName }) => {
     const device = await requireDevice(ctx, token);
     const dn = clean(displayName, 40);
     const senior = await ctx.db.get(device.seniorId);
     if (!senior) throw new Error("not paired");
     await ctx.db.patch(senior._id, { displayName: dn, ...(senior.name ? {} : { name: dn }) });
-  },
-});
-
-/** Extension: she turns "Type it for me" on or off (asked at setup or at her first search box). */
-export const setAssist = mutation({
-  args: { token: v.string(), on: v.boolean() },
-  handler: async (ctx, { token, on }) => {
-    const device = await requireDevice(ctx, token);
-    await ctx.db.patch(device.seniorId, { assistTyping: on, assistSetBy: "self" });
+    return null;
   },
 });
 
 export const setConsent = mutation({
   args: { token: v.string(), notifyOnComplete: v.boolean(), notifyOnStuck: v.boolean() },
+  returns: v.null(),
   handler: async (ctx, { token, ...consent }) => {
     const device = await requireDevice(ctx, token);
     await ctx.db.patch(device.seniorId, { consent });
+    return null;
   },
 });
 
 /**
- * Extension: stop working with one helper (or all). JustAsk keeps working on its own; only the link
+ * Her install: stop working with one helper (or all). JustAsk keeps working on its own; only the link
  * and that helper's waiting tasks go away. The helper gets a short note so they aren't left guessing.
  */
 export const leaveHelpers = mutation({
   args: { token: v.string(), caregiverId: v.optional(v.id("caregivers")) },
+  returns: v.null(),
   handler: async (ctx, { token, caregiverId }) => {
     const device = await requireDevice(ctx, token);
     const senior = await ctx.db.get(device.seniorId);
-    const links = await ctx.db.query("careLinks").withIndex("by_senior", (q) => q.eq("seniorId", device.seniorId)).collect();
+    const links = await ctx.db.query("careLinks").withIndex("by_senior", (q) => q.eq("seniorId", device.seniorId)).take(50);
     for (const l of links) {
       if (caregiverId && l.caregiverId !== caregiverId) continue;
       await ctx.db.delete(l._id);
-      for (const t of await ctx.db.query("tasks").withIndex("by_senior_status", (q) => q.eq("seniorId", device.seniorId).eq("status", "pending")).collect()) {
+      for (const t of await ctx.db.query("tasks").withIndex("by_senior_status", (q) => q.eq("seniorId", device.seniorId).eq("status", "pending")).take(100)) {
         if (t.assignedBy === l.caregiverId) await ctx.db.patch(t._id, { status: "dismissed" });
       }
       await ctx.db.insert("notifications", {
@@ -212,12 +260,77 @@ export const leaveHelpers = mutation({
         read: false,
       });
     }
+    return null;
+  },
+});
+
+const deviceSummary = v.object({
+  deviceId: v.id("devices"),
+  kind: deviceKind,
+  platform: v.string(),
+  label: v.string(),
+  machineId: v.union(v.string(), v.null()),
+  pairedAt: v.number(),
+  lastSeenAt: v.union(v.number(), v.null()),
+  isThisDevice: v.boolean(),
+});
+
+/** Her installs (not revoked). Never returns token hashes. */
+export const list = query({
+  args: { token: v.string() },
+  returns: v.array(deviceSummary),
+  handler: async (ctx, { token }) => {
+    const me = await requireDevice(ctx, token);
+    const rows = await ctx.db
+      .query("devices")
+      .withIndex("by_senior", (q) => q.eq("seniorId", me.seniorId))
+      .take(50);
+    return rows
+      .filter((d) => d.revokedAt === undefined)
+      .map((d) => ({
+        deviceId: d._id,
+        kind: kindOf(d),
+        platform: d.platform ?? "unknown",
+        label: d.label ?? (kindOf(d) === "desktop" ? "JustAsk app" : "Web browser"),
+        machineId: d.machineId ?? null,
+        pairedAt: d.pairedAt,
+        lastSeenAt: d.lastSeenAt ?? null,
+        isThisDevice: d._id === me._id,
+      }));
+  },
+});
+
+/** Any install can revoke another install of the same account (or itself). */
+export const revoke = mutation({
+  args: { token: v.string(), deviceId: v.id("devices") },
+  returns: v.null(),
+  handler: async (ctx, { token, deviceId }) => {
+    const me = await requireDevice(ctx, token);
+    const target = await ctx.db.get(deviceId);
+    if (!target || target.seniorId !== me.seniorId) throw new Error("not found");
+    if (target.revokedAt === undefined) await ctx.db.patch(deviceId, { revokedAt: Date.now() });
+    return null;
+  },
+});
+
+/** Marks this install as seen. Writes at most once a minute, since live queries read the device row. */
+export const heartbeat = mutation({
+  args: { token: v.string() },
+  returns: v.null(),
+  handler: async (ctx, { token }) => {
+    const device = await requireDevice(ctx, token);
+    const now = Date.now();
+    if (device.lastSeenAt === undefined || now - device.lastSeenAt >= HEARTBEAT_MIN_MS) {
+      await ctx.db.patch(device._id, { lastSeenAt: now });
+    }
+    return null;
   },
 });
 
 /** Called by the plan action before every Claude call. Throws past the hourly budget. */
 export const consumeStep = internalMutation({
   args: { token: v.string() },
+  returns: v.null(),
   handler: async (ctx, { token }) => {
     const device = await requireDevice(ctx, token);
     const hour = Math.floor(Date.now() / 3_600_000);
@@ -228,5 +341,6 @@ export const consumeStep = internalMutation({
     if (row && row.count >= STEPS_PER_HOUR) throw new Error("rate limited");
     if (row) await ctx.db.patch(row._id, { count: row.count + 1 });
     else await ctx.db.insert("stepCounts", { deviceId: device._id, hour, count: 1 });
+    return null;
   },
 });

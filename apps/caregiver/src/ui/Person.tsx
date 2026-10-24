@@ -87,7 +87,7 @@ function PersonPage({ id }: { id: Id<"seniors"> }) {
           </div>
           <div className="col side">
             <Sharing displayName={p.displayName} consent={p.consent} stats={p.stats} />
-            <TypingHelp seniorId={p.id} displayName={p.displayName} on={p.assistTyping} setBy={p.assistSetBy} />
+            <HowItHelps seniorId={p.id} displayName={p.displayName} showMe={p.showMeInstead} setBy={p.showMeSetBy} />
             <section className="card">
               <h2>Computers</h2>
               <p className="muted small">
@@ -414,34 +414,34 @@ function Sharing({
   );
 }
 
-/** "Type it for me" on search boxes. Either she or a linked helper can change it. */
-function TypingHelp({ seniorId, displayName, on, setBy }: { seniorId: Id<"seniors">; displayName: string; on: boolean | null; setBy: "self" | "caregiver" | null }) {
-  const setAssist = useMutation(api.people.setAssist);
+/** Drive mode or "Show me instead". A helper may know clicking and typing is hard for them, or that they'd rather learn. */
+function HowItHelps({ seniorId, displayName, showMe, setBy }: { seniorId: Id<"seniors">; displayName: string; showMe: boolean; setBy: "self" | "caregiver" | null }) {
+  const setShowMe = useMutation(api.people.setShowMe);
   const [error, setError] = useState("");
   const toggle = async () => {
     setError("");
     try {
-      await setAssist({ seniorId, on: !on });
+      await setShowMe({ seniorId, on: !showMe });
     } catch (e) {
       setError(errorText(e));
     }
   };
   return (
     <section className="card">
-      <h2>Typing help</h2>
+      <h2>How JustAsk helps</h2>
       <label className="check">
-        <input type="checkbox" checked={on === true} onChange={() => void toggle()} />
+        <input type="checkbox" checked={!showMe} onChange={() => void toggle()} />
         <span>
-          <strong>Type searches for {displayName}</strong>
-          <span className="muted small"> JustAsk offers a “Type it for me” button on search boxes. It never types passwords or personal details, and {displayName} still presses Search.</span>
+          <strong>Click and type for {displayName}</strong>
+          <span className="muted small">
+            {" "}
+            JustAsk does each step for them and says what it's doing. It asks first before payments or account changes, and never types passwords, card numbers or other private details.
+          </span>
         </span>
       </label>
       <p className="muted small">
-        {on === null
-          ? `${displayName} hasn't chosen yet. JustAsk will ask them the first time they search.`
-          : setBy === "caregiver"
-            ? `Set by a helper. ${displayName} can change it in Settings.`
-            : `${displayName} chose this. You can change it if typing is hard for them.`}
+        {showMe ? `Off: JustAsk shows ${displayName} where to click, and they do it themselves. ` : ""}
+        {setBy === "caregiver" ? `Set by a helper. ${displayName} can change it in Settings.` : setBy === "self" ? `${displayName} chose this. You can change it if it suits them better.` : `${displayName} can change this in Settings.`}
       </p>
       {error && (
         <p className="error" role="alert">

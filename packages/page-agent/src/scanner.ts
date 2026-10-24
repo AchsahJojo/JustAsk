@@ -1,8 +1,12 @@
 import type { FieldInfo, FieldKind, SnapshotElement } from "@justask/shared";
 import { colorName } from "./color";
 import { fingerprint, normalize } from "./fingerprint";
+import { isSensitive } from "./sensitive";
+import { closestComposed, containsComposed, inViewport, isVisible, pickModal } from "./visibility";
 
-// Mana's SEL, extended per plan §3.3.
+export { closestComposed, isVisible };
+
+// Mana's SEL, extended per plan §3.3 and ARCHITECTURE §10 P1/P2.
 export const CLICKABLE_SELECTOR = [
   "a[href]",
   "button",
@@ -12,11 +16,16 @@ export const CLICKABLE_SELECTOR = [
   "summary",
   "[contenteditable=true]",
   "[contenteditable='']",
+  "[contenteditable=plaintext-only]",
   "[tabindex]:not([tabindex='-1'])",
-  ...["button", "link", "tab", "menuitem", "checkbox", "radio", "switch", "option", "combobox", "textbox", "listbox", "treeitem"].map((r) => `[role=${r}]`),
+  ...[
+    "button", "link", "tab", "menuitem", "menuitemcheckbox", "menuitemradio", "checkbox", "radio", "switch", "option",
+    "combobox", "textbox", "searchbox", "listbox", "treeitem", "spinbutton", "slider",
+  ].map((r) => `[role=${r}]`),
 ].join(", ");
 
-const MODAL_SELECTOR = "dialog[open], [aria-modal=true]";
+/** Editable regions whose typed text must never be read. */
+const EDITABLE_SELECTOR = "[contenteditable=true], [contenteditable=''], [contenteditable=plaintext-only], [role=textbox], [role=searchbox]";
 const TEXT_MAX = 80;
 export const ELEMENT_CAP = 150;
 
@@ -52,22 +61,38 @@ export function collectComposed(root: Document | ShadowRoot | Element, opts: Sca
   return out;
 }
 
-export function isVisible(el: Element): boolean {
-  const r = el.getBoundingClientRect();
-  if (r.width <= 2 || r.height <= 2) {
-    // Visually hidden native radios/checkboxes are often styled through a label; keep if the label is visible.
-    if (el instanceof HTMLInputElement && (el.type === "checkbox" || el.type === "radio" || el.type === "file")) {
-      const lab = el.labels?.[0];
-      if (lab) return isVisible(lab);
-    }
-    return false;
-  }
-  const cs = getComputedStyle(el);
-  if (cs.visibility === "hidden" || cs.display === "none" || (cs.opacity !== "" && Number(cs.opacity) === 0)) return false;
-  return true;
+/** A contenteditable host or a [role=textbox|searchbox] that is not a native control. */
+export function isEditableHost(el: Element): boolean {
+  if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement || el instanceof HTMLSelectElement) return false;
+  return (el as HTMLElement).isContentEditable === true || el.matches(EDITABLE_SELECTOR);
+}
+
+const TEXT_INPUT_TYPES = new Set(["text", "search", ""]);
+const SEARCH_WORD = /(?:^|\s)(search|query|find|keywords?)(?:\s|$)/;
+
+function searchWords(s: string): string {
+  return s
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .replace(/[_\-.[\]]+/g, " ")
+    .toLowerCase();
+}
+
+/**
+ * A search field: type=search, role=searchbox, a text input inside [role=search] / <search>,
+ * or a text input whose name/id/aria-label/placeholder means search (q, query, search, find, keyword).
+ */
+export function isSearchBox(el: Element): boolean {
+  if (el.getAttribute("role") === "searchbox") return true;
+  if (!(el instanceof HTMLInputElement)) return false;
+  if (el.type === "search") return true;
+  if (!TEXT_INPUT_TYPES.has(el.type)) return false;
+  if (closestComposed(el, "[role=search], search")) return true;
+  for (const a of ["name", "id"]) if (/^q$/i.test(el.getAttribute(a) ?? "")) return true;
+  return ["name", "id", "aria-label", "placeholder"].some((a) => SEARCH_WORD.test(searchWords(el.getAttribute(a) ?? "")));
 }
 
 export function roleOf(el: Element): string {
+  if (isSearchBox(el)) return "search box";
   const explicit = el.getAttribute("role");
   if (explicit) return explicit;
   const tag = el.tagName.toLowerCase();
@@ -84,7 +109,7 @@ export function roleOf(el: Element): string {
     if (t === "range") return "slider";
     return "text box";
   }
-  if ((el as HTMLElement).isContentEditable) return "text box";
+  if (isEditableHost(el)) return "text box";
   return tag;
 }
 
@@ -100,7 +125,7 @@ export function visibleText(el: Element): string {
   }
   if (el instanceof HTMLTextAreaElement) return clip(el.placeholder || "");
   if (el instanceof HTMLSelectElement) return "";
-  if ((el as HTMLElement).isContentEditable || el.getAttribute("role") === "textbox") {
+  if (isEditableHost(el)) {
     return clip(el.getAttribute("aria-placeholder") || el.getAttribute("data-placeholder") || el.getAttribute("placeholder") || "");
   }
   const t = (el as HTMLElement).innerText ?? el.textContent ?? "";
@@ -115,11 +140,13 @@ export function accessibleName(el: Element): string {
   const ids = el.getAttribute("aria-labelledby");
   if (ids) {
     const root = el.getRootNode() as Document | ShadowRoot;
-    const txt = ids
+    const safe = ids
       .split(/\s+/)
-      .map((id) => (root.getElementById ? root.getElementById(id) : (root as ShadowRoot).querySelector(`#${CSS.escape(id)}`))?.textContent ?? "")
+      .map((id) => (root.getElementById ? root.getElementById(id) : (root as ShadowRoot).querySelector(`#${CSS.escape(id)}`)))
+      .filter((node): node is Element => !!node)
+      .map((node) => safeText(node))
       .join(" ");
-    if (txt.trim()) return clip(txt);
+    if (safe.trim()) return clip(safe);
   }
   const aria = el.getAttribute("aria-label");
   if (aria?.trim()) return clip(aria);
@@ -139,12 +166,21 @@ export function accessibleName(el: Element): string {
 
 /** A <label> can wrap its own <select>/<input>; skip those children so option text doesn't leak in. */
 function labelTextWithoutControls(label: HTMLLabelElement): string {
-  let out = "";
-  label.childNodes.forEach((n) => {
-    if (n.nodeType === Node.TEXT_NODE) out += n.textContent;
-    else if (n instanceof HTMLElement && !n.matches("input, select, textarea, option")) out += n.innerText ?? n.textContent ?? "";
-  });
-  return out;
+  return safeText(label, label.control ?? undefined);
+}
+
+/** Text for names/context only. Never includes an editable subtree or live status message. */
+function safeText(root: Node, skip?: Node): string {
+  if (root === skip) return "";
+  if (root.nodeType === Node.TEXT_NODE) return root.textContent ?? "";
+  if (root instanceof Element) {
+    if (
+      isEditableHost(root) ||
+      insideEditable(root) ||
+      root.matches("input, textarea, select, option, [role=alert], [role=status]")
+    ) return "";
+  }
+  return Array.from(root.childNodes).map((child) => safeText(child, skip)).join(" ");
 }
 
 function clip(s: string): string {
@@ -153,40 +189,17 @@ function clip(s: string): string {
 
 export function fieldKind(el: Element): FieldKind | null {
   if (el instanceof HTMLSelectElement) return "select";
-  if (el instanceof HTMLTextAreaElement) return isSearchBox(el) ? "search" : "textarea";
+  if (el instanceof HTMLTextAreaElement) return "textarea";
   if (el instanceof HTMLInputElement) {
     const t = el.type;
     if (["submit", "button", "reset", "image", "range", "color", "hidden"].includes(t)) return null;
     if (el.autocomplete === "one-time-code") return "otp";
     if (["password", "email", "number", "tel", "search", "url", "date", "time", "month", "checkbox", "radio", "file"].includes(t)) return t as FieldKind;
     if (t === "datetime-local" || t === "week") return "date";
-    return isSearchBox(el) ? "search" : "text";
+    return "text";
   }
-  if ((el as HTMLElement).isContentEditable || el.getAttribute("role") === "textbox") return "contenteditable";
+  if (isEditableHost(el)) return "contenteditable";
   return null;
-}
-
-const SEARCH_HINT = /\b(search|query|keywords?|find)\b/i;
-const SEARCH_NAMES = new Set(["q", "s", "k", "query", "search", "field-keywords", "search_query", "keyword", "keywords"]);
-// Autocomplete tokens for personal data. A box with one of these is never a search box.
-const PERSONAL = /\b(name|email|tel|username|password|one-time-code|address|postal|country|cc-|bday|sex|organization|street)/i;
-
-/**
- * A plain search box: the only kind of box "Type it for me" may fill. Checked from attributes
- * and structure, never from the value. Anything that might hold personal data is excluded.
- */
-export function isSearchBox(el: Element): boolean {
-  if (el instanceof HTMLInputElement) {
-    if (el.type === "search") return !el.closest("form")?.querySelector('input[type="password"]');
-    if (el.type !== "text") return false;
-  } else if (!(el instanceof HTMLTextAreaElement)) return false;
-  if (PERSONAL.test(el.getAttribute("autocomplete") ?? "")) return false;
-  if (el.closest("form")?.querySelector('input[type="password"]')) return false;
-  if (el.getAttribute("role") === "searchbox") return true;
-  if (el.closest('[role="search"], search')) return true;
-  if (SEARCH_NAMES.has((el.getAttribute("name") ?? "").toLowerCase())) return true;
-  const hints = ["id", "aria-label", "placeholder", "title"].map((a) => el.getAttribute(a) ?? "").join(" ");
-  return SEARCH_HINT.test(hints.replace(/[-_]/g, " "));
 }
 
 /** `hasValue` is a local boolean only. The value never leaves this function. */
@@ -197,9 +210,21 @@ export function hasValue(el: Element): boolean {
     return el.value !== "";
   }
   if (el instanceof HTMLTextAreaElement) return el.value !== "";
-  if (el instanceof HTMLSelectElement) return el.selectedIndex > 0 || (el.selectedIndex === 0 && el.options[0]?.value !== "");
-  if ((el as HTMLElement).isContentEditable || el.getAttribute("role") === "textbox") return (el.textContent ?? "").trim() !== "";
+  if (el instanceof HTMLSelectElement) {
+    if (el.selectedIndex < 0) return false;
+    const selected = el.options[el.selectedIndex];
+    if (selected && isPlaceholderOption(el, selected)) return false;
+    return true;
+  }
+  if (isEditableHost(el)) return (el.textContent ?? "").trim() !== "";
   return false;
+}
+
+/** Common first-option placeholders, including the no-value-attribute form. */
+function isPlaceholderOption(select: HTMLSelectElement, option: HTMLOptionElement): boolean {
+  if (select.multiple || select.size > 1 || option.index !== 0) return false;
+  if (option.disabled || option.hidden || option.value.trim() === "") return true;
+  return /^(please\s+)?(select|choose|pick)(\s+(an?|the))?(\s+.+)?[.…]*$/i.test(normalize(option.label || option.text));
 }
 
 const DATE_HINTS: Record<string, string> = {
@@ -230,18 +255,20 @@ export function fieldInfo(el: Element): FieldInfo | undefined {
     valid: "validity" in el ? (el as HTMLInputElement).validity.valid : true,
   };
   if (el instanceof HTMLSelectElement) {
-    const labels = Array.from(el.options).map((o) => normalize(o.label || o.text).slice(0, 60));
+    const labels = Array.from(el.options).map((o) => normalize(o.label || o.text));
     info.optionCount = labels.length;
     info.options = labels.length > 30 ? labels.slice(0, 10) : labels;
   }
   if (el instanceof HTMLInputElement && (el.type === "checkbox" || el.type === "radio")) info.checked = el.checked;
   const hint = dateHint(kind);
   if (hint) info.formatHint = hint;
+  if (isSensitive(el)) info.sensitive = true;
   return info;
 }
 
-function regionOf(el: Element): SnapshotElement["region"] {
-  if (closestComposed(el, MODAL_SELECTOR)) return "modal";
+/** Landmark region. "modal" only for the modal `pickModal` chose, never for an off-screen drawer. */
+function regionOf(el: Element, modal: Element | null): SnapshotElement["region"] {
+  if (modal && containsComposed(modal, el)) return "modal";
   if (closestComposed(el, "main, [role=main]")) return "main";
   if (closestComposed(el, "nav, [role=navigation]")) return "nav";
   if (closestComposed(el, "footer, [role=contentinfo]")) return "footer";
@@ -250,35 +277,36 @@ function regionOf(el: Element): SnapshotElement["region"] {
   return "other";
 }
 
-/** `closest` that crosses shadow boundaries. */
-export function closestComposed(el: Element, selector: string): Element | null {
-  let cur: Node | null = el;
-  while (cur) {
-    if (cur instanceof Element) {
-      const hit = cur.closest(selector);
-      if (hit) return hit;
-    }
-    const root: Node = (cur as Element).getRootNode?.() ?? cur;
-    cur = root instanceof ShadowRoot ? root.host : null;
-  }
-  return null;
-}
-
 /** Nearest heading or row text, for context ("Refill" next to "Lisinopril"). */
 export function nearbyText(el: Element, ownText: string): string | null {
   let cur: Element | null = el.parentElement;
   for (let depth = 0; cur && depth < 4; depth++, cur = cur.parentElement) {
     const h = cur.querySelector("h1,h2,h3,h4,h5,h6,legend,strong,[role=heading]");
     if (h && !h.contains(el)) {
-      const t = clip(h.textContent ?? "");
+      const t = clip(safeText(h));
       if (t && t !== ownText) return t;
     }
+    // Generic row/list context preserves identical controls in distinct rows even when the
+    // site has no heading element (for example two unlabelled "Edit" buttons).
+    const row = cur.matches("li, tr, [role=row], [role=listitem], article, fieldset");
+    const t = clip(safeContextText(cur, el));
+    if (t && t !== ownText && (row || depth === 0)) return t;
   }
   return null;
 }
 
-function inViewport(r: DOMRect): boolean {
-  return r.bottom > 0 && r.right > 0 && r.top < innerHeight && r.left < innerWidth;
+function safeContextText(root: Element, target: Element): string {
+  const walk = (node: Node): string => {
+    if (node === target || (node instanceof Element && isInteractiveContext(node))) return "";
+    if (node.nodeType === Node.TEXT_NODE) return node.textContent ?? "";
+    if (node instanceof Element && node.matches("[contenteditable=true], [contenteditable=''], [contenteditable=plaintext-only], [role=textbox], [role=searchbox], [role=alert], [role=status]")) return "";
+    return Array.from(node.childNodes).map(walk).join(" ");
+  };
+  return normalize(walk(root));
+}
+
+function isInteractiveContext(el: Element): boolean {
+  return el.matches("a[href], button, input, select, textarea, [role=button], [role=link], [role=checkbox], [role=radio], [role=menuitem], [role=option]");
 }
 
 function isDisabled(el: Element): boolean {
@@ -297,7 +325,9 @@ function words(s: string): Set<string> {
 /** Scan one document (frame). Returns ranked elements, capped, numbered from 1. */
 export function scanDocument(doc: Document, opts: ScanOptions = {}): { elements: ScannedElement[]; omitted: { count: number; regions: string[] } } {
   const cap = opts.cap ?? ELEMENT_CAP;
-  const candidates = collectComposed(doc, opts).filter((el) => isVisible(el) && !insideEditable(el));
+  const candidates = collectComposed(doc, opts).filter(
+    (el) => isVisible(el) && !insideEditable(el) && !closestComposed(el, "[role=alert], [role=status]"),
+  );
 
   // Drop nested duplicates: an <a> inside a [role=button] wrapper etc. Keep the outermost interactive.
   const set = new Set(candidates);
@@ -310,10 +340,8 @@ export function scanDocument(doc: Document, opts: ScanOptions = {}): { elements:
     return true;
   });
 
-  const modal = (() => {
-    const all = Array.from(doc.querySelectorAll(MODAL_SELECTOR)).filter(isVisible);
-    return all[all.length - 1] ?? null;
-  })();
+  const modal = pickModal(doc);
+  const win = doc.defaultView ?? window;
 
   const ctxWords = words((opts.context ?? []).join(" "));
   const focusForm = (doc.activeElement as HTMLElement | null)?.closest?.("form") ?? null;
@@ -321,7 +349,7 @@ export function scanDocument(doc: Document, opts: ScanOptions = {}): { elements:
   const scored: ScannedElement[] = [];
   const dupKeys = new Set<string>();
   for (const el of filtered) {
-    const inModal = !!(modal && closestComposed(el, MODAL_SELECTOR));
+    const inModal = !!modal && containsComposed(modal, el);
     if (modal && !inModal) continue; // plan §3.3: if a modal is open, elements outside it are dropped
     const r = el.getBoundingClientRect();
     const role = roleOf(el);
@@ -330,14 +358,16 @@ export function scanDocument(doc: Document, opts: ScanOptions = {}): { elements:
     if (name === text) name = "";
     const field = fieldInfo(el);
     if (!text && !name && !field) continue;
-    const region = inModal ? "modal" : regionOf(el);
+    const region = inModal ? "modal" : regionOf(el, modal);
     const disabled = isDisabled(el);
-    const vis = inViewport(r);
+    const vis = inViewport(r, win);
     const cs = getComputedStyle(el);
     const color = colorName(cs.backgroundColor);
     const big = r.width * r.height > 9000;
+    const nearby = nearbyText(el, text);
 
-    const dupKey = `${role}|${text}|${(el as HTMLAnchorElement).href ?? ""}`;
+    // Same control in different rows ("Add to cart" under each product) stays distinct via `nearby`.
+    const dupKey = `${role}|${text}|${name}|${(el as HTMLAnchorElement).href ?? ""}|${nearby ?? ""}`;
     if (!field && dupKeys.has(dupKey)) continue;
     dupKeys.add(dupKey);
 
@@ -365,7 +395,7 @@ export function scanDocument(doc: Document, opts: ScanOptions = {}): { elements:
         role,
         text,
         label: name || null,
-        nearby: nearbyText(el, text),
+        nearby,
         color,
         big,
         disabled,
@@ -394,13 +424,13 @@ export function scanDocument(doc: Document, opts: ScanOptions = {}): { elements:
 export function pageText(doc: Document, max = 1400): string {
   const seen = new Set<string>();
   const out: string[] = [];
-  const modal = Array.from(doc.querySelectorAll(MODAL_SELECTOR)).filter(isVisible).pop();
-  const root: ParentNode = modal ?? doc;
+  const root: ParentNode = pickModal(doc) ?? doc; // same modal choice as scanDocument
   for (const e of Array.from(root.querySelectorAll("h1,h2,h3,p,li,label,legend,[role=alert],[role=status]"))) {
     if (!isVisible(e)) continue;
     if (e.closest("script,style,noscript")) continue;
-    if (insideEditable(e)) continue; // typed text in editors must never be read
-    const t = normalize((e as HTMLElement).innerText ?? e.textContent ?? "");
+    if (insideEditable(e) || isEditableHost(e)) continue; // typed text in editors must never be read
+    if (e.matches("[role=alert], [role=status]") || closestComposed(e, "[role=alert], [role=status]")) continue;
+    const t = normalize(safeText(e));
     if (!t || seen.has(t)) continue;
     seen.add(t);
     out.push(t.slice(0, 200));
@@ -410,8 +440,10 @@ export function pageText(doc: Document, max = 1400): string {
 }
 
 export function mainHeading(doc: Document): string {
-  const h = Array.from(doc.querySelectorAll("h1, [role=heading][aria-level='1'], h2")).find(isVisible);
-  return h ? clip(h.textContent ?? "") : "";
+  const h = Array.from(doc.querySelectorAll("h1, [role=heading][aria-level='1'], h2")).find(
+    (el) => isVisible(el) && !isEditableHost(el) && !insideEditable(el) && !closestComposed(el, "[role=alert], [role=status]"),
+  );
+  return h ? clip(safeText(h)) : "";
 }
 
 /** URL with query and fragment stripped. */
@@ -422,7 +454,7 @@ export function strippedUrl(loc: Location | URL): string {
 /** True for nodes *inside* an editable region (not the editable root itself). */
 export function insideEditable(el: Element): boolean {
   const p = el.parentElement;
-  return !!p && (p.isContentEditable || !!p.closest("[role=textbox]"));
+  return !!p && (p.isContentEditable || !!closestComposed(p, EDITABLE_SELECTOR));
 }
 
 /** The parts a fingerprint is built from. Shared by the scanner and the resolver. */

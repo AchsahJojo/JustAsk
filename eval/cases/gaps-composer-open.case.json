@@ -1,0 +1,22 @@
+{
+  "id": "gaps-composer-open",
+  "url": "{FIXTURES}/gaps/composer",
+  "request": "write a post",
+  "pendingFixture": true,
+  "history": [
+    "She did: \"Click the button that says Start a post.\" (click)"
+  ],
+  "prepare": {
+    "clickText": "Start a post"
+  },
+  "settleMs": 2000,
+  "note": "P1: the editor appears 1200 ms after the click. Once it is there, point at it; do not wait.",
+  "expected": {
+    "kind": "guide",
+    "allowKinds": [
+      "guide",
+      "act"
+    ],
+    "targetText": "What's on your mind"
+  }
+}

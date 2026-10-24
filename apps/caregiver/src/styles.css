@@ -301,3 +301,9 @@ input::placeholder { color: color-mix(in srgb, var(--ink-3) 70%, transparent); }
 }
 .empty-feed { max-width: 640px; margin: 0 auto; }
 .empty-feed .feed { position: static; }
+
+/* "Do they already use JustAsk?": link with the code from their Settings. */
+.helper-code { margin-top: 16px; }
+.helper-code h2 { margin: 0; font-size: 18px; }
+.code-row { display: flex; gap: 10px; flex-wrap: wrap; }
+.code-row input { flex: 1 1 160px; font-size: 22px; letter-spacing: 0.12em; font-variant-numeric: tabular-nums; }

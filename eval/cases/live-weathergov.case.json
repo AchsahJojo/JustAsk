@@ -1,0 +1,18 @@
+{
+  "id": "live-weathergov",
+  "url": "https://www.weather.gov/",
+  "request": "check the weather in Phoenix",
+  "live": true,
+  "expected": {
+    "kind": "guide",
+    "allowKinds": [
+      "guide",
+      "act"
+    ],
+    "targetText": [
+      "location",
+      "city",
+      "zip"
+    ]
+  }
+}

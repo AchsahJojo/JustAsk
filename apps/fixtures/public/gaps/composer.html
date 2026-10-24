@@ -1,0 +1,15 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><link rel="stylesheet" href="/site.css"><title>Composer</title></head><body><main><h1>Home feed</h1><p class="muted">See what your friends are sharing.</p>
+<button class="btn" id="start">Start a post</button><div id="feed"></div>
+<dialog id="d" aria-label="Create post" style="border:0;border-radius:14px;padding:24px;width:420px;max-width:90vw"><h2>Create post</h2><div id="body"></div></dialog>
+<script>
+const d=document.getElementById("d"), body=document.getElementById("body");
+document.getElementById("start").onclick=()=>{
+  body.innerHTML='<p role="status">Loading…</p>';
+  d.showModal();
+  // The editor arrives late, like real post composers (ARCHITECTURE §10 P1).
+  setTimeout(()=>{
+    body.innerHTML='<div contenteditable="true" aria-label="What\'s on your mind?" style="border:1px solid #ccc;border-radius:8px;min-height:80px;padding:8px;margin-bottom:12px"></div><button class="btn" id="post">Post</button>';
+    document.getElementById("post").onclick=()=>{d.close();document.getElementById("feed").innerHTML='<p role="status">Your post is shared.</p>';};
+  },1200);
+};
+</script></main></body></html>

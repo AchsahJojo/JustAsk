@@ -1,6 +1,6 @@
 import { browser } from "wxt/browser";
 import type { PageBridge, TargetRef } from "@justask/core";
-import type { FrameScan, HighlightSpec, ScanReply, ToContent } from "@justask/shared";
+import type { ActResult, ActSpec, FrameScan, HighlightSpec, ScanReply, ToContent } from "@justask/shared";
 import { isInjectable } from "../platform";
 
 const CONTENT_FILE = "/content-scripts/content.js";
@@ -99,8 +99,14 @@ export class ExtensionBridge implements PageBridge {
     await Promise.all(frames.map((f) => this.send({ type: "ja:clear" }, f.frameId, 500, null)));
   }
 
-  async fill(ref: TargetRef, text: string): Promise<boolean> {
-    return this.send<boolean>({ type: "ja:fill", text }, ref.frameId, 1000, false);
+  /** Drive mode: ask the target's frame to perform the action. A missing or slow reply counts as not done. */
+  async act(ref: TargetRef, spec: ActSpec): Promise<ActResult> {
+    return this.send<ActResult>({ type: "ja:act", spec }, ref.frameId, 3000, { ok: false });
+  }
+
+  /** Waiting phase: the top frame reports settled DOM changes as `ja:page-changed`. */
+  watch(on: boolean): void {
+    void this.send({ type: "ja:watch", on }, 0, 500, null);
   }
 
   async pulse(ref: TargetRef): Promise<void> {

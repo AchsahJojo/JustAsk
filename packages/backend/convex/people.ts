@@ -1,12 +1,12 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
-import type { QueryCtx } from "./_generated/server";
+import type { MutationCtx, QueryCtx } from "./_generated/server";
 import type { CaregiverTaskStatus } from "@justask/shared";
-import { clean, requireCaregiver, requireLink, resolveSenior } from "./lib";
+import { clean, prefsOf, requireCaregiver, requireLink, resolveSenior } from "./lib";
 
-async function deviceCount(ctx: QueryCtx, seniorId: Id<"seniors">) {
-  return (await ctx.db.query("devices").withIndex("by_senior", (q) => q.eq("seniorId", seniorId)).collect()).length;
+async function deviceCount(ctx: QueryCtx | MutationCtx, seniorId: Id<"seniors">) {
+  return (await ctx.db.query("devices").withIndex("by_senior", (q) => q.eq("seniorId", seniorId)).collect()).filter((d) => d.revokedAt === undefined).length;
 }
 
 /** Without her consent to share results, a caregiver only sees that a task was sent. */
@@ -93,12 +93,12 @@ export const get = query({
       name: s.name || s.displayName,
       displayName: s.displayName,
       relation: link.relation,
-      origin: s.origin ?? "caregiver",
+      origin: s.createdBy ?? "caregiver",
       devices,
       otherHelpers,
       consent: s.consent,
-      assistTyping: s.assistTyping ?? null,
-      assistSetBy: s.assistSetBy ?? null,
+      showMeInstead: prefsOf(s).showMeInstead,
+      showMeSetBy: s.showMeSetBy ?? null,
       tasks: tasks.map((t) => ({ id: t._id, title: t.title, spokenPrompt: t.spokenPrompt, recipe: t.recipe ?? null, createdAt: t.createdAt, status: statusFor(t, s), canCancel: t.status === "pending" })),
       stats,
     };
@@ -112,18 +112,24 @@ export const update = mutation({
     const { link } = await requireLink(ctx, args.seniorId);
     const name = clean(args.name, 60);
     if (!name) throw new Error("Add their name.");
-    const connected = !!(await ctx.db.query("devices").withIndex("by_senior", (q) => q.eq("seniorId", args.seniorId)).first());
+    const connected = (await deviceCount(ctx, args.seniorId)) > 0;
     await ctx.db.patch(args.seniorId, { name, ...(connected ? {} : { displayName: clean(args.displayName, 40) || name.split(" ")[0] }) });
     await ctx.db.patch(link._id, { relation: clean(args.relation, 40) });
   },
 });
 
-/** Caregiver: turn "Type it for me" on or off for someone they help (they may know typing is hard for them). */
-export const setAssist = mutation({
+/**
+ * Caregiver: turn "Show me instead" on or off for someone they help. On, JustAsk shows her each click
+ * and she does it herself. Off (the default), JustAsk clicks and types for her, except sensitive fields.
+ */
+export const setShowMe = mutation({
   args: { seniorId: v.id("seniors"), on: v.boolean() },
   handler: async (ctx, { seniorId, on }) => {
     await requireLink(ctx, seniorId);
-    await ctx.db.patch(seniorId, { assistTyping: on, assistSetBy: "caregiver" });
+    const s = await ctx.db.get(seniorId);
+    if (!s) throw new Error("not your senior");
+    const { voice, rate } = prefsOf(s);
+    await ctx.db.patch(seniorId, { prefs: { voice, rate, showMeInstead: on }, showMeSetBy: "caregiver" });
   },
 });
 

@@ -1,0 +1,187 @@
+{
+  "snapshotId": "eval-gaps-form",
+  "url": "http://localhost:6174/gaps/form",
+  "title": "Form | Fixtures",
+  "heading": "Create your account",
+  "pageText": "Create your account\nFull name\nEmail\nPassword\nState\nDate of birth\nProfile photo\nAbout you\nI agree to the terms",
+  "elements": [
+    {
+      "n": 1,
+      "role": "text box",
+      "text": "",
+      "label": "Full name",
+      "nearby": "Full name",
+      "color": null,
+      "big": false,
+      "disabled": false,
+      "inModal": false,
+      "inViewport": true,
+      "region": "main",
+      "field": {
+        "kind": "text",
+        "hasValue": false,
+        "valid": false
+      }
+    },
+    {
+      "n": 2,
+      "role": "text box",
+      "text": "",
+      "label": "Email",
+      "nearby": "Email",
+      "color": null,
+      "big": false,
+      "disabled": false,
+      "inModal": false,
+      "inViewport": true,
+      "region": "main",
+      "field": {
+        "kind": "email",
+        "hasValue": false,
+        "valid": false
+      }
+    },
+    {
+      "n": 3,
+      "role": "text box",
+      "text": "",
+      "label": "Password",
+      "nearby": "Password",
+      "color": null,
+      "big": false,
+      "disabled": false,
+      "inModal": false,
+      "inViewport": true,
+      "region": "main",
+      "field": {
+        "kind": "password",
+        "hasValue": false,
+        "valid": false,
+        "sensitive": true
+      }
+    },
+    {
+      "n": 4,
+      "role": "dropdown",
+      "text": "",
+      "label": "State",
+      "nearby": "State",
+      "color": null,
+      "big": false,
+      "disabled": false,
+      "inModal": false,
+      "inViewport": true,
+      "region": "main",
+      "field": {
+        "kind": "select",
+        "hasValue": false,
+        "valid": true,
+        "optionCount": 51,
+        "options": [
+          "Choose a state",
+          "Alabama",
+          "Alaska",
+          "Arizona",
+          "Arkansas",
+          "California",
+          "Colorado",
+          "Connecticut",
+          "Delaware",
+          "Florida"
+        ]
+      }
+    },
+    {
+      "n": 5,
+      "role": "text box",
+      "text": "",
+      "label": "Date of birth",
+      "nearby": "Date of birth",
+      "color": null,
+      "big": false,
+      "disabled": false,
+      "inModal": false,
+      "inViewport": true,
+      "region": "main",
+      "field": {
+        "kind": "date",
+        "hasValue": false,
+        "valid": true,
+        "formatHint": "month, then day, then year"
+      }
+    },
+    {
+      "n": 6,
+      "role": "file picker",
+      "text": "",
+      "label": "Profile photo",
+      "nearby": "Profile photo",
+      "color": null,
+      "big": false,
+      "disabled": false,
+      "inModal": false,
+      "inViewport": true,
+      "region": "main",
+      "field": {
+        "kind": "file",
+        "hasValue": false,
+        "valid": true
+      }
+    },
+    {
+      "n": 7,
+      "role": "textbox",
+      "text": "",
+      "label": "About you",
+      "nearby": "Full name Email Password State Date of birth Profile photo About you I agree to ",
+      "color": null,
+      "big": true,
+      "disabled": false,
+      "inModal": false,
+      "inViewport": true,
+      "region": "main",
+      "field": {
+        "kind": "contenteditable",
+        "hasValue": false,
+        "valid": true
+      }
+    },
+    {
+      "n": 8,
+      "role": "checkbox",
+      "text": "",
+      "label": "I agree to the terms",
+      "nearby": "I agree to the terms",
+      "color": null,
+      "big": false,
+      "disabled": false,
+      "inModal": false,
+      "inViewport": true,
+      "region": "main",
+      "field": {
+        "kind": "checkbox",
+        "hasValue": false,
+        "valid": false,
+        "checked": false
+      }
+    },
+    {
+      "n": 9,
+      "role": "button",
+      "text": "Create account",
+      "label": null,
+      "nearby": "Full name Email Password State Date of birth Profile photo About you I agree to ",
+      "color": "blue",
+      "big": false,
+      "disabled": false,
+      "inModal": false,
+      "inViewport": true,
+      "region": "main"
+    }
+  ],
+  "omitted": {
+    "count": 0,
+    "regions": []
+  },
+  "surface": "web"
+}

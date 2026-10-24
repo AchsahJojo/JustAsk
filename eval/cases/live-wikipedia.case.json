@@ -1,0 +1,14 @@
+{
+  "id": "live-wikipedia",
+  "url": "https://en.wikipedia.org/wiki/Main_Page",
+  "request": "find the article about Arizona",
+  "live": true,
+  "expected": {
+    "kind": "guide",
+    "allowKinds": [
+      "guide",
+      "act"
+    ],
+    "targetText": "Search"
+  }
+}

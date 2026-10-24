@@ -108,14 +108,14 @@ try {
   await clickText("Make a different code", "button");
   await page.waitForFunction((old) => document.querySelector(".code-box")?.textContent.replace(/\D/g, "") !== old, {}, code);
   const code2 = await page.$eval(".code-box", (e) => e.textContent.replace(/\D/g, ""));
-  const { token } = await senior.mutation("devices:registerStandalone", { displayName: "Joanie" });
+  const { token } = await senior.mutation("accounts:createSelf", { displayName: "Joanie", device: { kind: "extension", platform: "test", label: "Chrome" } });
   const stale = await senior.mutation("devices:redeemCode", { code, token });
-  assert.equal(stale.ok, false, "replaced code no longer works");
+  assert.equal(stale, null, "replaced code no longer works");
   step("making a different code invalidates the old one");
 
   // --- Senior already used JustAsk alone, types the code: page flips to connected live ---
   const res = await senior.mutation("devices:redeemCode", { code: code2, token });
-  assert.equal(res.ok, true);
+  assert.ok(res);
   assert.equal(res.displayName, "Joanie", "her own name is kept");
   await waitText("You're connected to Joanie", 10000);
   await sleep(1500); // let the Clayzo "connected" state play
@@ -152,6 +152,7 @@ try {
 
   // --- She opts in, finishes the task: status, stats and the activity note update live ---
   await senior.mutation("devices:setConsent", { token, notifyOnComplete: true, notifyOnStuck: true });
+  await senior.mutation("tasks:setStatus", { token, taskId: pending[0].id, status: "active" }); // she pressed Start
   const sid = await senior.mutation("sessions:start", { token, request: "refill", taskId: pending[0].id });
   await senior.mutation("sessions:logEvent", { token, sessionId: sid, type: "step_shown", latencyMs: 1200 });
   await senior.mutation("sessions:logEvent", { token, sessionId: sid, type: "stuck" });
@@ -161,14 +162,14 @@ try {
   await shot("09-person-done");
   step("consent on: task shows Done, stats appear");
 
-  // Typing help: the caregiver turns "Type it for me" on; her extension sees it.
-  assert.match(await text(), /hasn't chosen yet/);
-  await page.evaluate(() => [...document.querySelectorAll("label.check")].find((l) => l.textContent.includes("Type searches for"))?.querySelector("input")?.click());
+  // How JustAsk helps: the caregiver turns on Show me instead; her synced prefs see it.
+  assert.match(await text(), /can change this in Settings/);
+  await page.evaluate(() => [...document.querySelectorAll("label.check")].find((l) => l.textContent.includes("Click and type for"))?.querySelector("input")?.click());
   await waitText("Set by a helper");
-  const me = await senior.query("devices:me", { token });
-  assert.deepEqual([me.assistTyping, me.assistSetBy], [true, "caregiver"]);
-  await shot("09b-typing-help");
-  step("caregiver turns on Type it for me; the senior's profile reflects it");
+  assert.equal((await senior.query("prefs:get", { token })).showMeInstead, true);
+  assert.equal((await senior.query("devices:me", { token })).showMeSetBy, "caregiver");
+  await shot("09b-how-it-helps");
+  step("caregiver turns on Show me instead; the senior's synced prefs reflect it");
 
   // Take back a second task.
   await clickText("New task", "button");

@@ -1,7 +1,12 @@
-import type { FrameScan, FromContent, HighlightSpec } from "@justask/shared";
-import { CLICKABLE_SELECTOR, closestComposed, collectComposed, elementParts, fieldKind, hasValue, isSearchBox, isVisible, mainHeading, pageText, scanDocument, strippedUrl, type ScanOptions } from "./scanner";
+import type { ActResult, ActSpec, FrameScan, FromContent, HighlightSpec } from "@justask/shared";
+import { CLICKABLE_SELECTOR, closestComposed, collectComposed, elementParts, fieldKind, hasValue, isVisible, mainHeading, pageText, scanDocument, strippedUrl, type ScanOptions } from "./scanner";
 import { fingerprint, normalize, roleTextKey } from "./fingerprint";
 import { Overlay } from "./overlay";
+import { performAct } from "./act";
+import { containsComposed } from "./visibility";
+
+/** Quiet time after real DOM mutations before `watch` reports a settled change. */
+export const WATCH_QUIET_MS = 600;
 
 interface Entry {
   ref: WeakRef<Element>;
@@ -34,6 +39,8 @@ export class PageAgent {
   private hoverTimer: ReturnType<typeof setTimeout> | null = null;
   private done = false;
   private listeners: Array<[EventTarget, string, EventListener, boolean]> = [];
+  private watching = false;
+  private watchTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(private opts: AgentOptions) {
     this.doc = opts.doc ?? document;
@@ -41,12 +48,13 @@ export class PageAgent {
     this.mo = new MutationObserver((muts) => {
       let real = false;
       for (const m of muts) {
-        if (isOurs(m.target)) continue;
+        if (isOurs(m.target) || onlyOurNodes(m)) continue;
         real = true;
         m.addedNodes.forEach((n) => this.added.add(n));
       }
       if (!real) return;
       this.lastMutation = Date.now();
+      if (this.watching) this.armWatch();
       if (this.target && !this.target.isConnected) this.onTargetGone();
     });
     this.mo.observe(this.doc.documentElement, { subtree: true, childList: true, attributes: true, characterData: false });
@@ -127,26 +135,6 @@ export class PageAgent {
     this.overlay.pulse();
   }
 
-  /**
-   * "Type it for me": put `text` into the highlighted search box. Only on a typing step, only in a
-   * search box (checked again here, never trusted from the message), and it never submits. The
-   * normal change listener then finishes the step. Returns false when not allowed.
-   */
-  fill(text: string): boolean {
-    const el = this.target;
-    if (!el || !this.spec || this.spec.expect !== "type" || this.done || !isSearchBox(el)) return false;
-    const box = el as HTMLInputElement | HTMLTextAreaElement;
-    const words = text.replace(/\s+/g, " ").trim().slice(0, 100);
-    if (!words) return false;
-    box.focus();
-    // The prototype setter, so frameworks that track `value` (React) see the change.
-    const proto = box instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
-    Object.getOwnPropertyDescriptor(proto, "value")?.set?.call(box, words);
-    box.dispatchEvent(new InputEvent("input", { bubbles: true, composed: true, inputType: "insertText", data: words }));
-    box.dispatchEvent(new Event("change", { bubbles: true }));
-    return true;
-  }
-
   clear() {
     this.spec = null;
     this.target = null;
@@ -183,7 +171,47 @@ export class PageAgent {
     });
   }
 
+  // ───────────── act (drive mode, ARCHITECTURE §11) ─────────────
+
+  /**
+   * Perform one action on element `localId`. Refuses type/choose/submit on sensitive fields.
+   * A highlighted step counts as done first, so our own synthetic events never report
+   * step-done, wrong or lost; on failure the highlight is live again for guide mode.
+   */
+  act(spec: ActSpec): ActResult {
+    const el = this.resolve(spec.localId);
+    if (!el) return { ok: false };
+    const prevDone = this.done;
+    this.done = true;
+    const result = performAct(el, spec);
+    if (!result.ok) this.done = prevDone;
+    return result;
+  }
+
+  // ───────────── watch (P1) ─────────────
+
+  /**
+   * While on, send `ja:page-changed` once each time real DOM mutations settle
+   * (`WATCH_QUIET_MS` of quiet). Off cancels any pending report.
+   */
+  watch(on: boolean) {
+    this.watching = on;
+    if (!on && this.watchTimer) {
+      clearTimeout(this.watchTimer);
+      this.watchTimer = null;
+    }
+  }
+
+  private armWatch() {
+    if (this.watchTimer) clearTimeout(this.watchTimer);
+    this.watchTimer = setTimeout(() => {
+      this.watchTimer = null;
+      if (this.watching) this.opts.send({ type: "ja:page-changed", reason: "mutation" });
+    }, WATCH_QUIET_MS);
+  }
+
   destroy() {
+    this.watch(false);
     this.clear();
     this.mo.disconnect();
     this.overlay.destroy();
@@ -267,7 +295,7 @@ export class PageAgent {
         const sel = this.target as HTMLSelectElement;
         const chosen = sel.selectedIndex >= 0 ? sel.options[sel.selectedIndex] : null;
         // Compare locally; only `matched` leaves the page, never the selected value.
-        const matched = !!chosen && normalize(chosen.label || chosen.text) === normalize(spec.option ?? "");
+        const matched = !!chosen && normalize(chosen.label || chosen.text).toLowerCase() === normalize(spec.option ?? "").toLowerCase();
         if (matched) this.finish("chose");
         else this.opts.send({ type: "ja:wrong", what: "choice" });
       });
@@ -285,10 +313,24 @@ export class PageAgent {
       const enter = (e: Event) => {
         if (this.done || !this.isTargetPath(e)) return;
         if (this.hoverTimer) clearTimeout(this.hoverTimer);
-        this.hoverTimer = setTimeout(() => this.finish("hovered"), 300);
+        this.hoverTimer = setTimeout(() => {
+          this.hoverTimer = null;
+          this.finish("hovered");
+        }, 300);
+      };
+      const leave = (e: Event) => {
+        if (this.done || !this.target || !this.isTargetPath(e)) return;
+        const related = (e as MouseEvent).relatedTarget;
+        const next = related instanceof Element ? related : related instanceof Node ? related.parentElement : null;
+        // Moving between descendants of the target is still a hover; leaving it cancels the dwell.
+        if (next && containsComposed(this.target, next)) return;
+        if (this.hoverTimer) clearTimeout(this.hoverTimer);
+        this.hoverTimer = null;
       };
       this.on(this.doc, "pointerover", enter);
       this.on(this.doc, "mouseover", enter);
+      this.on(this.doc, "pointerout", leave);
+      this.on(this.doc, "mouseout", leave);
     }
   }
 
@@ -315,6 +357,13 @@ function isOurs(n: Node): boolean {
     else cur = (cur as Element).parentNode;
   }
   return false;
+}
+
+/** A childList mutation that only adds/removes our overlay host (e.g. on body). */
+function onlyOurNodes(m: MutationRecord): boolean {
+  if (m.type !== "childList") return false;
+  const nodes = [...Array.from(m.addedNodes), ...Array.from(m.removedNodes)];
+  return nodes.length > 0 && nodes.every((n) => n instanceof Element && n.tagName === "JUSTASK-OVERLAY");
 }
 
 function hasAddedAncestor(n: Node, set: WeakSet<Node>): boolean {

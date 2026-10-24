@@ -6,7 +6,8 @@ export class BrowserSpeech implements SpeechOut {
   onSpeaking: (on: boolean) => void = () => {};
   muted = false;
 
-  constructor(private rate = 0.9) {
+  /** Speaking rate; the panel applies her synced setting. */
+  constructor(public rate = 0.9) {
     const pick = () => {
       const vs = speechSynthesis.getVoices();
       this.voice = vs.find((x) => /^en[-_]US/i.test(x.lang) && /natural|samantha|google/i.test(x.name)) ?? vs.find((x) => /^en[-_]US/i.test(x.lang)) ?? vs.find((x) => /^en/i.test(x.lang)) ?? null;

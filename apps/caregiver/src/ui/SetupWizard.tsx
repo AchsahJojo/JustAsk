@@ -109,6 +109,56 @@ export function SetupWizard() {
           </button>
         </div>
       </form>
+      <HelperCode />
     </div>
+  );
+}
+
+/**
+ * They already use JustAsk on their own: in their Settings, "Share with my helper" shows a 6-digit
+ * code. Typing it here links you to their account (`careLinks:redeemHelperCode`).
+ */
+function HelperCode() {
+  const redeem = useMutation(api.careLinks.redeemHelperCode);
+  const [code, setCode] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const digits = code.replace(/\D/g, "");
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (digits.length !== 6) return setError("Enter the 6 numbers from their screen.");
+    setBusy(true);
+    setError("");
+    try {
+      const r = await redeem({ code: digits });
+      if (!r) {
+        setError("That code didn't work. Ask them to press “Get a new code” and try again.");
+        setBusy(false);
+      } else go({ name: "person", id: r.seniorId });
+    } catch (err) {
+      setError(errorText(err));
+      setBusy(false);
+    }
+  };
+
+  return (
+    <form className="card form helper-code" onSubmit={submit} onInput={() => setError("")} noValidate>
+      <h2>Do they already use JustAsk?</h2>
+      <p className="muted">
+        Ask them to open JustAsk's <strong>Settings</strong> and press <strong>Share with my helper</strong>. Then type the code they see.
+      </p>
+      <div className="code-row">
+        <input value={code} onChange={(e) => setCode(e.target.value)} inputMode="numeric" maxLength={7} placeholder="123456" aria-label="Their code" autoComplete="one-time-code" />
+        <button className="btn ghost" disabled={busy}>
+          {busy ? "Connecting…" : "Connect"}
+        </button>
+      </div>
+      {error && (
+        <p className="error" role="alert">
+          {error}
+        </p>
+      )}
+    </form>
   );
 }

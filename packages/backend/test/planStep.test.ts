@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import Anthropic from "@anthropic-ai/sdk";
 import { planStep } from "../lib/planStep";
-import type { PlanRequest } from "@justask/shared";
+import { mockPlan, type MockRule } from "../lib/mockPlanner";
+import type { PageSnapshot, PlanRequest, SnapshotElement } from "@justask/shared";
 
 const req: PlanRequest = {
   deviceToken: null,
@@ -48,7 +51,7 @@ function client(replies: unknown[], seen: Array<{ headers: Headers; body: any }>
   });
 }
 
-const good = JSON.stringify({ kind: "guide", say: "Click the blue Refill button.", target: 1, expect: "click", option: null, fill: null, risk: "none" });
+const good = JSON.stringify({ kind: "guide", say: "Click the blue Refill button.", target: 1, expect: "click", option: null, text: null, risk: "none" });
 
 describe("planStep request shape (plan §4.2)", () => {
   it("uses the beta endpoint with fallbacks default, low effort, json_schema, cached system, no sampling params or thinking", async () => {
@@ -87,5 +90,83 @@ describe("planStep request shape (plan §4.2)", () => {
   it("an unparseable reply is retryable", async () => {
     const res = await planStep(client([message("end_turn", "not json")], []), req);
     expect(res).toEqual({ ok: false, error: "unparseable reply", retryable: true });
+  });
+
+  it("accepts an act reply with text", async () => {
+    const reply = JSON.stringify({ kind: "act", say: "I'm clicking Refill.", target: 1, expect: "click", option: null, text: null, risk: "none" });
+    const res = await planStep(client([message("end_turn", reply)], []), req);
+    expect(res).toMatchObject({ ok: true, step: { kind: "act", target: 1 } });
+  });
+
+  it("takes eval options (model, effort) as the third or fourth argument; defaults unchanged", async () => {
+    const seen: Array<{ headers: Headers; body: any }> = [];
+    await planStep(client([message("end_turn", good)], seen), req, { model: "claude-sonnet-5-5", effort: "medium" });
+    expect(seen[0].body.model).toBe("claude-sonnet-5-5");
+    expect(seen[0].body.output_config.effort).toBe("medium");
+    const logs: unknown[] = [];
+    await planStep(client([message("end_turn", good)], seen), req, (l) => logs.push(l), { effort: "high" });
+    expect(seen[1].body.model).toBe("claude-opus-5-5");
+    expect(seen[1].body.output_config.effort).toBe("high");
+    expect(logs.length).toBe(1);
+    await planStep(client([message("end_turn", good)], seen), req);
+    expect(seen[2].body.output_config.effort).toBe("low");
+  });
+
+  it("keeps the system prompt byte-stable across calls (cache prefix)", async () => {
+    const seen: Array<{ headers: Headers; body: any }> = [];
+    await planStep(client([message("end_turn", good)], seen), req);
+    await planStep(client([message("end_turn", good)], seen), { ...req, request: "something else", history: ["x"] });
+    expect(seen[0].body.system).toEqual(seen[1].body.system);
+    expect(seen[0].body.system[0].text.length).toBeGreaterThan(3000);
+  });
+});
+
+describe("mock-script drive-mode rules (titles are a contract with the fixture pages)", () => {
+  const rules: MockRule[] = JSON.parse(readFileSync(fileURLToPath(new URL("../../../apps/fixtures/mock-script.json", import.meta.url)), "utf8"));
+  let n = 0;
+  const el = (role: string, text: string, field?: SnapshotElement["field"], label: string | null = null): SnapshotElement => ({
+    n: ++n, role, text, label, nearby: null, color: null, big: false, disabled: false, inModal: false, inViewport: true, region: "main", ...(field ? { field } : {}),
+  });
+  const plan = (title: string, elements: SnapshotElement[], history: string[] = [], request = "find me a water bottle") => {
+    const snapshot: PageSnapshot = { snapshotId: "s", url: "http://localhost/", title, heading: "", pageText: "", elements: elements.map((e, i) => ({ ...e, n: i + 1 })), omitted: { count: 0, regions: [] }, surface: "web" };
+    const res = mockPlan({ ...req, request, history, snapshot }, rules);
+    if (!res.ok) throw new Error("mock failed");
+    return res.step;
+  };
+  const search = (hasValue: boolean) => el("search box", "", { kind: "search", hasValue, valid: true }, "Search products");
+
+  it("Store | Home: types the request words, then submits", () => {
+    expect(plan("Store | Home", [el("button", "Shop by room"), search(false)])).toMatchObject({ kind: "act", expect: "type", text: "water bottle", target: 2 });
+    const typed = ['On "Store | Home": JustAsk did: "I\'m typing water bottle in the search box." (type)'];
+    expect(plan("Store | Home", [el("button", "Shop by room"), search(true)], typed)).toMatchObject({ kind: "act", expect: "submit", target: 2 });
+  });
+
+  it("Store | Results: clicks Add to cart, then done", () => {
+    expect(plan("Store | Results", [el("link", "Water bottle 24 oz"), el("button", "Add to cart")])).toMatchObject({ kind: "act", expect: "click", target: 2 });
+    expect(plan("Store | Results", [el("button", "Add to cart")], ['JustAsk did: "I\'m clicking the Add to cart button." (click)'])).toMatchObject({ kind: "done" });
+  });
+
+  it("Checkout: guides the card number, asks first on Place order", () => {
+    const card = (hasValue: boolean) => el("text box", "", { kind: "text", hasValue, valid: true, sensitive: true }, "Card number");
+    expect(plan("Checkout", [card(false), el("button", "Place order $42.10")])).toMatchObject({ kind: "guide", expect: "type", target: 1 });
+    expect(plan("Checkout", [card(true), el("button", "Place order $42.10")])).toMatchObject({ kind: "act", expect: "click", target: 2, risk: "money" });
+  });
+
+  it("Sign in: guides email and password, never acts on them", () => {
+    const email = (v: boolean) => el("text box", "", { kind: "email", hasValue: v, valid: true }, "Email");
+    const pw = (v: boolean) => el("text box", "", { kind: "password", hasValue: v, valid: true, sensitive: true }, "Password");
+    const btn = el("button", "Sign in");
+    expect(plan("Sign in", [email(false), pw(false), btn])).toMatchObject({ kind: "guide", target: 1 });
+    expect(plan("Sign in", [email(true), pw(false), btn])).toMatchObject({ kind: "guide", target: 2 });
+    expect(plan("Sign in", [email(true), pw(true), btn])).toMatchObject({ kind: "act", expect: "click", target: 3 });
+  });
+
+  it("Composer: waits while loading, then clicks the post box", () => {
+    expect(plan("Composer", [el("button", "Close")])).toMatchObject({ kind: "wait", target: null });
+    expect(plan("Composer", [el("button", "Close"), el("text box", "What's on your mind?", { kind: "contenteditable", hasValue: false, valid: true })])).toMatchObject({ kind: "act", expect: "click", target: 2 });
+  });
+
+  it("existing fixture rules stay guide steps", () => {
+    expect(plan("Maple Pharmacy | Home", [el("button", "Refill a prescription")])).toMatchObject({ kind: "guide" });
   });
 });

@@ -1,0 +1,18 @@
+{
+  "id": "live-usagov",
+  "url": "https://www.usa.gov/",
+  "request": "find out how to renew my passport",
+  "live": true,
+  "expected": {
+    "kind": "guide",
+    "allowKinds": [
+      "guide",
+      "act",
+      "clarify"
+    ],
+    "targetText": [
+      "passport",
+      "search"
+    ]
+  }
+}
