@@ -1,8 +1,13 @@
 import { z } from "zod";
 import type { PageSnapshot } from "./snapshot";
 
-export const StepKind = z.enum(["guide", "clarify", "wait", "done", "blocked"]);
-export const Expect = z.enum(["click", "type", "choose", "hover", "file"]);
+/**
+ * `act`: JustAsk performs the step itself (drive mode, docs/ARCHITECTURE.md §11).
+ * `guide`: she performs it (sensitive fields, failed actions, "Show me instead").
+ */
+export const StepKind = z.enum(["act", "guide", "clarify", "wait", "done", "blocked"]);
+/** `scroll` brings the target into view; `submit` presses Enter in (or submits the form of) the target field. */
+export const Expect = z.enum(["click", "type", "choose", "hover", "file", "scroll", "submit"]);
 export const Risk = z.enum(["none", "money", "personal_info", "account_change", "suspicious"]);
 
 /**
@@ -16,6 +21,8 @@ export const StepResponse = z
     target: z.number().int().nullable(),
     expect: Expect.nullable(),
     option: z.string().nullable(),
+    /** What JustAsk types for an `act` + `type` step. Built from her words; null otherwise. */
+    text: z.string().nullable(),
     risk: Risk,
   })
   .strict();
@@ -54,13 +61,21 @@ export function checkStep(step: StepResponse, snapshot: PageSnapshot): StepCheck
   if (words === 0) return { ok: false, reason: "say is empty" };
   if (words > MAX_SAY_WORDS) return { ok: false, reason: `say has ${words} words; the limit is ${MAX_SAY_WORDS}` };
 
-  if (step.kind === "guide") {
-    if (step.target === null) return { ok: false, reason: "guide needs a target" };
-    if (step.expect === null) return { ok: false, reason: "guide needs expect" };
+  if (step.kind === "guide" || step.kind === "act") {
+    if (step.target === null) return { ok: false, reason: `${step.kind} needs a target` };
+    if (step.expect === null) return { ok: false, reason: `${step.kind} needs expect` };
+  }
+  if (step.kind === "act") {
+    if (step.expect === "type" && !step.text?.trim()) return { ok: false, reason: "act with type needs text" };
+    if (step.expect === "hover" || step.expect === "file") return { ok: false, reason: `act can't ${step.expect}; use guide` };
   }
   if (step.target !== null) {
     const el = snapshot.elements.find((e) => e.n === step.target);
     if (!el) return { ok: false, reason: `target ${step.target} is not in the current list` };
+    // Sensitive fields (passwords, codes, card numbers) are never filled by JustAsk: she types them.
+    if (step.kind === "act" && el.field?.sensitive && (step.expect === "type" || step.expect === "choose" || step.expect === "submit")) {
+      return { ok: false, reason: "that field is sensitive; use guide so she types it herself" };
+    }
     if (step.expect === "choose") {
       const options = el.field?.options;
       if (!options || options.length === 0) return { ok: false, reason: "choose needs a select target" };
@@ -70,7 +85,7 @@ export function checkStep(step: StepResponse, snapshot: PageSnapshot): StepCheck
       }
     }
   }
-  if (step.kind !== "guide" && step.target !== null && step.kind !== "clarify") {
+  if (step.kind !== "guide" && step.kind !== "act" && step.target !== null && step.kind !== "clarify") {
     return { ok: false, reason: `${step.kind} must not have a target` };
   }
   return { ok: true };

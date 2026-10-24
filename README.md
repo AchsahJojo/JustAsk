@@ -2,7 +2,8 @@
 
 A Chrome extension that guides an older adult through any task on any website. She presses one big button and says what she wants. JustAsk reads the page, puts a glowing box around the right control, and says one short line. She clicks; JustAsk never does.
 
-- Plans: `docs/initial-plan.md`, `docs/refined-plan-1.md`
+- **System architecture (start here): `docs/ARCHITECTURE.md`**
+- Plans: `docs/initial-plan.md`, `docs/refined-plan-1.md`, `docs/refined-plan-2.md`
 - **Manual setup, keys and test checklist: `docs/MANUAL_SETUP.md`**
 - Rules for building with Claude Code: `CLAUDE.md`
 

@@ -22,7 +22,7 @@ function frame(frameId: number, texts: string[], isTop = frameId === 0): FrameSc
   };
 }
 
-const guide = (target: number, say = "Click it.", extra: Partial<StepResponse> = {}): StepResponse => ({ kind: "guide", say, target, expect: "click", option: null, risk: "none", ...extra });
+const guide = (target: number, say = "Click it.", extra: Partial<StepResponse> = {}): StepResponse => ({ kind: "guide", say, target, expect: "click", option: null, text: null, risk: "none", ...extra });
 
 function harness(steps: StepResponse[], scans: FrameScan[][] = [[frame(0, ["A", "B"])]]) {
   const plans: PlanRequest[] = [];
@@ -35,6 +35,8 @@ function harness(steps: StepResponse[], scans: FrameScan[][] = [[frame(0, ["A", 
     clear: vi.fn(async () => {}),
     pulse: vi.fn(async () => {}),
     waitForChange: vi.fn(async () => true),
+    act: vi.fn(async () => ({ ok: false })),
+    watch: vi.fn(),
   };
   const planner: Planner = {
     plan: vi.fn(async (req: PlanRequest) => {
@@ -61,7 +63,7 @@ describe("mergeScans", () => {
 
 describe("SessionController", () => {
   it("runs a multi-step loop to done", async () => {
-    const h = harness([guide(1, "Click A."), guide(2, "Click B."), { kind: "done", say: "All done, you did it!", target: null, expect: null, option: null, risk: "none" }]);
+    const h = harness([guide(1, "Click A."), guide(2, "Click B."), { kind: "done", say: "All done, you did it!", target: null, expect: null, option: null, text: null, risk: "none" }]);
     await h.c.start("help me");
     expect(h.c.state.phase).toBe("guiding");
     expect(h.c.state.line).toBe("Click A.");
@@ -101,13 +103,13 @@ describe("SessionController", () => {
   });
 
   it("suspicious ends blocked", async () => {
-    const h = harness([{ kind: "blocked", say: "This page might be a trick.", target: null, expect: null, option: null, risk: "suspicious" }]);
+    const h = harness([{ kind: "blocked", say: "This page might be a trick.", target: null, expect: null, option: null, text: null, risk: "suspicious" }]);
     await h.c.start("x");
     expect(h.c.state.phase).toBe("blocked");
   });
 
   it("clarify then answer goes into history", async () => {
-    const h = harness([{ kind: "clarify", say: "Pickup or mail?", target: null, expect: null, option: null, risk: "none" }, guide(2)]);
+    const h = harness([{ kind: "clarify", say: "Pickup or mail?", target: null, expect: null, option: null, text: null, risk: "none" }, guide(2)]);
     await h.c.start("refill");
     expect(h.c.state.phase).toBe("asking");
     await h.c.input("pick it up");

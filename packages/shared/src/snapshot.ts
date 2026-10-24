@@ -35,6 +35,11 @@ export const FieldInfo = z.object({
   checked: z.boolean().optional(),
   /** Locale hint for date-like fields, e.g. "month, then day, then year". */
   formatHint: z.string().optional(),
+  /**
+   * Passwords, one-time codes, card/CVV, SSN, bank fields. Decided by deterministic page-agent
+   * rules (never by Claude). JustAsk never types into these; she does.
+   */
+  sensitive: z.boolean().optional(),
 });
 export type FieldInfo = z.infer<typeof FieldInfo>;
 
@@ -65,6 +70,9 @@ export const PageSnapshot = z.object({
   pageText: z.string(),
   elements: z.array(SnapshotElement),
   omitted: z.object({ count: z.number().int(), regions: z.array(z.string()) }),
-  surface: z.literal("web"),
+  /** "native": a desktop app window scanned through UIA / AX (apps/desktop). */
+  surface: z.enum(["web", "native"]),
+  /** Native surfaces only: the app and window being guided. `url` is "" there. */
+  app: z.object({ name: z.string(), window: z.string() }).optional(),
 });
 export type PageSnapshot = z.infer<typeof PageSnapshot>;

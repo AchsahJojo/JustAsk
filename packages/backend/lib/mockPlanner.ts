@@ -11,7 +11,8 @@ export interface MockRule {
   unlessFilled?: boolean;
   /** Only when the history contains this text. */
   afterHistory?: string;
-  step: Omit<StepResponse, "target"> & { targetText?: string };
+  /** `text` may be left out of the script; it defaults to null. */
+  step: Omit<StepResponse, "target" | "text"> & { text?: string | null; targetText?: string };
 }
 
 function findTarget(snapshot: PageSnapshot, text: string) {
@@ -36,7 +37,7 @@ export function mockPlan(req: PlanRequest, rules: MockRule[]): PlanResponse {
       if (r.unlessFilled && el.field?.hasValue) continue;
       target = el.n;
     }
-    const step: StepResponse = { ...rest, target };
+    const step: StepResponse = { ...rest, text: rest.text ?? null, target };
     if (checkStep(step, s).ok) return { ok: true, snapshotId: s.snapshotId, step, latencyMs: 1 };
   }
   // Heuristic fallback: the element sharing the most words with the request.
@@ -51,8 +52,8 @@ export function mockPlan(req: PlanRequest, rules: MockRule[]): PlanResponse {
       ok: true,
       snapshotId: s.snapshotId,
       latencyMs: 1,
-      step: { kind: "guide", say: `Click the one that says ${best.text}.`.split(/\s+/).slice(0, 20).join(" "), target: best.n, expect: "click", option: null, risk: "none" },
+      step: { kind: "guide", say: `Click the one that says ${best.text}.`.split(/\s+/).slice(0, 20).join(" "), target: best.n, expect: "click", option: null, text: null, risk: "none" },
     };
   }
-  return { ok: true, snapshotId: s.snapshotId, latencyMs: 1, step: { kind: "blocked", say: "I'm not sure what to do on this page.", target: null, expect: null, option: null, risk: "none" } };
+  return { ok: true, snapshotId: s.snapshotId, latencyMs: 1, step: { kind: "blocked", say: "I'm not sure what to do on this page.", target: null, expect: null, option: null, text: null, risk: "none" } };
 }

@@ -59,7 +59,7 @@ export async function planStep(client: Anthropic, req: PlanRequest, log: (l: Pla
         ok: true,
         snapshotId: req.snapshot.snapshotId,
         latencyMs: Date.now() - started,
-        step: { kind: "blocked", say: "I can't help with this page. Let's ask your helper.", target: null, expect: null, option: null, risk: "none" },
+        step: { kind: "blocked", say: "I can't help with this page. Let's ask your helper.", target: null, expect: null, option: null, text: null, risk: "none" },
       };
     }
     if (res.stop_reason === "max_tokens") continue; // retry once, then blocked
@@ -76,6 +76,6 @@ export async function planStep(client: Anthropic, req: PlanRequest, log: (l: Pla
     ok: true,
     snapshotId: req.snapshot.snapshotId,
     latencyMs: Date.now() - started,
-    step: { kind: "blocked", say: "I'm having trouble. Let's try again in a moment.", target: null, expect: null, option: null, risk: "none" },
+    step: { kind: "blocked", say: "I'm having trouble. Let's try again in a moment.", target: null, expect: null, option: null, text: null, risk: "none" },
   };
 }

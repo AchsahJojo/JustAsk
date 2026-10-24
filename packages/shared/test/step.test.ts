@@ -28,14 +28,14 @@ const snap: PageSnapshot = {
   ],
 };
 
-const base = { kind: "guide", say: "Click Go.", target: 1, expect: "click", option: null, risk: "none" } as const;
+const base = { kind: "guide", say: "Click Go.", target: 1, expect: "click", option: null, text: null, risk: "none" } as const;
 
 describe("StepResponse JSON Schema", () => {
   it("has every field required, nullable via anyOf, additionalProperties false", () => {
     const s = stepJsonSchema() as any;
     expect(s.type).toBe("object");
     expect(s.additionalProperties).toBe(false);
-    expect([...s.required].sort()).toEqual(["expect", "kind", "option", "risk", "say", "target"]);
+    expect([...s.required].sort()).toEqual(["expect", "kind", "option", "risk", "say", "target", "text"]);
     expect(JSON.stringify(s.properties.target)).toContain('"null"');
     expect(JSON.stringify(s)).not.toMatch(/minimum|maximum|minLength|maxLength/);
   });
@@ -66,4 +66,22 @@ describe("checkStep", () => {
     expect(checkStep({ ...base, kind: "done", target: 1, expect: null }, snap).ok).toBe(false);
     expect(checkStep({ ...base, kind: "done", target: null, expect: null }, snap).ok).toBe(true);
   });
+});
+
+describe("checkStep: act (drive mode)", () => {
+  const box = { n: 3, role: "text box", text: "Search", label: null, nearby: null, color: null, big: false, disabled: false, inModal: false, inViewport: true, region: "header" as const, field: { kind: "search" as const, hasValue: false, valid: true } };
+  const pw = { ...box, n: 4, text: "", label: "Password", field: { kind: "password" as const, hasValue: false, valid: true, sensitive: true } };
+  const s2: PageSnapshot = { ...snap, elements: [...snap.elements, box, pw] };
+  const act = { ...base, kind: "act" } as const;
+
+  it("accepts a click and a typed search", () => {
+    expect(checkStep(act, s2).ok).toBe(true);
+    expect(checkStep({ ...act, target: 3, expect: "type", text: "water bottle" }, s2).ok).toBe(true);
+  });
+  it("type needs text", () => expect(checkStep({ ...act, target: 3, expect: "type", text: null }, s2).ok).toBe(false));
+  it("never types into a sensitive field", () => {
+    expect(checkStep({ ...act, target: 4, expect: "type", text: "hunter2" }, s2).ok).toBe(false);
+    expect(checkStep({ ...base, target: 4, expect: "type" }, s2).ok).toBe(true); // guiding her is fine
+  });
+  it("can't hover or pick files", () => expect(checkStep({ ...act, expect: "file" }, s2).ok).toBe(false));
 });

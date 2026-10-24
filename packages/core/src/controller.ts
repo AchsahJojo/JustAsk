@@ -1,9 +1,9 @@
-import { checkStep, type EventType, type FrameScan, type FromContent, type HighlightSpec, type PageSnapshot, type PlanRequest, type PlanResponse, type Recipe, type StepResponse } from "@justask/shared";
+import { checkStep, type ActResult, type ActSpec, type EventType, type FrameScan, type FromContent, type HighlightSpec, type PageSnapshot, type PlanRequest, type PlanResponse, type Recipe, type StepResponse } from "@justask/shared";
 import { mergeScans, type TargetRef } from "./merge";
 import * as L from "./lines";
 import { parseCommand } from "./commands";
 
-export type Phase = "idle" | "planning" | "confirming" | "guiding" | "verifying" | "asking" | "waiting" | "paused" | "done" | "blocked";
+export type Phase = "idle" | "planning" | "confirming" | "acting" | "guiding" | "verifying" | "asking" | "waiting" | "paused" | "done" | "blocked";
 
 export interface SessionView {
   phase: Phase;
@@ -28,6 +28,10 @@ export interface PageBridge {
   pulse(ref: TargetRef): Promise<void>;
   /** Resolves true when the page navigated or the DOM settled after changing. */
   waitForChange(timeoutMs: number): Promise<boolean>;
+  /** Perform one action for her (drive mode). Resolves `{ok: false}` when it could not, so the step falls back to guide. */
+  act(ref: TargetRef, spec: ActSpec): Promise<ActResult>;
+  /** While on, report settled page changes as `ja:page-changed` (used in the waiting phase). */
+  watch(on: boolean): void;
 }
 
 export interface Planner {
@@ -432,6 +436,8 @@ export class SessionController {
       return this.block(step.say || L.SUSPICIOUS_LINE);
     }
     switch (step.kind) {
+      // Wave 0 stub: drive mode (docs/ARCHITECTURE.md §11) lands with the core-loop work. Until then act = guide.
+      case "act":
       case "guide":
         this.deps.events?.log("step_shown", { latencyMs });
         if (step.risk !== "none" && L.RISK_QUESTION[step.risk]) {
