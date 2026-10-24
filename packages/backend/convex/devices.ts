@@ -127,7 +127,11 @@ export const redeemCode = mutation({
       } else {
         // Keep her own profile (name, consent choices, history) and bring the caregiver over.
         await mergeSenior(ctx, theirs._id, own._id);
-        await ctx.db.patch(own._id, { name: own.name || theirs.name, displayName: own.displayName || theirs.displayName });
+        // Her display name wins (it's what JustAsk calls her). A self-made profile has no full name, so take the caregiver's.
+        await ctx.db.patch(own._id, {
+          name: own.origin === "self" ? theirs.name || own.name : own.name || theirs.name,
+          displayName: own.displayName || theirs.displayName,
+        });
       }
     }
     const senior = await ctx.db.get(kept);

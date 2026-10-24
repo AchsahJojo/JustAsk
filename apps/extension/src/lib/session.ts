@@ -45,6 +45,7 @@ export class SessionHost {
   }
 
   async init() {
+    await backend.ensureDevice();
     this.settings = await getSettings();
     this.speech.muted = false;
     browser.storage.onChanged.addListener(async (changes) => {
@@ -87,6 +88,10 @@ export class SessionHost {
         await browser.tabs.update(this.sessionTabId, { url: recipe.startUrl });
         await loaded;
       }
+    }
+    if (!this.settings?.deviceToken) {
+      await backend.ensureDevice();
+      this.settings = await getSettings();
     }
     this.sessionId = await backend.startSession(request, opts.taskId ?? null);
     if (opts.taskId) void backend.setTaskStatus(opts.taskId, "active");

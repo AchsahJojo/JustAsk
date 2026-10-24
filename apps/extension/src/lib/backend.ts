@@ -1,6 +1,13 @@
 import { ConvexHttpClient } from "convex/browser";
 import type { EventType, Recipe } from "@justask/shared";
-import { getSettings } from "./config";
+import { getSettings, saveSettings, type Settings } from "./config";
+
+export interface Helper {
+  id: string;
+  name: string;
+}
+
+export type RedeemResult = { ok: true; token: string; displayName: string } | { ok: false; error: string };
 
 export interface PendingTask {
   id: string;
@@ -25,9 +32,58 @@ export class Backend {
     return { client: this.client, token: s.deviceToken };
   }
 
-  async redeem(convexUrl: string, code: string): Promise<{ token: string; displayName: string }> {
+  private registering: Promise<void> | null = null;
+
+  /**
+   * Make sure this computer has its own account. JustAsk works without a caregiver, so a fresh
+   * install signs itself up silently (no password, no email). Safe to call often.
+   */
+  async ensureDevice(): Promise<void> {
+    const s = await getSettings();
+    if (!s.convexUrl || s.deviceToken) return;
+    this.registering ??= (async () => {
+      try {
+        const client = new ConvexHttpClient(s.convexUrl);
+        const { token } = await client.mutation("devices:registerStandalone" as never, { displayName: s.displayName } as never) as { token: string };
+        const now = await getSettings();
+        if (!now.deviceToken) await saveSettings({ deviceToken: token });
+      } catch {
+        /* offline or rate limited: try again next time */
+      } finally {
+        this.registering = null;
+      }
+    })();
+    return this.registering;
+  }
+
+  /** Type a caregiver's code. With an existing account, the caregiver joins it; nothing is lost. */
+  async redeem(convexUrl: string, code: string): Promise<RedeemResult> {
+    const s = await getSettings();
     const client = new ConvexHttpClient(convexUrl);
-    return client.mutation("devices:redeemCode" as never, { code } as never);
+    return client.mutation("devices:redeemCode" as never, { code, ...(s.deviceToken ? { token: s.deviceToken } : {}) } as never);
+  }
+
+  async me(): Promise<{ displayName: string; consent: Settings["consent"]; helpers: Helper[] } | null> {
+    const c = await this.c();
+    if (!c) return null;
+    try {
+      return await c.client.query("devices:me" as never, { token: c.token } as never);
+    } catch {
+      return null;
+    }
+  }
+
+  async setDisplayName(displayName: string) {
+    const c = await this.c();
+    if (!c) return;
+    await c.client.mutation("devices:setDisplayName" as never, { token: c.token, displayName } as never).catch(() => {});
+  }
+
+  /** Stop working with one helper, or all of them. This computer keeps its own account. */
+  async leaveHelpers(caregiverId?: string) {
+    const c = await this.c();
+    if (!c) return;
+    await c.client.mutation("devices:leaveHelpers" as never, { token: c.token, ...(caregiverId ? { caregiverId } : {}) } as never);
   }
 
   async pendingTasks(): Promise<PendingTask[]> {
