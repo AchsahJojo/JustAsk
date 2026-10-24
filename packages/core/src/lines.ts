@@ -12,6 +12,7 @@ export const SUSPICIOUS_LINE = "This page might be a trick. Let's stop and check
 export const CANT_SEE_PAGE = "I can't see this kind of page. Let's go back to the last page.";
 export const NEW_TAB_LINE = "That opened a new tab. I'll keep helping you there.";
 export const STUCK_LINE = "That's okay. Let me look again.";
+export const TYPING_NOT_DETECTED = "I can't see anything in that box yet. Please type your answer, then tell me when you're done.";
 export const STOPPED_LINE = "Okay, I stopped. Press the big button any time.";
 export const NO_CHANGE_NOTE = "the page did not change after that";
 
@@ -47,9 +48,9 @@ export function typeConfirm(text: string) {
 }
 
 /** The completion line after JustAsk acted at least once. */
-export function doneActed(actions: number, clicks = 0) {
+export function doneActed(actions: number, guidedSteps = 0) {
   const steps = `${actions} ${actions === 1 ? "step" : "steps"}`;
-  return clicks > 0 ? `All done. I did ${steps} for you, and you did ${clicks}.` : `All done. I did ${steps} for you.`;
+  return guidedSteps > 0 ? `All done. I did ${steps} for you, and you did ${guidedSteps} ${guidedSteps === 1 ? "step" : "steps"}.` : `All done. I did ${steps} for you.`;
 }
 
 /**

@@ -80,7 +80,9 @@ export function checkStep(step: StepResponse, snapshot: PageSnapshot): StepCheck
       const options = el.field?.options;
       if (!options || options.length === 0) return { ok: false, reason: "choose needs a select target" };
       if (step.option === null) return { ok: false, reason: "choose needs an option" };
-      if (!options.includes(step.option) && (el.field?.optionCount ?? 0) <= options.length) {
+      // The snapshot may include only the first part of a long list. We only let the
+      // planner choose an option it actually saw; otherwise it could invent a label.
+      if (!options.includes(step.option)) {
         return { ok: false, reason: `option "${step.option}" is not one of the target's options` };
       }
     }

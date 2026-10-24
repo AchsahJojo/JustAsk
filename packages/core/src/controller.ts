@@ -19,8 +19,10 @@ export interface SessionView {
   note: string;
   pauseReason: "other-tab" | "tab-closed" | "cant-see" | "no-access" | null;
   taskId: string | null;
-  /** Steps she did herself (guide steps). */
+  /** Click events she completed herself (guide steps). */
   clicks: number;
+  /** All guide steps she completed, including typing, choosing, hovering and file selection. */
+  guidedSteps: number;
   /** Steps JustAsk did for her (act steps that succeeded). */
   actions: number;
 }
@@ -101,6 +103,7 @@ const INITIAL: SessionView = {
   pauseReason: null,
   taskId: null,
   clicks: 0,
+  guidedSteps: 0,
   actions: 0,
 };
 
@@ -213,7 +216,7 @@ export class SessionController {
 
   /** Restore after the panel or service worker restarts (state came from storage.session). */
   restore(view: SessionView, history: string[], recipe: Recipe | null) {
-    this.view = { ...INITIAL, ...view, note: "" };
+    this.view = { ...INITIAL, ...view, guidedSteps: view.guidedSteps ?? view.clicks ?? 0, note: "" };
     this.history = history;
     this.recipe = recipe;
     for (const fn of this.listeners) fn(this.view);
@@ -316,9 +319,29 @@ export class SessionController {
     await this.showGuide(step);
   }
 
-  doneTyping() {
-    if (this.view.phase !== "guiding") return;
-    void this.onStepDone("typed");
+  async doneTyping() {
+    return this.verifyTypedAndComplete();
+  }
+
+  /** Advance a guided typing step only when the scanner's local hasValue boolean is true. */
+  private async verifyTypedAndComplete() {
+    if (this.view.phase !== "guiding" || this.step?.expect !== "type" || !this.target) return;
+    const gen = this.gen;
+    const target = this.target;
+    let scans: FrameScan[] = [];
+    try {
+      scans = await this.deps.bridge.scan([this.view.request, this.view.line, ...(this.recipe?.steps ?? [])]);
+    } catch {
+      // Keep the current guide step active when its state cannot be checked.
+    }
+    if (gen !== this.gen || this.view.phase !== "guiding" || this.target !== target) return;
+    const field = scans.find((s) => s.frameId === target.frameId)?.snapshot.elements.find((e) => e.n === target.localId)?.field;
+    if (!field?.hasValue) {
+      this.say(L.TYPING_NOT_DETECTED);
+      this.set({ line: L.TYPING_NOT_DETECTED });
+      return;
+    }
+    await this.onStepDone("typed");
   }
 
   // ───────────── tab / environment events (from TabWatcher) ─────────────
@@ -383,7 +406,7 @@ export class SessionController {
     }
     switch (e.type) {
       case "ja:step-done":
-        return this.onStepDone(e.how);
+        return e.how === "typed" ? this.verifyTypedAndComplete() : this.onStepDone(e.how);
       case "ja:wrong":
         return this.onWrong(e.what);
       case "ja:lost":
@@ -412,13 +435,14 @@ export class SessionController {
     if (this.view.phase !== "guiding" || !this.step) return;
     const gen = this.bump();
     const did = this.step.say;
-    const clicks = this.view.clicks + 1;
+    const clicks = this.view.clicks + (how === "click" ? 1 : 0);
+    const guidedSteps = this.view.guidedSteps + 1;
     this.history.push(this.onPage(`She did: ${JSON.stringify(did)} (${how})`));
     const p = L.praise(this.history.length);
     this.say(p);
     await this.deps.bridge.clear();
     this.target = null;
-    this.set({ phase: "verifying", line: `${p} ${L.LOOKING_NEXT}`, clicks, note: "" });
+    this.set({ phase: "verifying", line: `${p} ${L.LOOKING_NEXT}`, clicks, guidedSteps, note: "" });
     // Clicks usually change the page; typing and choosing usually don't, so don't make her wait.
     const changed = await this.deps.bridge.waitForChange(how === "click" ? this.t.changeTimeoutMs : this.t.quietChangeMs);
     if (gen !== this.gen) return;
@@ -482,7 +506,10 @@ export class SessionController {
       this.deps.events?.log("blocked");
       return this.block(L.TROUBLE_LINE, false);
     }
-    if (res.snapshotId !== snapshot.snapshotId) return; // stale
+    if (res.snapshotId !== snapshot.snapshotId) {
+      // A mismatched reply cannot safely be applied to the current numbered targets.
+      return this.block(L.TROUBLE_LINE);
+    }
     const check = checkStep(res.step, snapshot);
     if (!check.ok) {
       if (this.replans++ < 1) return this.requestStep(gen, check.reason);
@@ -517,7 +544,7 @@ export class SessionController {
     this.step = step;
     if (step.risk === "suspicious") {
       this.deps.events?.log("blocked");
-      return this.block(step.say || L.SUSPICIOUS_LINE);
+      return this.block(L.SUSPICIOUS_LINE);
     }
     switch (step.kind) {
       case "act":
@@ -557,7 +584,7 @@ export class SessionController {
       case "done": {
         this.deps.events?.log("done");
         await this.deps.bridge.clear();
-        const line = this.view.actions > 0 ? L.doneActed(this.view.actions, this.view.clicks) : step.say || L.DONE_LINE;
+        const line = this.view.actions > 0 ? L.doneActed(this.view.actions, this.view.guidedSteps) : step.say || L.DONE_LINE;
         this.say(line);
         this.set({ phase: "done", line, expect: null, risk: "none" });
         return;

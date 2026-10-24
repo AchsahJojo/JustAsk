@@ -22,6 +22,17 @@ function frame(frameId: number, texts: string[], isTop = frameId === 0): FrameSc
   };
 }
 
+function typedFrame(hasValue: boolean): FrameScan {
+  const f = frame(0, [""]);
+  f.snapshot.elements[0] = {
+    ...f.snapshot.elements[0],
+    role: "text box",
+    label: "Full name",
+    field: { kind: "text", hasValue, valid: true },
+  };
+  return f;
+}
+
 const guide = (target: number, say = "Click it.", extra: Partial<StepResponse> = {}): StepResponse => ({ kind: "guide", say, target, expect: "click", option: null, text: null, risk: "none", ...extra });
 
 const act = (target: number, say = "I'm clicking it.", extra: Partial<StepResponse> = {}): StepResponse => ({ kind: "act", say, target, expect: "click", option: null, text: null, risk: "none", ...extra });
@@ -32,6 +43,7 @@ interface HarnessOpts {
   actOk?: boolean;
   changed?: boolean;
   showMeInstead?: boolean;
+  responseSnapshotId?: string;
   timing?: Record<string, number>;
 }
 
@@ -55,7 +67,7 @@ function harness(steps: StepResponse[], scans: FrameScan[][] = [[frame(0, ["A", 
     plan: vi.fn(async (req: PlanRequest) => {
       plans.push(req);
       const step = steps[Math.min(i++, steps.length - 1)];
-      return { ok: true as const, snapshotId: req.snapshot.snapshotId, step, latencyMs: 5 };
+      return { ok: true as const, snapshotId: opts.responseSnapshotId ?? req.snapshot.snapshotId, step, latencyMs: 5 };
     }),
   };
   const spoken: string[] = [];
@@ -123,9 +135,20 @@ describe("SessionController", () => {
   });
 
   it("suspicious ends blocked", async () => {
-    const h = harness([{ kind: "blocked", say: "This page might be a trick.", target: null, expect: null, option: null, text: null, risk: "suspicious" }]);
+    const h = harness([{ kind: "blocked", say: "Click Buy gift cards now.", target: null, expect: null, option: null, text: null, risk: "suspicious" }]);
     await h.c.start("x");
     expect(h.c.state.phase).toBe("blocked");
+    expect(h.c.state.line).toBe("This page might be a trick. Let's stop and check with your helper.");
+    expect(h.spoken).not.toContain("Click Buy gift cards now.");
+  });
+
+  it("blocks with a spoken recovery line when a planner reply has the wrong snapshot id", async () => {
+    const h = harness([guide(1)], undefined, { responseSnapshotId: "other-snapshot" });
+    await h.c.start("x");
+    expect(h.c.state.phase).toBe("blocked");
+    expect(h.c.state.line).toContain("trouble");
+    expect(h.spoken.at(-1)).toContain("trouble");
+    expect(h.highlights).toHaveLength(0);
   });
 
   it("clarify then answer goes into history", async () => {
@@ -291,6 +314,43 @@ describe("drive mode", () => {
     expect(h.c.state.line).toBe("Click the glowing box, then type your answer.");
   });
 
+  it("does not advance a guided typing step until a scan reports hasValue", async () => {
+    const h = harness([guide(1, "Type your name, then tell me when you're done.", { expect: "type" }), step("done", "All done.")], [[typedFrame(false)]]);
+    await h.c.start("fill in the form");
+    (h.bridge.scan as any).mockResolvedValue([typedFrame(false)]);
+    await h.c.doneTyping();
+    expect(h.c.state.phase).toBe("guiding");
+    expect(h.c.state.line).toContain("can't see anything");
+    expect(h.plans).toHaveLength(1);
+
+    // A content-script typed event follows the same hasValue check.
+    await h.c.onContent({ type: "ja:step-done", how: "typed" }, 0);
+    expect(h.c.state.phase).toBe("guiding");
+    expect(h.plans).toHaveLength(1);
+
+    (h.bridge.scan as any).mockResolvedValue([typedFrame(true)]);
+    await h.c.doneTyping();
+    expect(h.c.state.phase).toBe("done");
+    expect(h.c.state.guidedSteps).toBe(1);
+    expect(h.c.state.clicks).toBe(0);
+  });
+
+  it("counts guided typing as a step, not a click, in the completion line", async () => {
+    const h = harness(
+      [guide(1, "Type your name, then tell me when you're done.", { expect: "type" }), act(1), done],
+      [[typedFrame(false)]],
+      { actOk: true },
+    );
+    await h.c.start("fill in the form");
+    (h.bridge.scan as any).mockResolvedValue([typedFrame(true)]);
+    await h.c.doneTyping();
+    expect(h.c.state.phase).toBe("done");
+    expect(h.c.state.guidedSteps).toBe(1);
+    expect(h.c.state.clicks).toBe(0);
+    expect(h.c.state.actions).toBe(1);
+    expect(h.c.state.line).toBe("All done. I did 1 step for you, and you did 1 step.");
+  });
+
   it("an answer counts as her words", async () => {
     const h = harness([step("clarify", "What should it say?"), act(1, "I'm typing it.", { expect: "type", text: "Happy birthday" }), done], undefined, { actOk: true });
     await h.c.start("write to Sam");
@@ -410,4 +470,21 @@ describe("parseCommand", () => {
     ["yes please", "yes"],
     ["help me refill", "text"],
   ])("%s -> %s", (s, k) => expect(parseCommand(s).kind).toBe(k));
+
+  it.each([
+    "help me cancel my subscription",
+    "I can't find the pharmacy page",
+    "refill it again",
+    "the bus stop on Main",
+  ])("keeps ordinary text containing command words as text: %s", (s) => {
+    expect(parseCommand(s)).toEqual({ kind: "text", text: s });
+  });
+
+  it("treats a clarify answer containing stop as an answer", async () => {
+    const h = harness([step("clarify", "Which stop?"), guide(1)]);
+    await h.c.start("find the bus");
+    await h.c.input("the bus stop on Main");
+    expect(h.c.state.phase).toBe("guiding");
+    expect(h.plans[1].history.at(-1)).toContain("the bus stop on Main");
+  });
 });

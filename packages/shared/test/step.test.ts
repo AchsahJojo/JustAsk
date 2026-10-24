@@ -58,6 +58,17 @@ describe("checkStep", () => {
     expect(checkStep({ ...base, target: 2, expect: "choose", option: null }, snap).ok).toBe(false);
     expect(checkStep({ ...base, target: 1, expect: "choose", option: "Go" }, snap).ok).toBe(false);
   });
+  it("does not accept a made-up option when a long list was truncated", () => {
+    const truncated: PageSnapshot = {
+      ...snap,
+      elements: snap.elements.map((el) => el.n !== 2 ? el : {
+        ...el,
+        field: { ...el.field!, options: ["Choose…", "Arizona", "Texas"], optionCount: 55 },
+      }),
+    };
+    expect(checkStep({ ...base, target: 2, expect: "choose", option: "Arizona" }, truncated).ok).toBe(true);
+    expect(checkStep({ ...base, target: 2, expect: "choose", option: "Nevada" }, truncated)).toMatchObject({ ok: false, reason: expect.stringContaining("not one of") });
+  });
   it("say is 20 words or fewer", () => {
     expect(checkStep({ ...base, say: Array(21).fill("word").join(" ") }, snap).ok).toBe(false);
     expect(checkStep({ ...base, say: Array(20).fill("word").join(" ") }, snap).ok).toBe(true);
