@@ -1,6 +1,6 @@
 # JustAsk — rules for building with Claude Code
 
-Start with `docs/ARCHITECTURE.md`. The current build plan is `docs/refined-plan-2.md`.
+Start with `docs/ARCHITECTURE.md`. The current build plan is `docs/refined-plan-2.md`. Where things stand (built, missing, open questions): `docs/STATUS.md`.
 
 - **Drive mode, with safety limits.** JustAsk clicks, types, chooses, scrolls and submits for her: one numbered action per step, announced and highlighted first, and Stop always works.
   - It **never types into, stores or reads `sensitive` fields** (passwords, one-time codes, card numbers or CVV, SSN, bank fields). For those it guides her instead.
