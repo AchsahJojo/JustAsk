@@ -1,6 +1,6 @@
 # JustAsk
 
-A Chrome extension that guides an older adult through any task on any website. She presses one big button and says what she wants. JustAsk reads the page, puts a glowing box around the right control, and says one short line. She clicks; JustAsk never does.
+A Chrome extension that guides older adults through any task on any website. They press one big button and say what they want. JustAsk reads the page, puts a glowing box around the right control, and says one short line. They click; JustAsk never does.
 
 - **System architecture (start here): `docs/ARCHITECTURE.md`**
 - Plans: `docs/initial-plan.md`, `docs/refined-plan-1.md`, `docs/refined-plan-2.md`
