@@ -15,16 +15,11 @@ use std::time::{Duration, Instant};
 
 use serde_json::{json, Value};
 use tauri::Emitter;
-use uiautomation::patterns::{
-    UIExpandCollapsePattern, UIInvokePattern, UISelectionItemPattern, UIValuePattern,
-};
-use uiautomation::types::{ControlType, Handle, ScrollAmount};
+use uiautomation::patterns::UIValuePattern;
+use uiautomation::types::{ControlType, Handle};
 use uiautomation::{UIAutomation, UIElement, UITreeWalker};
-use windows::core::{w, HSTRING, PCWSTR, PWSTR};
-use windows::Win32::Foundation::{CloseHandle, ERROR_SUCCESS};
-use windows::Win32::System::Registry::{
-    RegGetValueW, HKEY, HKEY_CLASSES_ROOT, HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE, RRF_RT_REG_SZ,
-};
+use windows::core::{w, PWSTR};
+use windows::Win32::Foundation::CloseHandle;
 use windows::Win32::Foundation::{COLORREF, HWND, LPARAM, LRESULT, WPARAM};
 use windows::Win32::Graphics::Gdi::{
     CreatePen, DeleteObject, GetDC, GetStockObject, Rectangle, ReleaseDC, SelectObject, HGDIOBJ,
@@ -86,10 +81,22 @@ fn guide_rect() -> &'static Mutex<Option<(i32, i32, i32, i32)>> {
     GUIDE_RECT.get_or_init(|| Mutex::new(None))
 }
 
-fn emit_native(event: &'static str, payload: Value) {
+/// The payload for a native event: `fields` plus `"type": event`, the same shape as the
+/// extension's content-script messages (`FromContent` in `@justask/shared`). The desktop
+/// bridge drops any event payload without `type`.
+fn event_payload(event: &str, fields: Value) -> Value {
+    let mut object = match fields {
+        Value::Object(map) => map,
+        _ => serde_json::Map::new(),
+    };
+    object.insert("type".into(), Value::String(event.into()));
+    Value::Object(object)
+}
+
+fn emit_native(event: &'static str, fields: Value) {
     if let Ok(handle) = app_handle().lock() {
         if let Some(app) = handle.as_ref() {
-            let _ = app.emit(event, payload);
+            let _ = app.emit(event, event_payload(event, fields));
         }
     }
 }
@@ -607,7 +614,7 @@ fn find_scanned_target(local_id: u32) -> Result<UIElement, String> {
             .lock()
             .map_err(|_| "Native scan state is unavailable")?;
         if last.hwnd != hwnd {
-            return Err("The foreground window changed; scan again before acting".into());
+            return Err("The foreground window changed; scan again before highlighting".into());
         }
         last.targets
             .get(&local_id)
@@ -621,12 +628,11 @@ fn find_scanned_target(local_id: u32) -> Result<UIElement, String> {
 /// Find the element (UI Automation, on a worker thread), then draw the ring on the main
 /// thread. A window belongs to the thread that creates it: only that thread can destroy it
 /// (`clear`, also on the main thread), and it dies when that thread exits.
+/// Only draws: it never focuses, clicks or changes the element. She does every action herself.
 pub fn highlight(app: tauri::AppHandle, local_id: u32, _label: String) -> bool {
     let Ok(element) = find_scanned_target(local_id) else {
         return false;
     };
-    // Focus helps her next keystroke land there; the ring doesn't need it, so failure is fine.
-    let _ = element.set_focus();
     let Ok(rect) = element.get_bounding_rectangle() else {
         return false;
     };
@@ -733,96 +739,6 @@ fn draw_overlay(left: i32, top: i32, right: i32, bottom: i32) -> bool {
     }
 }
 
-pub fn act(spec: Value) -> Value {
-    if let Ok(mut target) = guide_rect().lock() {
-        *target = None;
-    }
-    let result = (|| -> Result<(), String> {
-        let local_id = spec
-            .get("localId")
-            .and_then(Value::as_u64)
-            .ok_or("Missing localId")? as u32;
-        let expect = spec
-            .get("expect")
-            .and_then(Value::as_str)
-            .ok_or("Missing expect")?;
-        let element = find_scanned_target(local_id)?;
-        let label = label_for(&element);
-        let sensitive = is_sensitive(&element, label.as_deref());
-        if sensitive && matches!(expect, "type" | "choose" | "submit") {
-            return Err("Refusing to act on a secure field".into());
-        }
-        match expect {
-            "click" | "submit" => element
-                .get_pattern::<UIInvokePattern>()
-                .and_then(|pattern| pattern.invoke())
-                .map_err(|e| format!("No safe invoke action is available: {e}"))?,
-            "type" => {
-                let text = spec
-                    .get("text")
-                    .and_then(Value::as_str)
-                    .ok_or("Missing text")?;
-                element
-                    .get_pattern::<UIValuePattern>()
-                    .and_then(|pattern| pattern.set_value(text))
-                    .map_err(|e| format!("No safe value action is available: {e}"))?;
-            }
-            "choose" => {
-                let option = spec
-                    .get("option")
-                    .and_then(Value::as_str)
-                    .ok_or("Missing option")?;
-                let (automation, _, _) = current_automation()?;
-                let walker = automation.create_tree_walker().map_err(|e| e.to_string())?;
-                if let Ok(expand) = element.get_pattern::<UIExpandCollapsePattern>() {
-                    let _ = expand.expand();
-                    thread::sleep(Duration::from_millis(100));
-                }
-                let mut pending = walker.get_children(&element).unwrap_or_default();
-                let mut found = None;
-                let mut seen = 0;
-                while let Some(candidate) = pending.pop() {
-                    seen += 1;
-                    if seen > 300 {
-                        break;
-                    }
-                    if candidate
-                        .get_name()
-                        .ok()
-                        .map(|name| name.eq_ignore_ascii_case(option))
-                        .unwrap_or(false)
-                    {
-                        found = Some(candidate);
-                        break;
-                    }
-                    pending.extend(walker.get_children(&candidate).unwrap_or_default());
-                }
-                let choice = found.ok_or_else(|| {
-                    "The requested option is not present in the current UI Automation tree"
-                        .to_string()
-                })?;
-                choice
-                    .get_pattern::<UISelectionItemPattern>()
-                    .and_then(|pattern| pattern.select())
-                    .map_err(|e| format!("No safe selection action is available: {e}"))?;
-            }
-            "scroll" => {
-                // UIA's ScrollPattern is exposed on scroll containers rather than every child;
-                // move the target into view through its pattern when available.
-                element
-                    .get_pattern::<uiautomation::patterns::UIScrollPattern>()
-                    .and_then(|pattern| {
-                        pattern.scroll(ScrollAmount::NoAmount, ScrollAmount::SmallIncrement)
-                    })
-                    .map_err(|e| format!("No safe scroll action is available: {e}"))?;
-            }
-            _ => return Err("Unsupported native action".into()),
-        }
-        Ok(())
-    })();
-    json!({ "ok": result.is_ok() })
-}
-
 pub fn clear() {
     if let Ok(mut target) = guide_rect().lock() {
         *target = None;
@@ -888,130 +804,38 @@ pub fn wait_for_change(timeout_ms: u64) -> bool {
     false
 }
 
-/// Read a string value from the registry. `value` None reads the key's default value.
-fn reg_string(root: HKEY, subkey: &str, value: Option<&str>) -> Option<String> {
-    let subkey = HSTRING::from(subkey);
-    let value = value.map(HSTRING::from);
-    let value_ptr = value
-        .as_ref()
-        .map(|v| PCWSTR(v.as_ptr()))
-        .unwrap_or(PCWSTR::null());
-    unsafe {
-        let mut size = 0u32;
-        let first = RegGetValueW(
-            root,
-            &subkey,
-            value_ptr,
-            RRF_RT_REG_SZ,
-            None,
-            None,
-            Some(&mut size),
-        );
-        if first != ERROR_SUCCESS || size < 2 {
-            return None;
-        }
-        let mut buffer = vec![0u16; (size as usize).div_ceil(2)];
-        let second = RegGetValueW(
-            root,
-            &subkey,
-            value_ptr,
-            RRF_RT_REG_SZ,
-            None,
-            Some(buffer.as_mut_ptr().cast()),
-            Some(&mut size),
-        );
-        if second != ERROR_SUCCESS {
-            return None;
-        }
-        let len = buffer.iter().position(|&c| c == 0).unwrap_or(buffer.len());
-        Some(String::from_utf16_lossy(&buffer[..len]))
-    }
-}
-
-/// The program path from a shell open command, like `"C:\...\chrome.exe" --single-argument %1`.
-/// Takes the quoted part, or everything up to the first space. Must end in `.exe`.
-fn exe_from_command(command: &str) -> Option<String> {
-    let command = command.trim();
-    let path = if let Some(rest) = command.strip_prefix('"') {
-        &rest[..rest.find('"')?]
-    } else {
-        command.split_whitespace().next()?
-    };
-    let path = path.trim();
-    (!path.is_empty() && path.to_ascii_lowercase().ends_with(".exe")).then(|| path.to_string())
-}
-
-/// Start `exe` with no arguments and don't wait for it.
-fn launch_exe(exe: &str) -> bool {
-    let path = std::path::Path::new(exe);
-    if !path.is_file() || !exe.to_ascii_lowercase().ends_with(".exe") {
-        return false;
-    }
-    std::process::Command::new(path).spawn().is_ok()
-}
-
-fn default_browser_exe() -> Option<String> {
-    let prog_id = reg_string(
-        HKEY_CURRENT_USER,
-        r"Software\Microsoft\Windows\Shell\Associations\UrlAssociations\https\UserChoice",
-        Some("ProgId"),
-    )?;
-    let prog_id = prog_id.trim();
-    if prog_id.is_empty() || prog_id.contains('\\') {
-        return None;
-    }
-    let command = reg_string(
-        HKEY_CLASSES_ROOT,
-        &format!(r"{prog_id}\shell\open\command"),
-        None,
-    )?;
-    exe_from_command(&command)
-}
-
-/// Open her default browser at its own start page. No URL is ever passed: the browser is
-/// started with no arguments. Falls back to Microsoft Edge.
-pub fn open_browser() -> bool {
-    if default_browser_exe().is_some_and(|exe| launch_exe(&exe)) {
-        return true;
-    }
-    reg_string(
-        HKEY_LOCAL_MACHINE,
-        r"SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\msedge.exe",
-        None,
-    )
-    .and_then(|value| exe_from_command(&value))
-    .is_some_and(|exe| launch_exe(&exe))
-}
-
 #[cfg(test)]
 mod tests {
-    use super::{exe_from_command, field_kind, is_candidate, looks_sensitive, role};
+    use super::{event_payload, field_kind, is_candidate, looks_sensitive, role};
+    use serde_json::json;
     use uiautomation::types::ControlType;
 
     #[test]
-    fn browser_command_parser_takes_only_the_program_path() {
+    fn event_payload_adds_type_and_keeps_fields() {
         assert_eq!(
-            exe_from_command(
-                r#""C:\Program Files\Google\Chrome\Application\chrome.exe" --single-argument %1"#
-            ),
-            Some(r"C:\Program Files\Google\Chrome\Application\chrome.exe".into())
+            event_payload("ja:step-done", json!({ "how": "click" })),
+            json!({ "type": "ja:step-done", "how": "click" })
         );
         assert_eq!(
-            exe_from_command(r#""C:\Program Files\Mozilla Firefox\firefox.exe""#),
-            Some(r"C:\Program Files\Mozilla Firefox\firefox.exe".into())
+            event_payload("ja:page-changed", json!({ "reason": "mutation" })),
+            json!({ "type": "ja:page-changed", "reason": "mutation" })
         );
+    }
+
+    #[test]
+    fn event_payload_works_with_no_fields() {
         assert_eq!(
-            exe_from_command(r"C:\Browsers\browser.exe"),
-            Some(r"C:\Browsers\browser.exe".into())
+            event_payload("ja:lost", json!({})),
+            json!({ "type": "ja:lost" })
         );
+    }
+
+    #[test]
+    fn event_payload_type_wins_over_a_stray_type_field() {
         assert_eq!(
-            exe_from_command(r#"C:\Browsers\browser.exe -osint -url "%1""#),
-            Some(r"C:\Browsers\browser.exe".into())
+            event_payload("ja:wrong", json!({ "type": "other", "what": "click" })),
+            json!({ "type": "ja:wrong", "what": "click" })
         );
-        assert_eq!(exe_from_command(r#""C:\Tools\open.cmd" %1"#), None);
-        assert_eq!(exe_from_command(r#""C:\unterminated.exe %1"#), None);
-        assert_eq!(exe_from_command("   "), None);
-        assert_eq!(exe_from_command(r#""" %1"#), None);
     }
 
     #[test]

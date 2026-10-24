@@ -112,14 +112,6 @@ export class DesktopBackend {
     await this.client?.mutation(m("devices:heartbeat"), { token }).catch(() => {});
   }
 
-  async getPrefs(token: string): Promise<{ showMeInstead?: boolean } | null> {
-    try {
-      return (await this.client?.query(q("prefs:get"), { token })) ?? null;
-    } catch {
-      return null;
-    }
-  }
-
   // ───── live queries ─────
 
   onTasks(token: string, cb: (tasks: PendingTask[]) => void): () => void {

@@ -111,8 +111,8 @@ export class Backend {
     return { displayName: typeof r.displayName === "string" ? r.displayName : "" };
   }
 
-  /** Her name, consent, the helpers who can send her tasks, and who last set Show me instead. Null when unavailable. */
-  async me(): Promise<{ displayName: string; consent: { notifyOnComplete: boolean; notifyOnStuck: boolean }; helpers: Helper[]; showMeSetBy: "self" | "caregiver" | null } | null> {
+  /** Her name, consent and the helpers who can send her tasks. Null when unavailable. */
+  async me(): Promise<{ displayName: string; consent: { notifyOnComplete: boolean; notifyOnStuck: boolean }; helpers: Helper[] } | null> {
     const c = await this.c();
     if (!c) return null;
     try {

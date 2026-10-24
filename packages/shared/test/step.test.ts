@@ -28,20 +28,28 @@ const snap: PageSnapshot = {
   ],
 };
 
-const base = { kind: "guide", say: "Click Go.", target: 1, expect: "click", option: null, text: null, risk: "none" } as const;
+const base = { kind: "guide", say: "Click Go.", target: 1, expect: "click", option: null, risk: "none" } as const;
 
 describe("StepResponse JSON Schema", () => {
   it("has every field required, nullable via anyOf, additionalProperties false", () => {
     const s = stepJsonSchema() as any;
     expect(s.type).toBe("object");
     expect(s.additionalProperties).toBe(false);
-    expect([...s.required].sort()).toEqual(["expect", "kind", "option", "risk", "say", "target", "text"]);
+    expect([...s.required].sort()).toEqual(["expect", "kind", "option", "risk", "say", "target"]);
     expect(JSON.stringify(s.properties.target)).toContain('"null"');
     expect(JSON.stringify(s)).not.toMatch(/minimum|maximum|minLength|maxLength/);
   });
   it("parses a valid response and rejects extra keys", () => {
     expect(StepResponse.parse(base)).toEqual(base);
     expect(() => StepResponse.parse({ ...base, extra: 1 })).toThrow();
+  });
+  it("has no text field and rejects one", () => {
+    expect((stepJsonSchema() as any).properties.text).toBeUndefined();
+    expect(() => StepResponse.parse({ ...base, text: null })).toThrow();
+  });
+  it("is guide-only: kind act is not in the enum and is rejected", () => {
+    expect(JSON.stringify((stepJsonSchema() as any).properties.kind)).not.toContain('"act"');
+    expect(() => StepResponse.parse({ ...base, kind: "act" })).toThrow();
   });
 });
 
@@ -79,27 +87,29 @@ describe("checkStep", () => {
   });
 });
 
-describe("checkStep: act (drive mode)", () => {
+describe("checkStep: guide on boxes", () => {
   const box = { n: 3, role: "text box", text: "Search", label: null, nearby: null, color: null, big: false, disabled: false, inModal: false, inViewport: true, region: "header" as const, field: { kind: "search" as const, hasValue: false, valid: true } };
   const pw = { ...box, n: 4, text: "", label: "Password", field: { kind: "password" as const, hasValue: false, valid: true, sensitive: true } };
   const s2: PageSnapshot = { ...snap, elements: [...snap.elements, box, pw] };
-  const act = { ...base, kind: "act" } as const;
 
-  it("accepts a click and a typed search", () => {
-    expect(checkStep(act, s2).ok).toBe(true);
-    expect(checkStep({ ...act, target: 3, expect: "type", text: "water bottle" }, s2).ok).toBe(true);
+  it("accepts guiding her to type, submit, hover and pick a file", () => {
+    expect(checkStep({ ...base, target: 3, expect: "type", say: "Type water bottle in the search box." }, s2).ok).toBe(true);
+    expect(checkStep({ ...base, target: 3, expect: "submit" }, s2).ok).toBe(true);
+    expect(checkStep({ ...base, expect: "hover" }, s2).ok).toBe(true);
+    expect(checkStep({ ...base, expect: "file" }, s2).ok).toBe(true);
   });
-  it("type needs text", () => expect(checkStep({ ...act, target: 3, expect: "type", text: null }, s2).ok).toBe(false));
-  it("never types into a sensitive field", () => {
-    expect(checkStep({ ...act, target: 4, expect: "type", text: "hunter2" }, s2).ok).toBe(false);
-    expect(checkStep({ ...base, target: 4, expect: "type" }, s2).ok).toBe(true); // guiding her is fine
+  it("guides her to type into a sensitive field herself", () => {
+    expect(checkStep({ ...base, target: 4, expect: "type", say: "Type your password here. I can't see it." }, s2).ok).toBe(true);
   });
-  it("can't hover or pick files", () => expect(checkStep({ ...act, expect: "file" }, s2).ok).toBe(false));
+  it("only guide and clarify may have a target", () => {
+    expect(checkStep({ ...base, kind: "clarify", expect: null }, s2).ok).toBe(true);
+    for (const kind of ["wait", "done", "blocked"] as const) expect(checkStep({ ...base, kind, expect: null }, s2).ok).toBe(false);
+  });
 });
 
 describe("checkStep: open_browser (desktop)", () => {
   const native: PageSnapshot = { ...snap, url: "", surface: "native", app: { name: "Notepad", window: "Untitled - Notepad" } };
-  const open = { kind: "open_browser", say: "I'm opening your web browser.", target: null, expect: null, option: null, text: null, risk: "none" } as const;
+  const open = { kind: "open_browser", say: "Please open your web browser, like Chrome or Edge.", target: null, expect: null, option: null, risk: "none" } as const;
 
   it("is in the schema enum", () => {
     expect(JSON.stringify((stepJsonSchema() as any).properties.kind)).toContain('"open_browser"');
@@ -109,10 +119,9 @@ describe("checkStep: open_browser (desktop)", () => {
   it("is rejected on a web page", () => {
     expect(checkStep(open, snap)).toMatchObject({ ok: false, reason: expect.stringContaining("already a web page") });
   });
-  it("never takes a target, expect, text, option or risk", () => {
+  it("never takes a target, expect, option or risk", () => {
     expect(checkStep({ ...open, target: 1 }, native).ok).toBe(false);
     expect(checkStep({ ...open, expect: "click" }, native).ok).toBe(false);
-    expect(checkStep({ ...open, text: "https://example.com" }, native).ok).toBe(false);
     expect(checkStep({ ...open, option: "Arizona" }, native).ok).toBe(false);
     expect(checkStep({ ...open, risk: "money" }, native).ok).toBe(false);
   });

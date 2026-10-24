@@ -28,7 +28,7 @@ export function Ask({ host, hs }: { host: DesktopHost; hs: HostState }) {
   const phase = view.phase;
   const running = !["idle", "done", "blocked"].includes(phase);
   const busy = phase === "planning" || phase === "verifying";
-  const orbMode: OrbMode = listening ? "listening" : phase === "done" ? "done" : busy || phase === "acting" ? "thinking" : speaking ? "speaking" : "idle";
+  const orbMode: OrbMode = listening ? "listening" : phase === "done" ? "done" : busy ? "thinking" : speaking ? "speaking" : "idle";
 
   /** Press-to-talk. Any voice failure leaves her at the typed box. */
   const talk = (onText: (t: string) => void) => {
@@ -112,7 +112,7 @@ export function Ask({ host, hs }: { host: DesktopHost; hs: HostState }) {
             <div className="stage">
               <Orb mode={orbMode} size={phase === "done" ? 132 : 96} />
               <div className="stage-text">
-                {(phase === "guiding" || phase === "acting") && <p className="eyebrow accent">Step {view.stepNo}</p>}
+                {phase === "guiding" && <p className="eyebrow accent">Step {view.stepNo}</p>}
                 {phase === "confirming" && <p className="eyebrow accent">Check first</p>}
                 <p ref={captionRef} tabIndex={-1} className={`caption ${busy ? "dim" : ""}`} aria-live="assertive">
                   {view.line}
@@ -121,7 +121,6 @@ export function Ask({ host, hs }: { host: DesktopHost; hs: HostState }) {
               </div>
             </div>
 
-            {phase === "acting" && <p className="acting">I'm doing it now. Press Stop if you want me to stop.</p>}
             {phase === "guiding" && (
               <p className="hint">{view.expect === "type" ? "Type in the box with the glowing outline. I can't see what you type." : "Look for the glowing box. Take your time."}</p>
             )}

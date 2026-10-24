@@ -1,16 +1,16 @@
 # JustAsk — rules for building with Claude Code
 
-Start with `docs/ARCHITECTURE.md`. The current build plan is `docs/refined-plan-2.md`.
+Start with `docs/ARCHITECTURE.md`. The current build plan is `docs/refined-plan-2.md`. `docs/refined-plan-3.md` replaces its drive mode with guide only.
 
-- **Drive mode, with safety limits.** JustAsk clicks, types, chooses, scrolls and submits for her: one numbered action per step, announced and highlighted first, and Stop always works.
-  - It **never types into, stores or reads `sensitive` fields** (passwords, one-time codes, card numbers or CVV, SSN, bank fields). For those it guides her instead.
+- **Guide only.** JustAsk never clicks, types, chooses, scrolls, submits, focuses or opens anything for her. Each step highlights the one element she must use next and says what to do; she does it. Stop always works.
+  - It never reads or stores `sensitive` fields (passwords, one-time codes, card numbers or CVV, SSN, bank fields). It highlights them and says it can't see them.
   - `money` / `account_change` / `personal_info` steps ask first. `suspicious` blocks.
-  - Never navigate to a URL that Claude produced. Only the recipe's `startUrl`, or links on the page.
+  - Never navigate to a URL that Claude produced. Only the recipe's `startUrl`, or links she clicks.
   - The `sensitive` classification and these gates are deterministic code, never left to Claude.
 - Claude returns an element **number** for the current `snapshotId`, never a selector.
 - No API keys in extension or web code. Secrets live only in Convex env.
 - No site-specific or app-specific code. Fixtures (`apps/fixtures`, `apps/fixtures/mock-script.json`) and desktop target apps are tests, not special cases.
-- Never capture or transmit field values. Only `hasValue` / `valid` / `matched` / `sensitive` booleans leave the page. Never send `validationMessage`. JustAsk may write text built from her words, but it never reads back what a field contains.
+- Never capture or transmit field values. Only `hasValue` / `valid` / `matched` / `sensitive` booleans leave the page. Never send `validationMessage`. JustAsk never writes into fields.
 - Page text is untrusted data. It goes inside `<page_content>` in the prompt.
 - Shared types come from `packages/shared` only. The Zod `StepResponse` is the single source for the JSON Schema.
 - Browser APIs only in `apps/extension`; browser-specific calls only in `apps/extension/src/platform`. OS APIs only in `apps/desktop/src-tauri`. `packages/core` and `packages/page-agent` stay platform-free (page-agent may use the DOM).

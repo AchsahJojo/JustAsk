@@ -9,8 +9,6 @@ export interface Settings {
   consent: { notifyOnComplete: boolean; notifyOnStuck: boolean };
   voice: "browser" | "cartesia";
   rate: number;
-  /** Synced. When on, JustAsk shows her where to click instead of doing it. */
-  showMeInstead: boolean;
 }
 
 export const DEFAULTS: Settings = {
@@ -22,7 +20,6 @@ export const DEFAULTS: Settings = {
   consent: { notifyOnComplete: false, notifyOnStuck: false },
   voice: "browser",
   rate: 0.9,
-  showMeInstead: false,
 };
 
 /** Read settings from storage.local, filled in with defaults. */

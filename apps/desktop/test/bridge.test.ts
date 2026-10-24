@@ -39,6 +39,27 @@ beforeEach(() => {
 });
 
 describe("NativeBridge", () => {
+  it("has no way to act for her: no act or openBrowser", () => {
+    const b = new NativeBridge() as unknown as Record<string, unknown>;
+    expect(b.act).toBeUndefined();
+    expect(b.openBrowser).toBeUndefined();
+    expect("act" in b).toBe(false);
+    expect("openBrowser" in b).toBe(false);
+  });
+
+  it("never invokes act or open_browser", async () => {
+    invoke.mockResolvedValue(undefined);
+    const b = new NativeBridge();
+    await b.scan([]);
+    await b.highlight(ref, { localId: 12, expect: "click", option: null, label: "Click here" });
+    await b.clear();
+    await b.pulse(ref);
+    await b.waitForChange(10);
+    const names = invoke.mock.calls.map((c) => c[0]);
+    expect(names).not.toContain("act");
+    expect(names).not.toContain("open_browser");
+  });
+
   it("scan returns the foreground scan as frame 0, top frame", async () => {
     invoke.mockResolvedValueOnce(nativeScan);
     const scans = await new NativeBridge().scan(["help me"]);
@@ -66,20 +87,6 @@ describe("NativeBridge", () => {
     expect(await new NativeBridge().highlight(ref, { localId: 12, expect: "click", option: null, label: "Click here" })).toBe(false);
   });
 
-  it("act sends the spec with the ref's localId", async () => {
-    invoke.mockResolvedValueOnce({ ok: true });
-    const res = await new NativeBridge().act(ref, { localId: 99, expect: "type", text: "large", option: null });
-    expect(res).toEqual({ ok: true });
-    expect(invoke).toHaveBeenCalledWith("act", { spec: { localId: 12, expect: "type", text: "large", option: null } });
-  });
-
-  it("act is {ok:false} on error or a bad reply", async () => {
-    invoke.mockRejectedValueOnce(new Error("secure field"));
-    expect(await new NativeBridge().act(ref, { localId: 12, expect: "click", text: null, option: null })).toEqual({ ok: false });
-    invoke.mockResolvedValueOnce(null);
-    expect(await new NativeBridge().act(ref, { localId: 12, expect: "click", text: null, option: null })).toEqual({ ok: false });
-  });
-
   it("clear, pulse and waitForChange map to their commands", async () => {
     const b = new NativeBridge();
     invoke.mockResolvedValue(undefined);
@@ -92,23 +99,6 @@ describe("NativeBridge", () => {
     expect(invoke).toHaveBeenLastCalledWith("wait_for_change", { timeoutMs: 4000 });
     invoke.mockRejectedValueOnce(new Error("x"));
     expect(await b.waitForChange(700)).toBe(false);
-  });
-
-  it("openBrowser calls open_browser with no arguments", async () => {
-    invoke.mockResolvedValueOnce(true);
-    expect(await new NativeBridge().openBrowser()).toBe(true);
-    expect(invoke).toHaveBeenCalledWith("open_browser");
-    expect(invoke.mock.calls[0]).toHaveLength(1);
-    invoke.mockResolvedValueOnce(false);
-    expect(await new NativeBridge().openBrowser()).toBe(false);
-  });
-
-  it("openBrowser is false and warns on error", async () => {
-    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-    invoke.mockRejectedValueOnce(new Error("no browser"));
-    expect(await new NativeBridge().openBrowser()).toBe(false);
-    expect(warn).toHaveBeenCalledWith("[bridge] open browser failed:", expect.any(Error));
-    warn.mockRestore();
   });
 
   it("clear and pulse swallow errors", async () => {
@@ -139,5 +129,21 @@ describe("NativeBridge", () => {
 
     off();
     expect(unlisten).toHaveBeenCalledTimes(4);
+  });
+
+  it("forwards the exact payloads the Rust layer emits (type plus fields)", async () => {
+    const b = new NativeBridge();
+    const got: FromContent[] = [];
+    await b.connect((e) => got.push(e));
+    b.watch(true);
+    // Shapes built by event_payload() in src-tauri/src/native/windows.rs.
+    handlers.get("ja:step-done")!({ payload: { type: "ja:step-done", how: "click" } });
+    handlers.get("ja:wrong")!({ payload: { type: "ja:wrong", what: "click" } });
+    handlers.get("ja:page-changed")!({ payload: { type: "ja:page-changed", reason: "navigation" } });
+    handlers.get("ja:lost")!({ payload: { type: "ja:lost" } });
+    expect(got.map((e) => e.type)).toEqual(["ja:step-done", "ja:wrong", "ja:page-changed", "ja:lost"]);
+    // A payload without type (the old Rust shape) is dropped.
+    handlers.get("ja:step-done")!({ payload: { how: "click" } });
+    expect(got).toHaveLength(4);
   });
 });

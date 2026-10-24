@@ -1,11 +1,10 @@
-import { checkStep, type ActResult, type ActSpec, type EventType, type FrameScan, type FromContent, type HighlightSpec, type PageSnapshot, type PlanRequest, type PlanResponse, type Recipe, type SnapshotElement, type StepResponse } from "@justask/shared";
+import { checkStep, type EventType, type FrameScan, type FromContent, type HighlightSpec, type PageSnapshot, type PlanRequest, type PlanResponse, type Recipe, type SnapshotElement, type StepResponse } from "@justask/shared";
 import { mergeScans, type TargetRef } from "./merge";
 import * as L from "./lines";
 import { parseCommand } from "./commands";
-import { gateAct, herWords } from "./drive";
 import { snapshotSignature } from "./signature";
 
-export type Phase = "idle" | "planning" | "confirming" | "acting" | "guiding" | "verifying" | "asking" | "waiting" | "paused" | "done" | "blocked";
+export type Phase = "idle" | "planning" | "confirming" | "guiding" | "verifying" | "asking" | "waiting" | "paused" | "done" | "blocked";
 
 export interface SessionView {
   phase: Phase;
@@ -23,10 +22,9 @@ export interface SessionView {
   clicks: number;
   /** All guide steps she completed, including typing, choosing, hovering and file selection. */
   guidedSteps: number;
-  /** Steps JustAsk did for her (act steps that succeeded). */
-  actions: number;
 }
 
+/** Read and point only: nothing here changes the page. She does every step herself. */
 export interface PageBridge {
   /** Scan every frame of the session tab. An empty array means the page can't be injected. */
   scan(context: string[]): Promise<FrameScan[]>;
@@ -35,12 +33,8 @@ export interface PageBridge {
   pulse(ref: TargetRef): Promise<void>;
   /** Resolves true when the page navigated or the DOM settled after changing. */
   waitForChange(timeoutMs: number): Promise<boolean>;
-  /** Perform one action for her (drive mode). Resolves `{ok: false}` when it could not, so the step falls back to guide. */
-  act(ref: TargetRef, spec: ActSpec): Promise<ActResult>;
   /** While on, report settled page changes as `ja:page-changed` (used in the waiting phase). */
   watch(on: boolean): void;
-  /** Open her default web browser at its start page (no URL). Resolves false when it could not. */
-  openBrowser?(): Promise<boolean>;
 }
 
 export interface Planner {
@@ -67,8 +61,6 @@ export interface ControllerDeps {
   store?: SessionStore;
   events?: EventSink;
   deviceToken?: () => string | null;
-  /** Synced account preferences. `showMeInstead`: turn every act step into a guide step. */
-  prefs?: () => { showMeInstead: boolean };
   /** Ids for snapshots; injectable for tests. */
   newId?: () => string;
   timing?: Partial<typeof DEFAULT_TIMING>;
@@ -81,8 +73,6 @@ export const DEFAULT_TIMING = {
   quietChangeMs: 700,
   maxSteps: 40,
   wrongDebounceMs: 250,
-  /** Drive mode: the pause between announcing an action and doing it (Stop cancels it). */
-  actBeatMs: 1_000,
   /** Waiting phase: how often to re-scan for a change. */
   waitRecheckMs: 1_500,
   /** Waiting phase: at most this many automatic re-plans per wait… */
@@ -90,9 +80,6 @@ export const DEFAULT_TIMING = {
   /** …within this window; then it asks "Do you see it now?" and stops polling. */
   waitWindowMs: 20_000,
 };
-
-/** Consecutive click/submit actions that changed nothing before the session switches to guide mode. */
-const NO_CHANGE_LIMIT = 3;
 
 const INITIAL: SessionView = {
   phase: "idle",
@@ -106,11 +93,7 @@ const INITIAL: SessionView = {
   taskId: null,
   clicks: 0,
   guidedSteps: 0,
-  actions: 0,
 };
-
-/** What a "yes" in the confirming phase does next. */
-type Pending = "guide" | "act" | "risk-text" | "text";
 
 interface WaitState {
   /** kind + say of the current wait step, so an identical re-plan stays quiet. */
@@ -146,14 +129,7 @@ export class SessionController {
   private sessionId: string | null = null;
   private lastWrongAt = 0;
   private t: typeof DEFAULT_TIMING;
-  /** Drive mode was switched off for this session (3 actions that changed nothing). */
-  private guideMode = false;
-  private noChange = 0;
-  /** JustAsk already opened her browser once this session; a second open_browser asks her instead. */
-  private browserOpened = false;
-  private pending: Pending | null = null;
   private waiting: WaitState | null = null;
-  private sleeps = new Set<() => void>();
 
   constructor(private deps: ControllerDeps) {
     this.t = { ...DEFAULT_TIMING, ...deps.timing };
@@ -188,24 +164,9 @@ export class SessionController {
     this.deps.speech.speak(text, { interrupt });
   }
 
-  /** A new generation: anything in flight (planner calls, the act beat, wait rechecks) is dropped. */
+  /** A new generation: anything in flight (planner calls, wait rechecks) is dropped. */
   private bump(): number {
-    this.gen++;
-    for (const cancel of [...this.sleeps]) cancel();
-    return this.gen;
-  }
-
-  /** Resolves true after `ms`, or false as soon as a newer generation starts (Stop, pause, a new plan). */
-  private sleep(ms: number, gen: number): Promise<boolean> {
-    return new Promise((resolve) => {
-      const done = () => {
-        clearTimeout(timer);
-        this.sleeps.delete(done);
-        resolve(gen === this.gen);
-      };
-      const timer = setTimeout(done, ms);
-      this.sleeps.add(done);
-    });
+    return ++this.gen;
   }
 
   /** Prefix a history line with the page it happened on. */
@@ -220,11 +181,13 @@ export class SessionController {
 
   /** Restore after the panel or service worker restarts (state came from storage.session). */
   restore(view: SessionView, history: string[], recipe: Recipe | null) {
-    this.view = { ...INITIAL, ...view, guidedSteps: view.guidedSteps ?? view.clicks ?? 0, note: "" };
+    // Older versions could save a session in the removed "acting" phase; treat it as planning.
+    const phase = (view.phase as string) === "acting" ? "planning" : view.phase;
+    this.view = { ...INITIAL, ...view, phase, guidedSteps: view.guidedSteps ?? view.clicks ?? 0, note: "" };
     this.history = history;
     this.recipe = recipe;
     for (const fn of this.listeners) fn(this.view);
-    if (["planning", "guiding", "verifying", "confirming", "acting"].includes(view.phase)) void this.plan();
+    if (["planning", "guiding", "verifying", "confirming"].includes(phase)) void this.plan();
   }
 
   // ───────────── user actions ─────────────
@@ -235,7 +198,6 @@ export class SessionController {
     this.reset();
     this.recipe = opts.recipe ?? null;
     this.sessionId = opts.sessionId ?? null;
-    if (this.deps.prefs?.().showMeInstead) this.history.push(L.SHOW_ME_NOTE);
     this.set({ ...INITIAL, request: text, taskId: opts.taskId ?? null, stepNo: 1, line: L.FILLER_LINE, phase: "planning" });
     this.say(L.FILLER_LINE);
     await this.plan();
@@ -303,14 +265,7 @@ export class SessionController {
   async confirm(yes: boolean) {
     if (this.view.phase !== "confirming" || !this.step) return;
     const step = this.step;
-    const pending = this.pending ?? "guide";
-    this.pending = null;
     if (!yes) {
-      if (pending === "text") {
-        // She doesn't want that text typed: she types it herself instead.
-        this.history.push(this.onPage(L.TEXT_DECLINED_NOTE));
-        return this.showGuide(this.asGuide(step, false));
-      }
       this.history.push("She chose not to do that step");
       this.say("Okay, we won't do that.");
       await this.deps.bridge.clear();
@@ -318,8 +273,6 @@ export class SessionController {
       this.set({ phase: "done", line: "Okay, we won't do that. Nothing was sent.", note: "" });
       return;
     }
-    if (pending === "risk-text") return this.askText(step);
-    if (pending === "act" || pending === "text") return this.doAct(step);
     await this.showGuide(step);
   }
 
@@ -551,31 +504,15 @@ export class SessionController {
       return this.block(L.SUSPICIOUS_LINE);
     }
     switch (step.kind) {
-      case "act":
       case "guide": {
         this.deps.events?.log("step_shown", { latencyMs });
-        let s = step;
-        let next: Pending = "guide";
-        if (step.kind === "act") {
-          const gate = gateAct(step, this.element(step.target), {
-            showMeInstead: this.deps.prefs?.().showMeInstead ?? false,
-            guideMode: this.guideMode,
-            her: herWords(this.view.request, this.history, this.recipe),
-          });
-          if (gate.mode === "guide") s = this.asGuide(step, gate.reason !== "personal-data");
-          else next = gate.mode === "act" ? "act" : "risk-text";
-        }
-        this.step = s;
-        if (s.risk !== "none" && L.RISK_QUESTION[s.risk]) {
-          const q = L.RISK_QUESTION[s.risk];
-          this.pending = next;
+        if (step.risk !== "none" && L.RISK_QUESTION[step.risk]) {
+          const q = L.RISK_QUESTION[step.risk];
           this.say(q);
-          this.set({ phase: "confirming", line: q, risk: s.risk, expect: s.expect });
+          this.set({ phase: "confirming", line: q, risk: step.risk, expect: step.expect });
           return;
         }
-        if (next === "guide") return this.showGuide(s);
-        if (next === "risk-text") return this.askText(s);
-        return this.doAct(s);
+        return this.showGuide(step);
       }
       case "clarify":
         this.deps.events?.log("clarify");
@@ -587,11 +524,11 @@ export class SessionController {
         return this.enterWait(step);
       case "open_browser":
         this.deps.events?.log("step_shown", { latencyMs });
-        return this.openBrowser(step);
+        return this.openBrowserGuide(step);
       case "done": {
         this.deps.events?.log("done");
         await this.deps.bridge.clear();
-        const line = this.view.actions > 0 ? L.doneActed(this.view.actions, this.view.guidedSteps) : step.say || L.DONE_LINE;
+        const line = step.say || L.DONE_LINE;
         this.say(line);
         this.set({ phase: "done", line, expect: null, risk: "none" });
         return;
@@ -602,120 +539,14 @@ export class SessionController {
     }
   }
 
-  // ───────────── drive mode (docs/ARCHITECTURE.md §11) ─────────────
+  // ───────────── open_browser (desktop) ─────────────
 
   /**
-   * The same step, for her to do. A first-person act line ("I'm clicking…") becomes a fixed guide
-   * line. With `keepText` false (personal data, or she declined), the text is never said.
+   * Desktop: she opens her web browser herself. JustAsk never opens it. Says the fixed line,
+   * not Claude's; the waiting phase re-plans when the window changes.
    */
-  private asGuide(step: StepResponse, keepText: boolean): StepResponse {
-    if (step.kind === "guide") return step;
-    const el = this.element(step.target);
-    const sensitive = !!el?.field?.sensitive || el?.field?.kind === "password";
-    const firstPerson = /^\s*I(?:'m|’m| am| will|'ll|’ll)\b/i.test(step.say);
-    const say =
-      firstPerson || !keepText
-        ? L.guideInstead(step.expect, el?.text || el?.label || "", { text: keepText && !sensitive ? step.text : null, option: step.option, sensitive })
-        : step.say;
-    return { ...step, kind: "guide", say, text: null };
-  }
-
-  /** Typed text with words she didn't say: ask first. */
-  private askText(step: StepResponse) {
-    const q = L.typeConfirm(step.text ?? "");
-    this.pending = "text";
-    this.say(q);
-    this.set({ phase: "confirming", line: q, risk: step.risk, expect: step.expect });
-  }
-
-  /** Highlight, announce, wait a beat, then act. Falls back to guiding her when the action fails. */
-  private async doAct(step: StepResponse) {
-    const gen = this.gen;
-    const ref = this.map.get(step.target!);
-    if (!ref) return this.block(L.TROUBLE_LINE, false);
-    this.target = ref;
-    const expect = step.expect as ActSpec["expect"];
-    this.set({ phase: "acting", line: step.say, expect, risk: step.risk, note: "" });
-    const shown = await this.deps.bridge.highlight(ref, { localId: ref.localId, expect, option: step.option, label: L.ACT_LABEL });
-    if (gen !== this.gen) return;
-    if (!shown) return this.lost();
-    this.lostCount = 0;
-    this.say(step.say);
-    if (!(await this.sleep(this.t.actBeatMs, gen))) return;
-
-    let res: ActResult;
-    try {
-      res = await this.deps.bridge.act(ref, { localId: ref.localId, expect, text: expect === "type" ? step.text : null, option: step.option });
-    } catch {
-      res = { ok: false };
-    }
-    if (gen !== this.gen) return;
-    if (!res.ok) {
-      this.history.push(this.onPage(L.ACT_FAILED_NOTE));
-      return this.showGuide(this.asGuide(step, true));
-    }
-
-    this.history.push(this.onPage(`JustAsk did: ${JSON.stringify(step.say)} (${expect})`));
-    await this.deps.bridge.clear();
-    this.target = null;
-    // No praise after JustAsk's own actions.
-    this.set({ phase: "verifying", line: L.LOOKING_NEXT, actions: this.view.actions + 1, note: "" });
-    const strong = expect === "click" || expect === "submit";
-    const changed = await this.deps.bridge.waitForChange(strong ? this.t.changeTimeoutMs : this.t.quietChangeMs);
-    if (gen !== this.gen) return;
-    // Typing, choosing and scrolling often leave the DOM as it was, so only clicks and submits count.
-    if (strong && changed) this.noChange = 0;
-    if (strong && !changed) {
-      this.history.push(L.NO_CHANGE_NOTE);
-      this.deps.events?.log("no_change");
-      if (++this.noChange >= NO_CHANGE_LIMIT && !this.guideMode) {
-        this.guideMode = true;
-        this.history.push(L.GUIDE_MODE_NOTE);
-      }
-    }
-    this.set({ stepNo: this.view.stepNo + 1 });
-    await this.plan(gen);
-  }
-
-  /**
-   * Desktop: open her default browser at its own start page. There is never a URL: the bridge
-   * opens the browser, and the next steps use its search box. Says the fixed line, not Claude's.
-   */
-  private async openBrowser(step: StepResponse) {
-    const bridge = this.deps.bridge;
-    const open = bridge.openBrowser;
-    const showMe = this.deps.prefs?.().showMeInstead ?? false;
-    if (!open || showMe || this.guideMode || this.browserOpened) return this.openBrowserGuide(step);
-    const gen = this.gen;
-    this.target = null;
-    this.set({ phase: "acting", line: L.OPENING_BROWSER, expect: null, risk: "none", note: "" });
-    this.say(L.OPENING_BROWSER);
-    if (!(await this.sleep(this.t.actBeatMs, gen))) return;
-
-    let opened: boolean;
-    try {
-      opened = await open.call(bridge);
-    } catch {
-      opened = false;
-    }
-    if (gen !== this.gen) return;
-    if (!opened) {
-      this.history.push(this.onPage(L.ACT_FAILED_NOTE));
-      return this.openBrowserGuide(step);
-    }
-
-    this.browserOpened = true;
-    this.history.push(this.onPage(L.OPENED_BROWSER_NOTE));
-    this.set({ phase: "verifying", line: L.LOOKING_NEXT, actions: this.view.actions + 1, note: "" });
-    await bridge.waitForChange(this.t.changeTimeoutMs);
-    if (gen !== this.gen) return;
-    this.set({ stepNo: this.view.stepNo + 1 });
-    await this.plan(gen);
-  }
-
-  /** She opens the browser herself. The waiting phase re-plans when the window changes. */
   private openBrowserGuide(step: StepResponse) {
-    const wait: StepResponse = { ...step, kind: "wait", say: L.OPEN_BROWSER_GUIDE, target: null, expect: null, option: null, text: null, risk: "none" };
+    const wait: StepResponse = { ...step, kind: "wait", say: L.OPEN_BROWSER_GUIDE, target: null, expect: null, option: null, risk: "none" };
     this.step = wait;
     return this.enterWait(wait);
   }
@@ -859,10 +690,6 @@ export class SessionController {
     this.target = null;
     this.replans = 0;
     this.lostCount = 0;
-    this.guideMode = false;
-    this.noChange = 0;
-    this.browserOpened = false;
-    this.pending = null;
   }
 }
 

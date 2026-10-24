@@ -43,8 +43,8 @@ describe("watchAccount", () => {
     expect(onTasks).toHaveBeenCalledWith({ open: [{ id: "task-1" }], done: [] });
     client.subscriptions[0].onUpdate(null);
     expect(onTasks).toHaveBeenLastCalledWith({ open: [], done: [] });
-    client.subscriptions[1].onUpdate({ showMeInstead: true });
-    expect(onPrefs).toHaveBeenCalledWith({ showMeInstead: true });
+    client.subscriptions[1].onUpdate({ voice: "cartesia", rate: 1.1 });
+    expect(onPrefs).toHaveBeenCalledWith({ voice: "cartesia", rate: 1.1 });
 
     stop();
     expect(client.unsubscriptions).toBe(2);

@@ -6,9 +6,6 @@
   "note": "She has not said her email; password is sensitive. Guide.",
   "expected": {
     "kind": "guide",
-    "allowKinds": [
-      "guide"
-    ],
     "targetText": [
       "Email",
       "Password"

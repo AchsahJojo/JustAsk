@@ -45,6 +45,34 @@ describe("fingerprint resolve (rerenders)", () => {
   });
 });
 
+describe("guide only (she does every action herself)", () => {
+  it("PageAgent has no act method", () => {
+    const { agent } = setup(`<main><button>Refill</button></main>`);
+    expect((agent as unknown as { act?: unknown }).act).toBeUndefined();
+    agent.destroy();
+  });
+
+  it("highlighting a field never changes its value or fires events on its own", async () => {
+    const { agent, sent, n } = setup(`<form><label for="e">Email</label><input id="e" type="email" value=""><button id="go" type="submit">Send</button></form>`);
+    const e = document.getElementById("e") as HTMLInputElement;
+    const go = document.getElementById("go") as HTMLButtonElement;
+    const fired: string[] = [];
+    for (const t of ["click", "input", "change", "keydown", "submit"]) {
+      e.addEventListener(t, () => fired.push(`e:${t}`));
+      go.addEventListener(t, () => fired.push(`go:${t}`));
+    }
+    go.form!.addEventListener("submit", (ev) => (ev.preventDefault(), fired.push("form:submit")));
+    expect(agent.highlight({ localId: n("Email"), expect: "type", option: null, label: "Type here" })).toBe(true);
+    await flush();
+    expect(agent.highlight({ localId: n("Send"), expect: "click", option: null, label: "Click here" })).toBe(true);
+    await flush();
+    expect(e.value).toBe("");
+    expect(fired).toEqual([]);
+    expect(sent).toEqual([]);
+    agent.destroy();
+  });
+});
+
 describe("click observation", () => {
   it("target click advances; a click elsewhere reports wrong", async () => {
     const { agent, sent, n } = setup(`<main><button id="a">Refill</button><button id="b">Other</button></main>`);

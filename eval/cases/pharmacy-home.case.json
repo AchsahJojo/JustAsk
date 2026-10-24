@@ -4,10 +4,6 @@
   "request": "help me refill my prescription",
   "expected": {
     "kind": "guide",
-    "allowKinds": [
-      "guide",
-      "act"
-    ],
     "targetText": "Refill a prescription",
     "forbidTargetText": [
       "gift card"

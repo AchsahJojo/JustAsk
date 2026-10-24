@@ -1,7 +1,7 @@
 // PageBridge for the desktop app: the controller's page operations go to the Rust native layer
 // through the frozen command surface in ./native.ts. No OS calls here, only Tauri invoke + events.
 import type { PageBridge, TargetRef } from "@justask/core";
-import type { ActResult, ActSpec, FrameScan, FromContent, HighlightSpec } from "@justask/shared";
+import type { FrameScan, FromContent, HighlightSpec } from "@justask/shared";
 import * as native from "./native";
 
 /** The native layer scans one window, so it is always frame 0 and the top frame. */
@@ -43,26 +43,6 @@ export class NativeBridge implements PageBridge {
     try {
       return await native.waitForChange(timeoutMs);
     } catch {
-      return false;
-    }
-  }
-
-  /** Perform one action. Any failure is `{ok: false}`, so the step falls back to guiding her. */
-  async act(ref: TargetRef, spec: ActSpec): Promise<ActResult> {
-    try {
-      const res = await native.act({ ...spec, localId: ref.localId });
-      return { ok: res?.ok === true };
-    } catch {
-      return { ok: false };
-    }
-  }
-
-  /** Open her default browser at its start page (no URL). False on any failure. */
-  async openBrowser(): Promise<boolean> {
-    try {
-      return (await native.openBrowser()) === true;
-    } catch (e) {
-      console.warn("[bridge] open browser failed:", e);
       return false;
     }
   }

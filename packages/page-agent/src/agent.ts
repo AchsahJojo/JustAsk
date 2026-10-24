@@ -1,8 +1,7 @@
-import type { ActResult, ActSpec, FrameScan, FromContent, HighlightSpec } from "@justask/shared";
+import type { FrameScan, FromContent, HighlightSpec } from "@justask/shared";
 import { CLICKABLE_SELECTOR, closestComposed, collectComposed, elementParts, fieldKind, hasValue, isVisible, mainHeading, pageText, scanDocument, strippedUrl, type ScanOptions } from "./scanner";
 import { fingerprint, normalize, roleTextKey } from "./fingerprint";
 import { Overlay } from "./overlay";
-import { performAct } from "./act";
 import { containsComposed } from "./visibility";
 
 /** Quiet time after real DOM mutations before `watch` reports a settled change. */
@@ -169,23 +168,6 @@ export class PageAgent {
         }
       }, 100);
     });
-  }
-
-  // ───────────── act (drive mode, ARCHITECTURE §11) ─────────────
-
-  /**
-   * Perform one action on element `localId`. Refuses type/choose/submit on sensitive fields.
-   * A highlighted step counts as done first, so our own synthetic events never report
-   * step-done, wrong or lost; on failure the highlight is live again for guide mode.
-   */
-  act(spec: ActSpec): ActResult {
-    const el = this.resolve(spec.localId);
-    if (!el) return { ok: false };
-    const prevDone = this.done;
-    this.done = true;
-    const result = performAct(el, spec);
-    if (!result.ok) this.done = prevDone;
-    return result;
   }
 
   // ───────────── watch (P1) ─────────────

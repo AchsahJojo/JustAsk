@@ -15,38 +15,18 @@ const SPEEDS = [
 /** Setup step 4 (once connected): synced preferences, linked devices and the helper code. */
 export function SettingsStep({ s, onChange }: { s: Settings; onChange: (s: Settings) => void }) {
   const set = async (patch: Parameters<typeof pushPrefs>[0]) => {
-    if (patch.showMeInstead !== undefined) setShowMeBy("self");
     onChange(await pushPrefs(patch));
   };
   const [helpers, setHelpers] = useState<Helper[] | null>(null);
-  const [showMeBy, setShowMeBy] = useState<"self" | "caregiver" | null>(null);
   const loadMe = async () => {
     const me = await backend.me();
     setHelpers(me?.helpers ?? []);
-    setShowMeBy(me?.showMeSetBy ?? null);
   };
   useEffect(() => void loadMe(), []);
   return (
     <li className="step">
       <h2>4. Your settings</h2>
       <p>These follow you to every computer and browser where you use JustAsk.</p>
-
-      <div className="toggles">
-        <label className="toggle">
-          <input type="checkbox" checked={s.showMeInstead} onChange={(e) => set({ showMeInstead: e.target.checked })} />
-          <span>
-            <strong>Show me instead</strong>
-            <br />
-            <span className="soft">JustAsk shows you where to click instead of doing it.</span>
-            {showMeBy === "caregiver" && (
-              <>
-                <br />
-                <span className="soft">Your helper set this. You can still change it.</span>
-              </>
-            )}
-          </span>
-        </label>
-      </div>
 
       <fieldset className="speeds">
         <legend>How fast JustAsk talks</legend>

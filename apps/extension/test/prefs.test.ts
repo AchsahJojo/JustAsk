@@ -1,16 +1,20 @@
 import { describe, expect, it } from "vitest";
 import { friendlyError, mergePrefs, parseCode, parseDevices, parseHandoff, seenAgo, spacedCode, type SyncedPrefs } from "../src/lib/prefs";
 
-const LOCAL: SyncedPrefs = { voice: "browser", rate: 0.9, consent: { notifyOnComplete: false, notifyOnStuck: false }, showMeInstead: false };
+const LOCAL: SyncedPrefs = { voice: "browser", rate: 0.9, consent: { notifyOnComplete: false, notifyOnStuck: false } };
 
 describe("mergePrefs", () => {
   it("takes valid remote fields that differ", () => {
-    expect(mergePrefs(LOCAL, { voice: "cartesia", rate: 1.1, showMeInstead: true, consent: { notifyOnComplete: true, notifyOnStuck: false } })).toEqual({
+    expect(mergePrefs(LOCAL, { voice: "cartesia", rate: 1.1, consent: { notifyOnComplete: true, notifyOnStuck: false } })).toEqual({
       voice: "cartesia",
       rate: 1.1,
-      showMeInstead: true,
       consent: { notifyOnComplete: true, notifyOnStuck: false },
     });
+  });
+
+  it("ignores a remote showMeInstead (guide-only: JustAsk never acts for her)", () => {
+    expect(mergePrefs(LOCAL, { showMeInstead: true })).toEqual({});
+    expect(mergePrefs(LOCAL, { showMeInstead: false, voice: "cartesia" })).toEqual({ voice: "cartesia" });
   });
 
   it("returns nothing when remote matches local", () => {
@@ -21,7 +25,7 @@ describe("mergePrefs", () => {
     expect(mergePrefs(LOCAL, null)).toEqual({});
     expect(mergePrefs(LOCAL, undefined)).toEqual({});
     expect(mergePrefs(LOCAL, [1, 2])).toEqual({});
-    expect(mergePrefs(LOCAL, { voice: "robot", rate: "fast", showMeInstead: "yes", consent: "all" })).toEqual({});
+    expect(mergePrefs(LOCAL, { voice: "robot", rate: "fast", consent: "all" })).toEqual({});
     expect(mergePrefs(LOCAL, { rate: Number.NaN })).toEqual({});
   });
 

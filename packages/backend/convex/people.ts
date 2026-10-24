@@ -119,8 +119,9 @@ export const update = mutation({
 });
 
 /**
- * Caregiver: turn "Show me instead" on or off for someone they help. On, JustAsk shows her each click
- * and she does it herself. Off (the default), JustAsk clicks and types for her, except sensitive fields.
+ * Caregiver: turn "Show me instead" on or off for someone they help. Kept for compatibility with the
+ * caregiver app: the setting is still stored, but it no longer changes behavior. JustAsk always shows
+ * her each step and she does it herself.
  */
 export const setShowMe = mutation({
   args: { seniorId: v.id("seniors"), on: v.boolean() },

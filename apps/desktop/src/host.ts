@@ -37,7 +37,6 @@ export class DesktopHost {
   private listeners = new Set<(s: HostState) => void>();
   private machineId = "";
   private sessionId: string | null = null;
-  private showMeInstead = false;
   private offline: Array<() => void> = [];
   private seenTasks = new Set<string>();
   private firstTaskBatch = true;
@@ -52,7 +51,6 @@ export class DesktopHost {
       planner: new HttpPlanner(() => import.meta.env.VITE_PLANNER_URL || "http://localhost:8787"),
       speech: this.speech,
       deviceToken: () => this.hs.token,
-      prefs: () => ({ showMeInstead: this.showMeInstead }),
       events: { log: (type: EventType, extra) => this.onEvent(type, extra?.latencyMs) },
     });
     // When a session ends, pick up any handoff that arrived meanwhile.
@@ -153,7 +151,6 @@ export class DesktopHost {
     this.offline.push(() => clearInterval(iv));
     this.offline.push(this.backend.onTasks(token, (t) => this.onTasks(t)));
     this.offline.push(this.backend.onHandoffs(token, (h) => void this.processHandoffs(h)));
-    void this.backend.getPrefs(token).then((p) => (this.showMeInstead = !!p?.showMeInstead));
     this.set({ online: true });
   }
 

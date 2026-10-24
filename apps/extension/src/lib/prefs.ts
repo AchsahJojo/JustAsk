@@ -4,7 +4,7 @@ import { Recipe } from "@justask/shared";
 import type { Settings } from "./config";
 
 /** The preferences that live on her account and follow her to every install. */
-export type SyncedPrefs = Pick<Settings, "voice" | "rate" | "consent" | "showMeInstead">;
+export type SyncedPrefs = Pick<Settings, "voice" | "rate" | "consent">;
 
 export const RATE_MIN = 0.5;
 export const RATE_MAX = 1.5;
@@ -23,7 +23,6 @@ export function mergePrefs(local: SyncedPrefs, remote: unknown): Partial<SyncedP
     const rate = Math.min(RATE_MAX, Math.max(RATE_MIN, remote.rate));
     if (rate !== local.rate) out.rate = rate;
   }
-  if (typeof remote.showMeInstead === "boolean" && remote.showMeInstead !== local.showMeInstead) out.showMeInstead = remote.showMeInstead;
   if (isObj(remote.consent)) {
     const c = remote.consent;
     const consent = {

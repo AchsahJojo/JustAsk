@@ -78,7 +78,7 @@ export function Setup() {
       <ol className="steps">
         <li className={`step ${access ? "ok" : ""}`}>
           <h2>1. Let JustAsk see web pages</h2>
-          <p>JustAsk reads the page you're on so it can find the right button and press it for you. It never reads what you have typed, and it never types passwords or card numbers.</p>
+          <p>JustAsk shows you exactly where to click, one step at a time. You do each step yourself. It reads the page you're on to find the right button, and it never reads what you have typed.</p>
           {access ? (
             <p className="done">✓ JustAsk is on</p>
           ) : (

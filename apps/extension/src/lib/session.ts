@@ -43,8 +43,6 @@ export class SessionHost {
       planner: new HttpPlanner(() => this.settings?.plannerUrl ?? "http://localhost:8787"),
       speech: this.speech,
       deviceToken: () => this.settings?.deviceToken ?? null,
-      // Synced "Show me instead": guide every step rather than acting for her.
-      prefs: () => ({ showMeInstead: this.settings?.showMeInstead ?? false }),
       store: {
         save: (view, extra) => {
           void browser.storage.session.set({ session: { view, ...extra, tabId: this.sessionTabId } }).catch(() => {});

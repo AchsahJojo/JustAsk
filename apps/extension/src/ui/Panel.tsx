@@ -10,12 +10,10 @@ import { buildCapture, captureFileName } from "../lib/capture";
 import { Orb, type OrbMode } from "./Orb";
 import { useTaskList } from "./useTaskList";
 import { focusCaptionUnlessAsking } from "./focusCaption";
+import { doneLine } from "./doneLine";
 
 const ALL_SITES = { origins: ["<all_urls>"] };
 const DEV = import.meta.env.MODE === "development";
-
-/** Steps JustAsk did for her. `actions` is added to SessionView by the core drive-mode work. */
-const actionsOf = (v: SessionView) => (v as SessionView & { actions?: number }).actions ?? 0;
 
 export function Panel({ pinnedTabId }: { pinnedTabId: number | null }) {
   const host = useMemo(() => new SessionHost({ pinnedTabId }), [pinnedTabId]);
@@ -124,8 +122,6 @@ export function Panel({ pinnedTabId }: { pinnedTabId: number | null }) {
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
 
-  const actions = actionsOf(view);
-
   return (
     <div className="panel" data-phase={phase}>
       <header className="top">
@@ -211,7 +207,7 @@ export function Panel({ pinnedTabId }: { pinnedTabId: number | null }) {
             <div className="stage">
               <Orb mode={orbMode} size={phase === "done" ? 132 : 96} />
               <div className="stage-text">
-                {(phase === "guiding" || phase === "acting") && <p className="eyebrow accent">Step {view.stepNo}</p>}
+                {phase === "guiding" && <p className="eyebrow accent">Step {view.stepNo}</p>}
                 {phase === "confirming" && <p className="eyebrow accent">Check first</p>}
                 <p ref={captionRef} tabIndex={-1} className={`caption ${phase === "planning" || phase === "verifying" ? "dim" : ""}`} aria-live="assertive">
                   {view.line}
@@ -221,17 +217,7 @@ export function Panel({ pinnedTabId }: { pinnedTabId: number | null }) {
             </div>
 
             {phase === "guiding" && <p className="hint">{view.expect === "type" ? "Type in the box with the glowing outline. I can't see what you type." : "Look for the glowing box. Take your time."}</p>}
-            {phase === "acting" && <p className="hint">I'm doing this step for you. Watch the glowing box. Press Stop at any time.</p>}
-            {phase === "done" &&
-              (actions > 0 ? (
-                <p className="hint big">
-                  I did {actions} {actions === 1 ? "step" : "steps"} for you.
-                </p>
-              ) : (
-                <p className="hint big">
-                  You made {view.clicks} {view.clicks === 1 ? "click" : "clicks"} yourself.
-                </p>
-              ))}
+            {phase === "done" && <p className="hint big">{doneLine(view.clicks)}</p>}
 
             {phase === "confirming" && (
               <div className="choices">
@@ -298,11 +284,6 @@ export function Panel({ pinnedTabId }: { pinnedTabId: number | null }) {
             </button>
           ) : (
             <>
-              {phase === "acting" && (
-                <button className="btn danger huge stop-now" onClick={() => host.controller.stop()} aria-label="Stop. JustAsk will not do anything else.">
-                  <StopIcon /> Stop
-                </button>
-              )}
               {phase === "guiding" && view.expect === "type" && (
                 <button className="btn primary huge" onClick={() => host.controller.doneTyping()}>
                   I'm done typing
@@ -319,11 +300,9 @@ export function Panel({ pinnedTabId }: { pinnedTabId: number | null }) {
                   I'm stuck
                 </button>
               </div>
-              {phase !== "acting" && (
-                <button className="btn ghost stop" onClick={() => host.controller.stop()}>
-                  Stop
-                </button>
-              )}
+              <button className="btn ghost stop" onClick={() => host.controller.stop()}>
+                Stop
+              </button>
             </>
           )}
         </footer>
@@ -410,14 +389,6 @@ function Tasks({ list, onStart, onFinish }: { list: TaskList; onStart: (t: Task)
         </details>
       )}
     </>
-  );
-}
-
-function StopIcon() {
-  return (
-    <svg width="26" height="26" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-      <rect x="5" y="5" width="14" height="14" rx="2" />
-    </svg>
   );
 }
 

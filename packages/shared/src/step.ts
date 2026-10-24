@@ -2,13 +2,13 @@ import { z } from "zod";
 import type { PageSnapshot } from "./snapshot";
 
 /**
- * `act`: JustAsk performs the step itself (drive mode, docs/ARCHITECTURE.md §11).
- * `guide`: she performs it (sensitive fields, failed actions, "Show me instead").
- * `open_browser`: desktop only. JustAsk opens her default web browser at its own start page.
- * It carries no URL, target or text: JustAsk never navigates to an address Claude produced.
+ * JustAsk never acts for her: she does every step herself.
+ * `guide`: JustAsk highlights one thing on the screen and says what to do; she does it.
+ * `open_browser`: desktop only. JustAsk asks her to open her web browser and waits.
+ * It carries no URL or target: JustAsk never opens anything or navigates to an address Claude produced.
  */
-export const StepKind = z.enum(["act", "guide", "clarify", "wait", "done", "blocked", "open_browser"]);
-/** `scroll` brings the target into view; `submit` presses Enter in (or submits the form of) the target field. */
+export const StepKind = z.enum(["guide", "clarify", "wait", "done", "blocked", "open_browser"]);
+/** What she does to the target. `scroll`: she brings it into view; `submit`: she presses Enter in the target field. */
 export const Expect = z.enum(["click", "type", "choose", "hover", "file", "scroll", "submit"]);
 export const Risk = z.enum(["none", "money", "personal_info", "account_change", "suspicious"]);
 
@@ -23,8 +23,6 @@ export const StepResponse = z
     target: z.number().int().nullable(),
     expect: Expect.nullable(),
     option: z.string().nullable(),
-    /** What JustAsk types for an `act` + `type` step. Built from her words; null otherwise. */
-    text: z.string().nullable(),
     risk: Risk,
   })
   .strict();
@@ -63,18 +61,13 @@ export function checkStep(step: StepResponse, snapshot: PageSnapshot): StepCheck
   if (words === 0) return { ok: false, reason: "say is empty" };
   if (words > MAX_SAY_WORDS) return { ok: false, reason: `say has ${words} words; the limit is ${MAX_SAY_WORDS}` };
 
-  if (step.kind === "guide" || step.kind === "act") {
-    if (step.target === null) return { ok: false, reason: `${step.kind} needs a target` };
-    if (step.expect === null) return { ok: false, reason: `${step.kind} needs expect` };
-  }
-  if (step.kind === "act") {
-    if (step.expect === "type" && !step.text?.trim()) return { ok: false, reason: "act with type needs text" };
-    if (step.expect === "hover" || step.expect === "file") return { ok: false, reason: `act can't ${step.expect}; use guide` };
+  if (step.kind === "guide") {
+    if (step.target === null) return { ok: false, reason: "guide needs a target" };
+    if (step.expect === null) return { ok: false, reason: "guide needs expect" };
   }
   if (step.kind === "open_browser") {
     if (step.target !== null) return { ok: false, reason: "open_browser must not have a target" };
     if (step.expect !== null) return { ok: false, reason: "open_browser must have expect null" };
-    if (step.text !== null) return { ok: false, reason: "open_browser must have text null; it never takes a web address" };
     if (step.option !== null) return { ok: false, reason: "open_browser must have option null" };
     if (step.risk !== "none") return { ok: false, reason: 'open_browser must have risk "none"' };
     if (snapshot.surface !== "native") return { ok: false, reason: "open_browser is only for desktop app windows; this is already a web page" };
@@ -83,10 +76,6 @@ export function checkStep(step: StepResponse, snapshot: PageSnapshot): StepCheck
   if (step.target !== null) {
     const el = snapshot.elements.find((e) => e.n === step.target);
     if (!el) return { ok: false, reason: `target ${step.target} is not in the current list` };
-    // Sensitive fields (passwords, codes, card numbers) are never filled by JustAsk: she types them.
-    if (step.kind === "act" && el.field?.sensitive && (step.expect === "type" || step.expect === "choose" || step.expect === "submit")) {
-      return { ok: false, reason: "that field is sensitive; use guide so she types it herself" };
-    }
     if (step.expect === "choose") {
       const options = el.field?.options;
       if (!options || options.length === 0) return { ok: false, reason: "choose needs a select target" };
@@ -98,8 +87,8 @@ export function checkStep(step: StepResponse, snapshot: PageSnapshot): StepCheck
       }
     }
   }
-  // Only act and guide point at a target (clarify may mention one). open_browser returned above.
-  if (step.kind !== "guide" && step.kind !== "act" && step.kind !== "clarify" && step.target !== null) {
+  // Only guide points at a target (clarify may mention one). open_browser returned above.
+  if (step.kind !== "guide" && step.kind !== "clarify" && step.target !== null) {
     return { ok: false, reason: `${step.kind} must not have a target` };
   }
   return { ok: true };

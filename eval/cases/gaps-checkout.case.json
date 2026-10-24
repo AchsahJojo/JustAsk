@@ -6,9 +6,6 @@
   "note": "Card number is sensitive: guide, never act.",
   "expected": {
     "kind": "guide",
-    "allowKinds": [
-      "guide"
-    ],
     "targetText": "Card number",
     "forbidTargetText": [
       "Place order"

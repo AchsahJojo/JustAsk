@@ -206,13 +206,13 @@ ok("activity mark-all-read");
   ok("task list: started task stays open after closing; I did it → done + note; removed tasks leave");
 }
 
-// --- Show me instead: she or a linked caregiver can change it; the caregiver's choice carries over ---
+// --- Show me instead (stored for compatibility; no longer changes behavior): she or a linked caregiver can change it; the caregiver's choice carries over ---
 {
   const jo = await caregiver("Jo");
   const { seniorId, code } = await jo.c.mutation("devices:createSeniorWithCode", { name: "Ruth Ng", displayName: "Gran", relation: "Grandmother" });
   await jo.c.mutation("people:setShowMe", { seniorId, on: true }); // set while setting up, before she connects
   const { token: solo3 } = await createSelf("Ruth");
-  assert.equal((await anon.query("prefs:get", { token: solo3 })).showMeInstead, false, "drive mode by default");
+  assert.equal((await anon.query("prefs:get", { token: solo3 })).showMeInstead, false, "showMeInstead is off by default");
   assert.ok(await anon.mutation("devices:redeemCode", { code, token: solo3 }));
   assert.equal((await anon.query("prefs:get", { token: solo3 })).showMeInstead, true, "caregiver's choice carries over on merge");
   assert.equal((await anon.query("devices:me", { token: solo3 })).showMeSetBy, "caregiver");

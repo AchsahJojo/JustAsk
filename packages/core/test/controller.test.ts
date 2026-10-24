@@ -33,20 +33,15 @@ function typedFrame(hasValue: boolean): FrameScan {
   return f;
 }
 
-const guide = (target: number, say = "Click it.", extra: Partial<StepResponse> = {}): StepResponse => ({ kind: "guide", say, target, expect: "click", option: null, text: null, risk: "none", ...extra });
+const guide = (target: number, say = "Click it.", extra: Partial<StepResponse> = {}): StepResponse => ({ kind: "guide", say, target, expect: "click", option: null, risk: "none", ...extra });
 
-const act = (target: number, say = "I'm clicking it.", extra: Partial<StepResponse> = {}): StepResponse => ({ kind: "act", say, target, expect: "click", option: null, text: null, risk: "none", ...extra });
-const step = (kind: StepResponse["kind"], say: string): StepResponse => ({ kind, say, target: null, expect: null, option: null, text: null, risk: "none" });
+const step = (kind: StepResponse["kind"], say: string): StepResponse => ({ kind, say, target: null, expect: null, option: null, risk: "none" });
 const tick = (ms = 0) => new Promise((r) => setTimeout(r, ms));
 
 interface HarnessOpts {
-  actOk?: boolean;
   changed?: boolean;
-  showMeInstead?: boolean;
   responseSnapshotId?: string;
   timing?: Record<string, number>;
-  /** Give the bridge an openBrowser that resolves this value (or throws). Omitted: no openBrowser. */
-  openBrowser?: boolean | "throw";
 }
 
 function harness(steps: StepResponse[], scans: FrameScan[][] = [[frame(0, ["A", "B"])]], opts: HarnessOpts = {}) {
@@ -54,7 +49,7 @@ function harness(steps: StepResponse[], scans: FrameScan[][] = [[frame(0, ["A", 
   let i = 0;
   let s = 0;
   const highlights: unknown[] = [];
-  /** Call order across bridge and speech, for the act flow. */
+  /** Call order across bridge and speech. */
   const ops: string[] = [];
   const bridge: PageBridge = {
     scan: vi.fn(async () => scans[Math.min(s++, scans.length - 1)]),
@@ -62,17 +57,8 @@ function harness(steps: StepResponse[], scans: FrameScan[][] = [[frame(0, ["A", 
     clear: vi.fn(async () => {}),
     pulse: vi.fn(async () => {}),
     waitForChange: vi.fn(async () => opts.changed ?? true),
-    act: vi.fn(async () => (ops.push("act"), { ok: opts.actOk ?? false })),
     watch: vi.fn(),
   };
-  if (opts.openBrowser !== undefined) {
-    const result = opts.openBrowser;
-    bridge.openBrowser = vi.fn(async () => {
-      ops.push("openBrowser");
-      if (result === "throw") throw new Error("no browser");
-      return result;
-    });
-  }
   const planner: Planner = {
     plan: vi.fn(async (req: PlanRequest) => {
       plans.push(req);
@@ -88,8 +74,7 @@ function harness(steps: StepResponse[], scans: FrameScan[][] = [[frame(0, ["A", 
     planner,
     speech,
     events: { log: (t) => events.push(t) },
-    prefs: () => ({ showMeInstead: opts.showMeInstead ?? false }),
-    timing: { changeTimeoutMs: 10, quietChangeMs: 7, actBeatMs: 0, waitRecheckMs: 60_000, ...opts.timing },
+    timing: { changeTimeoutMs: 10, quietChangeMs: 7, waitRecheckMs: 60_000, ...opts.timing },
   });
   return { c, bridge, planner, plans, spoken, highlights, events, ops };
 }
@@ -105,7 +90,7 @@ describe("mergeScans", () => {
 
 describe("SessionController", () => {
   it("runs a multi-step loop to done", async () => {
-    const h = harness([guide(1, "Click A."), guide(2, "Click B."), { kind: "done", say: "All done, you did it!", target: null, expect: null, option: null, text: null, risk: "none" }]);
+    const h = harness([guide(1, "Click A."), guide(2, "Click B."), step("done", "All done, you did it!")]);
     await h.c.start("help me");
     expect(h.c.state.phase).toBe("guiding");
     expect(h.c.state.line).toBe("Click A.");
@@ -133,6 +118,8 @@ describe("SessionController", () => {
     expect(h.highlights.length).toBe(0);
     await h.c.input("no");
     expect(h.c.state.phase).toBe("done");
+    expect(h.c.state.line).toBe("Okay, we won't do that. Nothing was sent.");
+    expect(h.events).toContain("abandoned");
     expect(h.highlights.length).toBe(0);
   });
 
@@ -145,7 +132,7 @@ describe("SessionController", () => {
   });
 
   it("suspicious ends blocked", async () => {
-    const h = harness([{ kind: "blocked", say: "Click Buy gift cards now.", target: null, expect: null, option: null, text: null, risk: "suspicious" }]);
+    const h = harness([{ ...step("blocked", "Click Buy gift cards now."), risk: "suspicious" }]);
     await h.c.start("x");
     expect(h.c.state.phase).toBe("blocked");
     expect(h.c.state.line).toBe("This page might be a trick. Let's stop and check with your helper.");
@@ -162,7 +149,7 @@ describe("SessionController", () => {
   });
 
   it("clarify then answer goes into history", async () => {
-    const h = harness([{ kind: "clarify", say: "Pickup or mail?", target: null, expect: null, option: null, text: null, risk: "none" }, guide(2)]);
+    const h = harness([step("clarify", "Pickup or mail?"), guide(2)]);
     await h.c.start("refill");
     expect(h.c.state.phase).toBe("asking");
     await h.c.input("pick it up");
@@ -212,117 +199,6 @@ describe("SessionController", () => {
     await h.c.start("sign in");
     expect(h.c.state.line).toMatch(/can't see it/);
   });
-});
-
-describe("prompt", () => {
-  it("system prompt is long enough to cache (>512 tokens ~ 2000+ chars)", () => {
-    expect(SYSTEM_PROMPT.length).toBeGreaterThan(3000);
-  });
-  it("wraps page text in page_content and includes options", () => {
-    const f = frame(0, ["Go"]);
-    const { snapshot } = mergeScans([f], "s");
-    const turn = buildTurn("help", [], { steps: ["Click Pharmacy"] }, snapshot);
-    expect(turn).toContain("<page_content>");
-    expect(turn).toContain("Caregiver's recipe");
-    expect(turn).toContain('[1] button: "Go"');
-  });
-  it("is drive mode: act by default, search first, no menu bias, native paragraph", () => {
-    expect(SYSTEM_PROMPT).toContain('"act" is the usual choice');
-    expect(SYSTEM_PROMPT).toContain('role "search box"');
-    expect(SYSTEM_PROMPT).toContain("don't open category menus to find a specific item");
-    expect(SYSTEM_PROMPT).not.toContain("prefer guiding her to scroll or open a menu");
-    expect(SYSTEM_PROMPT).toContain("Desktop apps:");
-    expect(SYSTEM_PROMPT).toContain('"kind":"guide","say":"Type your password here. I can\'t see it."');
-    expect(SYSTEM_PROMPT).toContain('"text":"water bottle"');
-  });
-  it("marks sensitive fields", () => {
-    const f = frame(0, ["Password"]);
-    f.snapshot.elements[0].field = { kind: "password", hasValue: false, valid: true, sensitive: true };
-    const { snapshot } = mergeScans([f], "s");
-    expect(buildTurn("x", [], null, snapshot)).toContain("{password, empty, sensitive}");
-  });
-  it("names the app and window on native surfaces, and mergeScans keeps them", () => {
-    const f = frame(0, ["Display"]);
-    f.snapshot.surface = "native";
-    f.snapshot.url = "";
-    f.snapshot.app = { name: "Settings", window: "System > Display" };
-    const { snapshot } = mergeScans([f], "s");
-    expect(snapshot.surface).toBe("native");
-    const turn = buildTurn("bigger text", [], null, snapshot);
-    expect(turn).toContain("App: Settings, window: System > Display");
-    expect(turn).not.toContain("Page address");
-    expect(buildTurn("x", [], null, mergeScans([frame(0, ["A"])], "t").snapshot)).toContain("Page address: https://x.test/");
-  });
-});
-
-describe("drive mode", () => {
-  const done = step("done", "All done, you did it!");
-
-  it("highlights, says the line, waits a beat, acts, then verifies and plans the next step", async () => {
-    const h = harness([act(1, "I'm clicking A."), done], undefined, { actOk: true, timing: { actBeatMs: 20 } });
-    const t0 = Date.now();
-    await h.c.start("help me");
-    expect(Date.now() - t0).toBeGreaterThanOrEqual(15);
-    expect(h.ops.slice(0, 4)).toEqual(["say:Let me look at the page.", "highlight:Doing this", "say:I'm clicking A.", "act"]);
-    expect(h.bridge.act).toHaveBeenCalledWith({ frameId: 0, localId: 1 }, { localId: 1, expect: "click", text: null, option: null });
-    expect(h.bridge.waitForChange).toHaveBeenCalledWith(10);
-    expect(h.plans[1].history).toEqual(['On "Page": JustAsk did: "I\'m clicking A." (click)']);
-    expect(h.c.state.phase).toBe("done");
-    expect(h.c.state.actions).toBe(1);
-    expect(h.c.state.line).toBe("All done. I did 1 step for you.");
-    // No praise after JustAsk's own actions.
-    expect(h.spoken.some((t) => /^(Good|Nice work|That's it)/.test(t))).toBe(false);
-  });
-
-  it("types her words straight in and waits only briefly after typing", async () => {
-    const h = harness([act(1, "I'm typing water bottle in the search box.", { expect: "type", text: "water bottle" }), done], undefined, { actOk: true });
-    await h.c.start("find a water bottle");
-    expect(h.bridge.act).toHaveBeenCalledWith(expect.anything(), { localId: 1, expect: "type", text: "water bottle", option: null });
-    expect(h.bridge.waitForChange).toHaveBeenCalledWith(7);
-  });
-
-  it("Stop during the beat cancels the action", async () => {
-    const h = harness([act(1)], undefined, { actOk: true, timing: { actBeatMs: 50 } });
-    const p = h.c.start("x");
-    await tick(10);
-    expect(h.c.state.phase).toBe("acting");
-    await h.c.stop();
-    await p;
-    expect(h.bridge.act).not.toHaveBeenCalled();
-    expect(h.c.state.phase).toBe("idle");
-  });
-
-  it("falls back to guiding her when the action fails", async () => {
-    const h = harness([act(1, "I'm clicking A."), done], undefined, { actOk: false });
-    await h.c.start("x");
-    expect(h.c.state.phase).toBe("guiding");
-    expect(h.c.state.line).toBe("Please click the one that says A. It has the glowing box.");
-    expect((h.highlights[1] as any).spec.label).toBe("Click here");
-    await h.c.onContent({ type: "ja:step-done", how: "click" }, 0);
-    expect(h.plans[1].history[0]).toBe('On "Page": JustAsk couldn\'t do that, so she will');
-    expect(h.plans[1].history[1]).toMatch(/^On "Page": She did:/);
-    expect(h.c.state.clicks).toBe(1);
-    expect(h.c.state.actions).toBe(0);
-  });
-
-  it("asks before typing words she didn't say; yes types them", async () => {
-    const h = harness([act(1, "I'm typing your message.", { expect: "type", text: "Happy birthday Sam" }), done], undefined, { actOk: true });
-    await h.c.start("write to Sam");
-    expect(h.c.state.phase).toBe("confirming");
-    expect(h.c.state.line).toBe("I'll type: Happy birthday Sam. Okay?");
-    expect(h.bridge.act).not.toHaveBeenCalled();
-    await h.c.input("yes");
-    expect(h.bridge.act).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ text: "Happy birthday Sam" }));
-  });
-
-  it("no to the typed text guides her instead", async () => {
-    const h = harness([act(1, "I'm typing your message.", { expect: "type", text: "Happy birthday Sam" })], undefined, { actOk: true });
-    await h.c.start("write to Sam");
-    await h.c.input("no");
-    expect(h.bridge.act).not.toHaveBeenCalled();
-    expect(h.c.state.phase).toBe("guiding");
-    expect(h.c.state.line).toBe("Click the glowing box, then type your answer.");
-  });
 
   it("does not advance a guided typing step until a scan reports hasValue", async () => {
     const h = harness([guide(1, "Type your name, then tell me when you're done.", { expect: "type" }), step("done", "All done.")], [[typedFrame(false)]]);
@@ -345,69 +221,136 @@ describe("drive mode", () => {
     expect(h.c.state.clicks).toBe(0);
   });
 
-  it("counts guided typing as a step, not a click, in the completion line", async () => {
+  it("counts guided typing as a step, not a click, and says the planner's done line", async () => {
     const h = harness(
-      [guide(1, "Type your name, then tell me when you're done.", { expect: "type" }), act(1), done],
+      [guide(1, "Type your name, then tell me when you're done.", { expect: "type" }), guide(1, "Click Save."), step("done", "All done, you did it!")],
       [[typedFrame(false)]],
-      { actOk: true },
     );
     await h.c.start("fill in the form");
     (h.bridge.scan as any).mockResolvedValue([typedFrame(true)]);
     await h.c.doneTyping();
-    expect(h.c.state.phase).toBe("done");
-    expect(h.c.state.guidedSteps).toBe(1);
-    expect(h.c.state.clicks).toBe(0);
-    expect(h.c.state.actions).toBe(1);
-    expect(h.c.state.line).toBe("All done. I did 1 step for you, and you did 1 step.");
-  });
-
-  it("an answer counts as her words", async () => {
-    const h = harness([step("clarify", "What should it say?"), act(1, "I'm typing it.", { expect: "type", text: "Happy birthday" }), done], undefined, { actOk: true });
-    await h.c.start("write to Sam");
-    await h.c.input("happy birthday");
-    expect(h.bridge.act).toHaveBeenCalled();
-  });
-
-  it("never types personal data, and never says it", async () => {
-    const h = harness([act(1, "I'm typing 602 555 0142 in the phone box.", { expect: "type", text: "602 555 0142" })], undefined, { actOk: true });
-    await h.c.start("my number is 602 555 0142");
-    expect(h.bridge.act).not.toHaveBeenCalled();
     expect(h.c.state.phase).toBe("guiding");
-    expect(h.spoken.some((t) => t.includes("555"))).toBe(false);
+    await h.c.onContent({ type: "ja:step-done", how: "click" }, 0);
+    expect(h.c.state.phase).toBe("done");
+    expect(h.c.state.guidedSteps).toBe(2);
+    expect(h.c.state.clicks).toBe(1);
+    expect(h.c.state.line).toBe("All done, you did it!");
+    expect("actions" in h.c.state).toBe(false);
+  });
+});
+
+describe("guide only (no drive mode)", () => {
+  it("the bridge has no act or openBrowser method", () => {
+    const h = harness([guide(1)]);
+    expect("act" in h.bridge).toBe(false);
+    expect("openBrowser" in h.bridge).toBe(false);
   });
 
-  it("asks first on a money act, then acts", async () => {
-    const h = harness([act(1, "I'm clicking Place order.", { risk: "money" }), done], undefined, { actOk: true });
+  it("a guide step only highlights and speaks; it never changes the page", async () => {
+    const h = harness([guide(1, "Type water bottle in the search box.", { expect: "type" })]);
+    const act = vi.fn();
+    const openBrowser = vi.fn();
+    Object.assign(h.bridge, { act, openBrowser });
+    await h.c.start("find a water bottle");
+    expect(h.c.state.phase).toBe("guiding");
+    expect(h.c.state.line).toBe("Type water bottle in the search box.");
+    expect(h.ops).toEqual(["say:Let me look at the page.", "highlight:Type here", "say:Type water bottle in the search box."]);
+    expect(act).not.toHaveBeenCalled();
+    expect(openBrowser).not.toHaveBeenCalled();
+    expect(h.bridge.waitForChange).not.toHaveBeenCalled();
+  });
+
+  it("an old-style act reply is rejected by checkStep, re-planned once, then blocked", async () => {
+    const stale = { kind: "act", say: "I'm clicking A.", target: 1, expect: "click", option: null, risk: "none" } as unknown as StepResponse;
+    const h = harness([stale, stale]);
+    await h.c.start("x");
+    expect(h.plans).toHaveLength(2);
+    expect(h.c.state.phase).toBe("blocked");
+    expect(h.highlights).toHaveLength(0);
+    expect(h.spoken).not.toContain("I'm clicking A.");
+  });
+
+  it("a session saved mid-action by an older version re-plans as a guide step", async () => {
+    const h = harness([guide(1, "Click A.")]);
+    const old = { ...h.c.state, request: "help me", stepNo: 2, phase: "acting" } as unknown as typeof h.c.state;
+    h.c.restore(old, [], null);
+    await vi.waitFor(() => expect(h.c.state.phase).toBe("guiding"));
+    expect(h.c.state.line).toBe("Click A.");
+  });
+
+  it("does not add a Show me instead note to the history", async () => {
+    const h = harness([guide(1), step("done", "All done.")]);
+    await h.c.start("x");
+    await h.c.onContent({ type: "ja:step-done", how: "click" }, 0);
+    expect(h.plans[0].history).toEqual([]);
+  });
+
+  it("asks first on a money step; yes highlights it for her", async () => {
+    const h = harness([guide(1, "Click Place order.", { risk: "money" })]);
     await h.c.start("buy it");
     expect(h.c.state.phase).toBe("confirming");
-    expect(h.bridge.act).not.toHaveBeenCalled();
+    expect(h.c.state.line).toBe("This step will spend money. Do you want to go ahead?");
     await h.c.input("yes");
-    expect(h.bridge.act).toHaveBeenCalled();
+    expect(h.c.state.phase).toBe("guiding");
+    expect(h.c.state.line).toBe("Click Place order.");
+    expect(h.highlights).toHaveLength(1);
   });
 
-  it("Show me instead turns acts into guide steps and tells Claude", async () => {
-    const h = harness([act(1, "I'm clicking A.")], undefined, { actOk: true, showMeInstead: true });
+  it("clicks that change nothing never switch modes; it keeps guiding", async () => {
+    const h = harness([guide(1), guide(1), guide(1), guide(1)], undefined, { changed: false });
     await h.c.start("x");
-    expect(h.bridge.act).not.toHaveBeenCalled();
+    for (let k = 0; k < 3; k++) await h.c.onContent({ type: "ja:step-done", how: "click" }, 0);
     expect(h.c.state.phase).toBe("guiding");
-    expect(h.plans[0].history[0]).toMatch(/Show me instead/);
-  });
-
-  it("switches to guide mode after 3 clicks that change nothing", async () => {
-    const h = harness([act(1), act(1), act(1), act(1)], undefined, { actOk: true, changed: false });
-    await h.c.start("x");
-    expect(h.bridge.act).toHaveBeenCalledTimes(3);
-    expect(h.c.state.phase).toBe("guiding");
-    expect(h.plans[3].history.join("\n")).toMatch(/from now on she does the steps herself/);
     expect(h.events.filter((e) => e === "no_change").length).toBe(3);
+    expect(h.plans[3].history.join("\n")).not.toMatch(/from now on/);
   });
+});
 
-  it("typing that changes nothing doesn't count toward guide mode", async () => {
-    const t = act(1, "I'm typing it.", { expect: "type", text: "x ray" });
-    const h = harness([t, t, t, t, done], undefined, { actOk: true, changed: false });
-    await h.c.start("x ray");
-    expect(h.bridge.act).toHaveBeenCalledTimes(4);
-    expect(h.c.state.line).toBe("All done. I did 4 steps for you.");
+describe("prompt", () => {
+  it("system prompt is long enough to cache (>512 tokens ~ 2000+ chars)", () => {
+    expect(SYSTEM_PROMPT.length).toBeGreaterThan(3000);
+  });
+  it("wraps page text in page_content and includes options", () => {
+    const f = frame(0, ["Go"]);
+    const { snapshot } = mergeScans([f], "s");
+    const turn = buildTurn("help", [], { steps: ["Click Pharmacy"] }, snapshot);
+    expect(turn).toContain("<page_content>");
+    expect(turn).toContain("Caregiver's recipe");
+    expect(turn).toContain('[1] button: "Go"');
+  });
+  it("is guide only: guide by default, she does it herself, search first, no menu bias, native paragraph", () => {
+    expect(SYSTEM_PROMPT).toContain('"guide" is the usual choice');
+    expect(SYSTEM_PROMPT).toContain("she does it herself");
+    expect(SYSTEM_PROMPT).not.toContain('"act"');
+    expect(SYSTEM_PROMPT).not.toContain('"text":');
+    expect(SYSTEM_PROMPT).not.toMatch(/I'm (clicking|typing|picking|searching|opening)/);
+    expect(SYSTEM_PROMPT).toContain('role "search box"');
+    expect(SYSTEM_PROMPT).toContain("don't open category menus to find a specific item");
+    expect(SYSTEM_PROMPT).not.toContain("prefer guiding her to scroll or open a menu");
+    expect(SYSTEM_PROMPT).toContain("Desktop apps:");
+    expect(SYSTEM_PROMPT).toContain("Click Display in the Settings window.");
+    expect(SYSTEM_PROMPT).toContain('"kind":"guide","say":"Type your password here. I can\'t see it."');
+    expect(SYSTEM_PROMPT).toContain('{"kind":"guide","say":"Type water bottle in the search box.","target":2,"expect":"type","option":null,"risk":"none"}');
+    expect(SYSTEM_PROMPT).toContain('"say":"Press Enter to search.","target":2,"expect":"submit"');
+    expect(SYSTEM_PROMPT).toContain("Pick Arizona in the State box.");
+  });
+  it("marks sensitive fields", () => {
+    const f = frame(0, ["Password"]);
+    f.snapshot.elements[0].field = { kind: "password", hasValue: false, valid: true, sensitive: true };
+    const { snapshot } = mergeScans([f], "s");
+    expect(buildTurn("x", [], null, snapshot)).toContain("{password, empty, sensitive}");
+  });
+  it("names the app and window on native surfaces, and mergeScans keeps them", () => {
+    const f = frame(0, ["Display"]);
+    f.snapshot.surface = "native";
+    f.snapshot.url = "";
+    f.snapshot.app = { name: "Settings", window: "System > Display" };
+    const { snapshot } = mergeScans([f], "s");
+    expect(snapshot.surface).toBe("native");
+    const turn = buildTurn("bigger text", [], null, snapshot);
+    expect(turn).toContain("App: Settings, window: System > Display");
+    expect(turn).not.toContain("Page address");
+    expect(buildTurn("x", [], null, mergeScans([frame(0, ["A"])], "t").snapshot)).toContain("Page address: https://x.test/");
   });
 });
 
@@ -417,7 +360,7 @@ describe("waiting (P1)", () => {
   const AB = [frame(0, ["A", "B"])];
 
   it("watches, and re-plans on page-changed only when the list changed", async () => {
-    const h = harness([wait, act(2, "I'm clicking B."), step("done", "All done.")], [A, A, AB], { actOk: true });
+    const h = harness([wait, guide(2, "Click B."), step("done", "All done.")], [A, A, AB]);
     await h.c.start("post");
     expect(h.c.state.phase).toBe("waiting");
     expect(h.bridge.watch).toHaveBeenCalledWith(true);
@@ -427,7 +370,8 @@ describe("waiting (P1)", () => {
     await h.c.onContent({ type: "ja:page-changed", reason: "mutation" }, 0);
     expect(h.plans.length).toBeGreaterThanOrEqual(2);
     expect(h.bridge.watch).toHaveBeenLastCalledWith(false);
-    expect(h.bridge.act).toHaveBeenCalled();
+    expect(h.c.state.phase).toBe("guiding");
+    expect(h.c.state.line).toBe("Click B.");
   });
 
   it("stays quiet when the re-plan gives the same wait", async () => {
@@ -454,16 +398,16 @@ describe("waiting (P1)", () => {
   });
 
   it("re-scans on a timer while waiting", async () => {
-    const h = harness([wait, act(2)], [A, AB], { timing: { waitRecheckMs: 5 } });
+    const h = harness([wait, guide(2)], [A, AB], { timing: { waitRecheckMs: 5 } });
     await h.c.start("post");
     expect(h.plans.length).toBe(1);
     await tick(60);
     expect(h.plans.length).toBe(2);
-    expect(h.c.state.phase).not.toBe("waiting");
+    expect(h.c.state.phase).toBe("guiding");
   });
 
   it("Stop clears the recheck timer", async () => {
-    const h = harness([wait, act(2)], [A, AB], { timing: { waitRecheckMs: 5 } });
+    const h = harness([wait, guide(2)], [A, AB], { timing: { waitRecheckMs: 5 } });
     await h.c.start("post");
     await h.c.stop();
     await tick(40);
@@ -473,10 +417,8 @@ describe("waiting (P1)", () => {
 });
 
 describe("open_browser (desktop)", () => {
-  const OPENING = "I'm opening your web browser.";
   const GUIDE = "Please open your web browser, like Chrome or Edge. I'll wait.";
   const open = step("open_browser", "Opening Chrome for you now.");
-  const done = step("done", "All done.");
   function nativeFrame(app: string, texts: string[]): FrameScan {
     const f = frame(0, texts);
     f.snapshot.surface = "native";
@@ -488,63 +430,42 @@ describe("open_browser (desktop)", () => {
   const notepad = [nativeFrame("Notepad", ["File", "Edit"])];
   const browser = [nativeFrame("Edge", ["Search box"])];
 
-  it("opens the browser with the fixed line, then re-plans", async () => {
-    const h = harness([open, done], [notepad, browser], { openBrowser: true });
-    await h.c.start("find a recipe for banana bread");
-    expect(h.bridge.openBrowser).toHaveBeenCalledTimes(1);
-    expect(h.ops).toContain(`say:${OPENING}`);
-    expect(h.ops.indexOf(`say:${OPENING}`)).toBeLessThan(h.ops.indexOf("openBrowser"));
-    expect(h.spoken).not.toContain(open.say);
-    expect(h.bridge.waitForChange).toHaveBeenCalledWith(10);
-    expect(h.plans).toHaveLength(2);
-    expect(h.plans[1].history).toEqual(['On "Notepad": JustAsk did: opened her web browser at its start page']);
-    expect(h.events).toEqual(["step_shown", "done"]);
-    expect(h.c.state.phase).toBe("done");
-    expect(h.c.state.actions).toBe(1);
-  });
-
-  it.each([
-    ["the bridge has no openBrowser", {}],
-    ["openBrowser resolves false", { openBrowser: false }],
-    ["openBrowser throws", { openBrowser: "throw" as const }],
-    ["Show me instead is on", { openBrowser: true, showMeInstead: true }],
-  ])("asks her to open it and waits when %s", async (_name, opts) => {
-    const h = harness([open], [notepad], opts);
+  it("asks her to open it and waits with the fixed line; never opens anything", async () => {
+    const h = harness([open], [notepad]);
+    const openBrowser = vi.fn(async () => true);
+    Object.assign(h.bridge, { openBrowser });
     await h.c.start("find a recipe for banana bread");
     expect(h.c.state.phase).toBe("waiting");
     expect(h.c.state.line).toBe(GUIDE);
     expect(h.spoken.at(-1)).toBe(GUIDE);
+    expect(h.spoken).not.toContain(open.say);
     expect(h.bridge.watch).toHaveBeenCalledWith(true);
-    expect(h.c.state.actions).toBe(0);
-    if ("showMeInstead" in opts) expect(h.bridge.openBrowser).not.toHaveBeenCalled();
+    expect(h.events).toEqual(["step_shown"]);
+    expect(openBrowser).not.toHaveBeenCalled();
+    expect(h.highlights).toHaveLength(0);
   });
 
-  it("a second open_browser in the same session asks her instead; a new session acts again", async () => {
-    const h = harness([open, open], [notepad, notepad], { openBrowser: true });
+  it("re-plans when the browser window appears", async () => {
+    const h = harness([open, guide(1, "Click the search box.")], [notepad, browser]);
+    await h.c.start("find a recipe for banana bread");
+    await h.c.onContent({ type: "ja:page-changed", reason: "mutation" }, 0);
+    expect(h.plans).toHaveLength(2);
+    expect(h.c.state.phase).toBe("guiding");
+  });
+
+  it("a second open_browser in the same session waits the same way", async () => {
+    const h = harness([open, open], [notepad, notepad]);
     await h.c.start("find a recipe");
-    expect(h.bridge.openBrowser).toHaveBeenCalledTimes(1);
-    expect(h.c.state.phase).toBe("waiting");
     expect(h.c.state.line).toBe(GUIDE);
     await h.c.stop();
     await h.c.start("find a recipe");
-    expect(h.bridge.openBrowser).toHaveBeenCalledTimes(2);
+    expect(h.c.state.phase).toBe("waiting");
+    expect(h.c.state.line).toBe(GUIDE);
   });
 
-  it("Stop during the beat cancels opening the browser", async () => {
-    const h = harness([open], [notepad], { openBrowser: true, timing: { actBeatMs: 50 } });
-    const p = h.c.start("x");
-    await tick(10);
-    expect(h.c.state.phase).toBe("acting");
-    expect(h.c.state.line).toBe(OPENING);
-    await h.c.stop();
-    await p;
-    expect(h.bridge.openBrowser).not.toHaveBeenCalled();
-    expect(h.c.state.phase).toBe("idle");
-  });
-
-  it("the prompt teaches open_browser with no web address", () => {
+  it("the prompt teaches open_browser as asking her, with no web address", () => {
     expect(SYSTEM_PROMPT).toContain('"open_browser": only when the turn shows "App" and "window"');
-    expect(SYSTEM_PROMPT).toContain('{"kind":"open_browser","say":"I\'m opening your web browser.","target":null,"expect":null,"option":null,"text":null,"risk":"none"}');
+    expect(SYSTEM_PROMPT).toContain('{"kind":"open_browser","say":"Please open your web browser, like Chrome or Edge.","target":null,"expect":null,"option":null,"risk":"none"}');
   });
 });
 

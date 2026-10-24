@@ -1,7 +1,7 @@
 import { browser } from "wxt/browser";
 import { defineContentScript } from "wxt/utils/define-content-script";
 import { PageAgent } from "@justask/page-agent";
-import type { ActResult, FromContent, ScanReply, ToContent } from "@justask/shared";
+import type { FromContent, ScanReply, ToContent } from "@justask/shared";
 import { shadowRootGetter } from "../platform";
 
 // Injected on demand with scripting.executeScript into every frame of the session tab.
@@ -42,11 +42,6 @@ export default defineContentScript({
           agent.pulse();
           sendResponse(true);
           return;
-        case "ja:act": {
-          const result: ActResult = agent.act(msg.spec);
-          sendResponse(result);
-          return;
-        }
         case "ja:watch":
           agent.watch(msg.on);
           sendResponse(true);

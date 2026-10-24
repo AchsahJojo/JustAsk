@@ -5,4 +5,3 @@ export * from "./overlay";
 export * from "./agent";
 export * from "./visibility";
 export * from "./sensitive";
-export * from "./act";

@@ -46,7 +46,7 @@ export function AccountStep({ s, onChange, linkCode, onLinkDone }: { s: Settings
       const { token } = await backend.createSelf(s.convexUrl, name, currentDevice());
       await connected(token, name);
       // Her account starts with what she already chose on this browser.
-      await pushPrefs({ voice: s.voice, rate: s.rate, consent: s.consent, showMeInstead: s.showMeInstead });
+      await pushPrefs({ voice: s.voice, rate: s.rate, consent: s.consent });
     } catch (e) {
       setMsg(friendlyError(e));
     } finally {

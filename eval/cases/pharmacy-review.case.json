@@ -9,10 +9,6 @@
   ],
   "expected": {
     "kind": "guide",
-    "allowKinds": [
-      "guide",
-      "act"
-    ],
     "targetText": "Send my refill request",
     "forbidTargetText": [
       "Cancel"

@@ -1,5 +1,7 @@
 # JustAsk — Refined Plan 2
 
+> Superseded for drive mode by docs/refined-plan-3.md (guide only).
+
 ## Context
 
 This builds on `docs/refined-plan-1.md` and states only what changes. The system design these changes fit into is in `docs/ARCHITECTURE.md`, and section numbers like "§10" below refer to that document.

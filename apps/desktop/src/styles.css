@@ -134,4 +134,3 @@ body { font-size: 20px; }
 .big-code { font-size: 56px; font-weight: 800; letter-spacing: 0.18em; text-align: center; font-variant-numeric: tabular-nums; margin: 4px 0; }
 .error { margin: 0; font-size: 19px; color: #8a1f0f; background: #fde7e2; border-radius: 12px; padding: 12px 14px; }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .error { color: #ffd2c8; background: #46201a; } }
-.acting { font-size: 22px; font-weight: 700; color: var(--accent-ink); margin: 0; }

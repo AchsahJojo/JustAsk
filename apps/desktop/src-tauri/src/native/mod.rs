@@ -1,5 +1,7 @@
 //! Fixed command surface (frozen after Wave 0, docs/refined-plan-2.md).
 //! Windows uses UI Automation; the command and payload shapes match `@justask/shared`.
+//! Guide only: these commands read the screen and draw a ring. None of them clicks, types,
+//! chooses, scrolls, focuses or opens anything for her.
 
 use serde_json::Value;
 
@@ -11,7 +13,7 @@ use self::windows as platform;
 
 #[cfg(not(windows))]
 mod platform {
-    use serde_json::{json, Value};
+    use serde_json::Value;
 
     pub fn scan_foreground(_app: tauri::AppHandle) -> Result<Value, String> {
         Err("native UI Automation is available on Windows only".into())
@@ -20,15 +22,9 @@ mod platform {
     pub fn highlight(_app: tauri::AppHandle, _local_id: u32, _label: String) -> bool {
         false
     }
-    pub fn act(_spec: Value) -> Value {
-        json!({"ok": false})
-    }
     pub fn clear() {}
     pub fn pulse() {}
     pub fn wait_for_change(_timeout_ms: u64) -> bool {
-        false
-    }
-    pub fn open_browser() -> bool {
         false
     }
 }
@@ -60,14 +56,6 @@ pub async fn highlight(app: tauri::AppHandle, local_id: u32, label: String) -> b
         .unwrap_or(false)
 }
 
-/// Perform one action through accessibility patterns. Must refuse secure fields.
-#[tauri::command]
-pub async fn act(spec: Value) -> Value {
-    tauri::async_runtime::spawn_blocking(move || platform::act(spec))
-        .await
-        .unwrap_or_else(|_| serde_json::json!({ "ok": false }))
-}
-
 #[tauri::command]
 pub fn clear() {
     platform::clear()
@@ -86,23 +74,6 @@ pub async fn wait_for_change(timeout_ms: u64) -> bool {
         .unwrap_or(false)
 }
 
-/// Open her default browser at its own start page. Takes no arguments on purpose: JustAsk
-/// never opens a URL that came from the AI. True when the browser process started.
-#[tauri::command]
-pub async fn open_browser() -> bool {
-    tauri::async_runtime::spawn_blocking(platform::open_browser)
-        .await
-        .unwrap_or(false)
-}
-
 pub fn handlers() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + 'static {
-    tauri::generate_handler![
-        scan_foreground,
-        highlight,
-        act,
-        clear,
-        pulse,
-        wait_for_change,
-        open_browser
-    ]
+    tauri::generate_handler![scan_foreground, highlight, clear, pulse, wait_for_change]
 }
