@@ -18,6 +18,8 @@ export interface SessionView {
   pauseReason: "other-tab" | "tab-closed" | "cant-see" | "no-access" | null;
   taskId: string | null;
   clicks: number;
+  /** On a typing step into a search box: the words "Type it for me" would fill. Null otherwise. */
+  fill: string | null;
 }
 
 export interface PageBridge {
@@ -28,6 +30,8 @@ export interface PageBridge {
   pulse(ref: TargetRef): Promise<void>;
   /** Resolves true when the page navigated or the DOM settled after changing. */
   waitForChange(timeoutMs: number): Promise<boolean>;
+  /** "Type it for me": fill the highlighted search box. The page re-checks it is a search box. */
+  fill(ref: TargetRef, text: string): Promise<boolean>;
 }
 
 export interface Planner {
@@ -79,6 +83,7 @@ const INITIAL: SessionView = {
   pauseReason: null,
   taskId: null,
   clicks: 0,
+  fill: null,
 };
 
 /**
@@ -127,6 +132,7 @@ export class SessionController {
 
   private set(patch: Partial<SessionView>) {
     this.view = { ...this.view, ...patch };
+    if (this.view.phase !== "guiding" && this.view.fill !== null) this.view = { ...this.view, fill: null };
     this.deps.store?.save(this.view, { history: this.history, recipe: this.recipe });
     for (const fn of this.listeners) fn(this.view);
   }
@@ -227,6 +233,15 @@ export class SessionController {
       return;
     }
     await this.showGuide(this.step);
+  }
+
+  /** She pressed "Type it for me". The page fills the box; its change event finishes the step as typed. */
+  async fillForMe(): Promise<boolean> {
+    const text = this.view.fill;
+    if (this.view.phase !== "guiding" || !this.target || !text) return false;
+    const ok = await this.deps.bridge.fill(this.target, text);
+    if (ok) this.deps.events?.log("assist_fill");
+    return ok;
   }
 
   doneTyping() {
@@ -486,7 +501,8 @@ export class SessionController {
     const line = step.expect === "type" && el?.field?.kind === "password" && !/can'?t see/i.test(step.say) ? `${step.say} I can't see it.` : step.say;
     this.lostCount = 0;
     this.say(line);
-    this.set({ phase: "guiding", line, expect: step.expect, risk: step.risk, note: "" });
+    const fill = step.expect === "type" && el?.field?.kind === "search" ? step.fill : null;
+    this.set({ phase: "guiding", line, expect: step.expect, risk: step.risk, note: "", fill });
   }
 
   private async block(line: string, speak = true) {

@@ -87,6 +87,7 @@ function PersonPage({ id }: { id: Id<"seniors"> }) {
           </div>
           <div className="col side">
             <Sharing displayName={p.displayName} consent={p.consent} stats={p.stats} />
+            <TypingHelp seniorId={p.id} displayName={p.displayName} on={p.assistTyping} setBy={p.assistSetBy} />
             <section className="card">
               <h2>Computers</h2>
               <p className="muted small">
@@ -408,6 +409,44 @@ function Sharing({
             </div>
           )}
         </dl>
+      )}
+    </section>
+  );
+}
+
+/** "Type it for me" on search boxes. Either she or a linked helper can change it. */
+function TypingHelp({ seniorId, displayName, on, setBy }: { seniorId: Id<"seniors">; displayName: string; on: boolean | null; setBy: "self" | "caregiver" | null }) {
+  const setAssist = useMutation(api.people.setAssist);
+  const [error, setError] = useState("");
+  const toggle = async () => {
+    setError("");
+    try {
+      await setAssist({ seniorId, on: !on });
+    } catch (e) {
+      setError(errorText(e));
+    }
+  };
+  return (
+    <section className="card">
+      <h2>Typing help</h2>
+      <label className="check">
+        <input type="checkbox" checked={on === true} onChange={() => void toggle()} />
+        <span>
+          <strong>Type searches for {displayName}</strong>
+          <span className="muted small"> JustAsk offers a “Type it for me” button on search boxes. It never types passwords or personal details, and {displayName} still presses Search.</span>
+        </span>
+      </label>
+      <p className="muted small">
+        {on === null
+          ? `${displayName} hasn't chosen yet. JustAsk will ask them the first time they search.`
+          : setBy === "caregiver"
+            ? `Set by a helper. ${displayName} can change it in Settings.`
+            : `${displayName} chose this. You can change it if typing is hard for them.`}
+      </p>
+      {error && (
+        <p className="error" role="alert">
+          {error}
+        </p>
       )}
     </section>
   );

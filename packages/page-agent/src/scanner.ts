@@ -153,17 +153,40 @@ function clip(s: string): string {
 
 export function fieldKind(el: Element): FieldKind | null {
   if (el instanceof HTMLSelectElement) return "select";
-  if (el instanceof HTMLTextAreaElement) return "textarea";
+  if (el instanceof HTMLTextAreaElement) return isSearchBox(el) ? "search" : "textarea";
   if (el instanceof HTMLInputElement) {
     const t = el.type;
     if (["submit", "button", "reset", "image", "range", "color", "hidden"].includes(t)) return null;
     if (el.autocomplete === "one-time-code") return "otp";
     if (["password", "email", "number", "tel", "search", "url", "date", "time", "month", "checkbox", "radio", "file"].includes(t)) return t as FieldKind;
     if (t === "datetime-local" || t === "week") return "date";
-    return "text";
+    return isSearchBox(el) ? "search" : "text";
   }
   if ((el as HTMLElement).isContentEditable || el.getAttribute("role") === "textbox") return "contenteditable";
   return null;
+}
+
+const SEARCH_HINT = /\b(search|query|keywords?|find)\b/i;
+const SEARCH_NAMES = new Set(["q", "s", "k", "query", "search", "field-keywords", "search_query", "keyword", "keywords"]);
+// Autocomplete tokens for personal data. A box with one of these is never a search box.
+const PERSONAL = /\b(name|email|tel|username|password|one-time-code|address|postal|country|cc-|bday|sex|organization|street)/i;
+
+/**
+ * A plain search box: the only kind of box "Type it for me" may fill. Checked from attributes
+ * and structure, never from the value. Anything that might hold personal data is excluded.
+ */
+export function isSearchBox(el: Element): boolean {
+  if (el instanceof HTMLInputElement) {
+    if (el.type === "search") return !el.closest("form")?.querySelector('input[type="password"]');
+    if (el.type !== "text") return false;
+  } else if (!(el instanceof HTMLTextAreaElement)) return false;
+  if (PERSONAL.test(el.getAttribute("autocomplete") ?? "")) return false;
+  if (el.closest("form")?.querySelector('input[type="password"]')) return false;
+  if (el.getAttribute("role") === "searchbox") return true;
+  if (el.closest('[role="search"], search')) return true;
+  if (SEARCH_NAMES.has((el.getAttribute("name") ?? "").toLowerCase())) return true;
+  const hints = ["id", "aria-label", "placeholder", "title"].map((a) => el.getAttribute(a) ?? "").join(" ");
+  return SEARCH_HINT.test(hints.replace(/[-_]/g, " "));
 }
 
 /** `hasValue` is a local boolean only. The value never leaves this function. */

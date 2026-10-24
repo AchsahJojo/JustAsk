@@ -16,6 +16,8 @@ export const StepResponse = z
     target: z.number().int().nullable(),
     expect: Expect.nullable(),
     option: z.string().nullable(),
+    /** Search boxes only: the words to search for, so "Type it for me" can fill them. Never submitted. */
+    fill: z.string().nullable(),
     risk: Risk,
   })
   .strict();
@@ -69,6 +71,12 @@ export function checkStep(step: StepResponse, snapshot: PageSnapshot): StepCheck
         return { ok: false, reason: `option "${step.option}" is not one of the target's options` };
       }
     }
+  }
+  if (step.fill !== null) {
+    const el = step.target !== null ? snapshot.elements.find((e) => e.n === step.target) : undefined;
+    if (step.kind !== "guide" || step.expect !== "type" || el?.field?.kind !== "search") return { ok: false, reason: "fill is only for typing into a search box; use null" };
+    const words = step.fill.trim();
+    if (!words || words.length > 100 || /[\r\n]/.test(words)) return { ok: false, reason: "fill must be a short one-line search, at most 100 characters" };
   }
   if (step.kind !== "guide" && step.target !== null && step.kind !== "clarify") {
     return { ok: false, reason: `${step.kind} must not have a target` };

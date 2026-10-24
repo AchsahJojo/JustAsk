@@ -73,7 +73,7 @@ export class Backend {
     return client.mutation("devices:redeemCode" as never, { code, ...(s.deviceToken ? { token: s.deviceToken } : {}) } as never);
   }
 
-  async me(): Promise<{ displayName: string; consent: Settings["consent"]; helpers: Helper[] } | null> {
+  async me(): Promise<{ displayName: string; consent: Settings["consent"]; helpers: Helper[]; assistTyping: boolean | null; assistSetBy: "self" | "caregiver" | null } | null> {
     const c = await this.c();
     if (!c) return null;
     try {
@@ -87,6 +87,21 @@ export class Backend {
     const c = await this.c();
     if (!c) return;
     await c.client.mutation("devices:setDisplayName" as never, { token: c.token, displayName } as never).catch(() => {});
+  }
+
+  /** Save "Type it for me" locally (works with no account) and on her profile, where a helper can see it. */
+  async setAssist(on: boolean) {
+    await saveSettings({ assistTyping: on });
+    const c = await this.c();
+    if (!c) return;
+    await c.client.mutation("devices:setAssist" as never, { token: c.token, on } as never).catch(() => {});
+  }
+
+  /** Pull the profile's "Type it for me" choice (a helper may have changed it). */
+  async syncAssist(): Promise<boolean | null> {
+    const me = await this.me();
+    if (me && me.assistTyping !== null && me.assistTyping !== (await getSettings()).assistTyping) await saveSettings({ assistTyping: me.assistTyping });
+    return (await getSettings()).assistTyping;
   }
 
   /** Stop working with one helper, or all of them. This computer keeps its own account. */

@@ -1,5 +1,5 @@
 import type { FrameScan, FromContent, HighlightSpec } from "@justask/shared";
-import { CLICKABLE_SELECTOR, closestComposed, collectComposed, elementParts, fieldKind, hasValue, isVisible, mainHeading, pageText, scanDocument, strippedUrl, type ScanOptions } from "./scanner";
+import { CLICKABLE_SELECTOR, closestComposed, collectComposed, elementParts, fieldKind, hasValue, isSearchBox, isVisible, mainHeading, pageText, scanDocument, strippedUrl, type ScanOptions } from "./scanner";
 import { fingerprint, normalize, roleTextKey } from "./fingerprint";
 import { Overlay } from "./overlay";
 
@@ -125,6 +125,26 @@ export class PageAgent {
 
   pulse() {
     this.overlay.pulse();
+  }
+
+  /**
+   * "Type it for me": put `text` into the highlighted search box. Only on a typing step, only in a
+   * search box (checked again here, never trusted from the message), and it never submits. The
+   * normal change listener then finishes the step. Returns false when not allowed.
+   */
+  fill(text: string): boolean {
+    const el = this.target;
+    if (!el || !this.spec || this.spec.expect !== "type" || this.done || !isSearchBox(el)) return false;
+    const box = el as HTMLInputElement | HTMLTextAreaElement;
+    const words = text.replace(/\s+/g, " ").trim().slice(0, 100);
+    if (!words) return false;
+    box.focus();
+    // The prototype setter, so frameworks that track `value` (React) see the change.
+    const proto = box instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
+    Object.getOwnPropertyDescriptor(proto, "value")?.set?.call(box, words);
+    box.dispatchEvent(new InputEvent("input", { bubbles: true, composed: true, inputType: "insertText", data: words }));
+    box.dispatchEvent(new Event("change", { bubbles: true }));
+    return true;
   }
 
   clear() {

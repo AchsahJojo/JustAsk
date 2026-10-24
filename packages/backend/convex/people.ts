@@ -97,6 +97,8 @@ export const get = query({
       devices,
       otherHelpers,
       consent: s.consent,
+      assistTyping: s.assistTyping ?? null,
+      assistSetBy: s.assistSetBy ?? null,
       tasks: tasks.map((t) => ({ id: t._id, title: t.title, spokenPrompt: t.spokenPrompt, recipe: t.recipe ?? null, createdAt: t.createdAt, status: statusFor(t, s), canCancel: t.status === "pending" })),
       stats,
     };
@@ -113,6 +115,15 @@ export const update = mutation({
     const connected = !!(await ctx.db.query("devices").withIndex("by_senior", (q) => q.eq("seniorId", args.seniorId)).first());
     await ctx.db.patch(args.seniorId, { name, ...(connected ? {} : { displayName: clean(args.displayName, 40) || name.split(" ")[0] }) });
     await ctx.db.patch(link._id, { relation: clean(args.relation, 40) });
+  },
+});
+
+/** Caregiver: turn "Type it for me" on or off for someone they help (they may know typing is hard for them). */
+export const setAssist = mutation({
+  args: { seniorId: v.id("seniors"), on: v.boolean() },
+  handler: async (ctx, { seniorId, on }) => {
+    await requireLink(ctx, seniorId);
+    await ctx.db.patch(seniorId, { assistTyping: on, assistSetBy: "caregiver" });
   },
 });
 

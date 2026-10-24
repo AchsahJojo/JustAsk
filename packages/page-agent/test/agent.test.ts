@@ -122,3 +122,30 @@ describe("lost target", () => {
     agent.destroy();
   });
 });
+
+describe("fill (Type it for me)", () => {
+  it("fills the highlighted search box, finishes the step as typed, and never submits", async () => {
+    const { agent, sent, scan } = setup(`<main><form><input type="search" aria-label="Search" name="q"><button>Go</button></form></main>`);
+    let submitted = false;
+    document.querySelector("form")!.addEventListener("submit", () => (submitted = true));
+    const n = scan.snapshot.elements.find((e) => e.field?.kind === "search")!.n;
+    agent.highlight({ localId: n, expect: "type", option: null, label: "Type here" });
+    expect(agent.fill("  air   fryer ")).toBe(true);
+    await flush();
+    expect((document.querySelector("input") as HTMLInputElement).value).toBe("air fryer");
+    expect(sent).toContainEqual({ type: "ja:step-done", how: "typed" });
+    expect(submitted).toBe(false);
+  });
+
+  it("refuses non-search boxes, click steps, and when nothing is highlighted", () => {
+    const { agent, scan } = setup(`<main><label>Email <input type="email" name="email"></label><input type="search" aria-label="Search"></main>`);
+    expect(agent.fill("x")).toBe(false);
+    const email = scan.snapshot.elements.find((e) => e.field?.kind === "email")!.n;
+    agent.highlight({ localId: email, expect: "type", option: null, label: "Type here" });
+    expect(agent.fill("me@example.com")).toBe(false);
+    expect((document.querySelector('input[type="email"]') as HTMLInputElement).value).toBe("");
+    const search = scan.snapshot.elements.find((e) => e.field?.kind === "search")!.n;
+    agent.highlight({ localId: search, expect: "click", option: null, label: "Click here" });
+    expect(agent.fill("x")).toBe(false);
+  });
+});

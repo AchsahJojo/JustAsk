@@ -38,6 +38,9 @@ export default defineContentScript({
           agent.clear();
           sendResponse(true);
           return;
+        case "ja:fill":
+          sendResponse(agent.fill(msg.text));
+          return;
         case "ja:pulse":
           agent.pulse();
           sendResponse(true);

@@ -122,3 +122,4 @@ input:focus { border-color: var(--ink); outline: none; }
 .done-list[open] summary { margin-bottom: 8px; }
 .soft.small, .small { font-size: 15px; }
 .btn.small { font-size: 16px; padding: 8px 14px; }
+.card.assist-ask { border-color: var(--accent); }

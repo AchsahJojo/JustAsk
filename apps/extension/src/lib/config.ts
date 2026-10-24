@@ -7,6 +7,8 @@ export interface Settings {
   displayName: string;
   setupDone: boolean;
   consent: { notifyOnComplete: boolean; notifyOnStuck: boolean };
+  /** "Type it for me" on search boxes. Null until she (or her helper) chooses. */
+  assistTyping: boolean | null;
   voice: "browser" | "cartesia";
   rate: number;
 }
@@ -18,6 +20,7 @@ export const DEFAULTS: Settings = {
   displayName: "",
   setupDone: false,
   consent: { notifyOnComplete: false, notifyOnStuck: false },
+  assistTyping: null,
   voice: "browser",
   rate: 0.9,
 };

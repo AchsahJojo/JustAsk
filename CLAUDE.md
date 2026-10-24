@@ -1,6 +1,6 @@
 # JustAsk — rules for building with Claude Code
 
-- Guide mode only. JustAsk never clicks, types or submits for the user.
+- Guide mode only. JustAsk never clicks, types or submits for the user. One opt-in exception, "Type it for me": when she (or a linked caregiver) has turned it on and she presses the button, JustAsk may fill a search box (`isSearchBox` in `packages/page-agent`, re-checked in the page) with the step's `fill` words. Never another kind of box, never personal details, never a submit.
 - Claude returns an element **number** for the current `snapshotId`, never a selector.
 - No API keys in extension or web code. Secrets live only in Convex env.
 - No site-specific code. Fixtures (`apps/fixtures`, `apps/fixtures/mock-script.json`) are tests, not special cases.

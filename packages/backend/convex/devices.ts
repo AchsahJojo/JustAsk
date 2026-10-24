@@ -132,6 +132,8 @@ export const redeemCode = mutation({
         await ctx.db.patch(own._id, {
           name: own.origin === "self" ? theirs.name || own.name : own.name || theirs.name,
           displayName: own.displayName || theirs.displayName,
+          // A choice the caregiver made while setting up carries over unless she already chose.
+          ...(own.assistTyping === undefined && theirs.assistTyping !== undefined ? { assistTyping: theirs.assistTyping, assistSetBy: theirs.assistSetBy } : {}),
         });
       }
     }
@@ -154,7 +156,7 @@ export const me = query({
         return { id: l.caregiverId, name: cg?.name ?? "Your helper" };
       }),
     );
-    return { displayName: senior.displayName, consent: senior.consent, helpers };
+    return { displayName: senior.displayName, consent: senior.consent, helpers, assistTyping: senior.assistTyping ?? null, assistSetBy: senior.assistSetBy ?? null };
   },
 });
 
@@ -166,6 +168,15 @@ export const setDisplayName = mutation({
     const senior = await ctx.db.get(device.seniorId);
     if (!senior) throw new Error("not paired");
     await ctx.db.patch(senior._id, { displayName: dn, ...(senior.name ? {} : { name: dn }) });
+  },
+});
+
+/** Extension: she turns "Type it for me" on or off (asked at setup or at her first search box). */
+export const setAssist = mutation({
+  args: { token: v.string(), on: v.boolean() },
+  handler: async (ctx, { token, on }) => {
+    const device = await requireDevice(ctx, token);
+    await ctx.db.patch(device.seniorId, { assistTyping: on, assistSetBy: "self" });
   },
 });
 

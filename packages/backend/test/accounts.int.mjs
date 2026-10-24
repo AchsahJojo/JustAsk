@@ -203,4 +203,24 @@ ok("activity mark-all-read");
   ok("task list: started task stays open after closing; I did it → done + note; removed tasks leave");
 }
 
+// --- "Type it for me": unset until chosen; she or a linked caregiver can change it ---
+{
+  const jo = await caregiver("Jo");
+  const { seniorId, code } = await jo.c.mutation("devices:createSeniorWithCode", { name: "Ruth Ng", displayName: "Gran", relation: "Grandmother" });
+  await jo.c.mutation("people:setAssist", { seniorId, on: true }); // set while setting up, before she connects
+  const { token: solo3 } = await anon.mutation("devices:registerStandalone", { displayName: "Ruth" });
+  assert.equal((await anon.query("devices:me", { token: solo3 })).assistTyping, null, "not asked yet");
+  const r = await anon.mutation("devices:redeemCode", { code, token: solo3 });
+  assert.equal(r.ok, true);
+  let me = await anon.query("devices:me", { token: solo3 });
+  assert.deepEqual([me.assistTyping, me.assistSetBy], [true, "caregiver"], "caregiver's choice carries over on merge");
+  await anon.mutation("devices:setAssist", { token: solo3, on: false });
+  const id = (await jo.c.query("people:list", {}))[0].id;
+  const p = await jo.c.query("people:get", { seniorId: id });
+  assert.deepEqual([p.assistTyping, p.assistSetBy], [false, "self"]);
+  const other = await caregiver("Stranger");
+  await assert.rejects(other.c.mutation("people:setAssist", { seniorId: id, on: true }), /not your senior/);
+  ok("assist: unset by default, caregiver choice carries over, she can turn it off, strangers can't change it");
+}
+
 console.log("\nall account checks passed");

@@ -24,6 +24,7 @@ export type ToContent =
   | { type: "ja:scan"; context: string[] }
   | { type: "ja:highlight"; spec: HighlightSpec }
   | { type: "ja:clear" }
+  | { type: "ja:fill"; text: string }
   | { type: "ja:pulse" }
   | { type: "ja:banner"; text: string }
   | { type: "ja:wait-change"; timeoutMs: number };

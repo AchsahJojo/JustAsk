@@ -99,6 +99,10 @@ export class ExtensionBridge implements PageBridge {
     await Promise.all(frames.map((f) => this.send({ type: "ja:clear" }, f.frameId, 500, null)));
   }
 
+  async fill(ref: TargetRef, text: string): Promise<boolean> {
+    return this.send<boolean>({ type: "ja:fill", text }, ref.frameId, 1000, false);
+  }
+
   async pulse(ref: TargetRef): Promise<void> {
     await this.send({ type: "ja:pulse" }, ref.frameId, 500, null);
   }

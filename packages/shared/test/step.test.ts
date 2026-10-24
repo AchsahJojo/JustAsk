@@ -28,14 +28,14 @@ const snap: PageSnapshot = {
   ],
 };
 
-const base = { kind: "guide", say: "Click Go.", target: 1, expect: "click", option: null, risk: "none" } as const;
+const base = { kind: "guide", say: "Click Go.", target: 1, expect: "click", option: null, fill: null, risk: "none" } as const;
 
 describe("StepResponse JSON Schema", () => {
   it("has every field required, nullable via anyOf, additionalProperties false", () => {
     const s = stepJsonSchema() as any;
     expect(s.type).toBe("object");
     expect(s.additionalProperties).toBe(false);
-    expect([...s.required].sort()).toEqual(["expect", "kind", "option", "risk", "say", "target"]);
+    expect([...s.required].sort()).toEqual(["expect", "fill", "kind", "option", "risk", "say", "target"]);
     expect(JSON.stringify(s.properties.target)).toContain('"null"');
     expect(JSON.stringify(s)).not.toMatch(/minimum|maximum|minLength|maxLength/);
   });
@@ -65,5 +65,28 @@ describe("checkStep", () => {
   it("done must not have a target", () => {
     expect(checkStep({ ...base, kind: "done", target: 1, expect: null }, snap).ok).toBe(false);
     expect(checkStep({ ...base, kind: "done", target: null, expect: null }, snap).ok).toBe(true);
+  });
+});
+
+describe("fill (Type it for me)", () => {
+  const withSearch: PageSnapshot = {
+    ...snap,
+    elements: [
+      ...snap.elements,
+      { n: 3, role: "textbox", text: "", label: "Search", nearby: null, color: null, big: false, disabled: false, inModal: false, inViewport: true, region: "header", field: { kind: "search", hasValue: false, valid: true } },
+      { n: 4, role: "textbox", text: "", label: "Email", nearby: null, color: null, big: false, disabled: false, inModal: false, inViewport: true, region: "main", field: { kind: "email", hasValue: false, valid: true } },
+    ],
+  };
+  const typing = { ...base, expect: "type" as const };
+  it("is allowed only when typing into a search box", () => {
+    expect(checkStep({ ...typing, target: 3, fill: "air fryer" }, withSearch).ok).toBe(true);
+    expect(checkStep({ ...typing, target: 4, fill: "me@x.com" }, withSearch).ok).toBe(false);
+    expect(checkStep({ ...base, target: 3, fill: "air fryer" }, withSearch).ok).toBe(false); // click, not type
+    expect(checkStep({ ...base, kind: "done", target: null, expect: null, fill: "x" }, withSearch).ok).toBe(false);
+  });
+  it("must be one short line", () => {
+    expect(checkStep({ ...typing, target: 3, fill: "  " }, withSearch).ok).toBe(false);
+    expect(checkStep({ ...typing, target: 3, fill: "a".repeat(101) }, withSearch).ok).toBe(false);
+    expect(checkStep({ ...typing, target: 3, fill: "air\nfryer" }, withSearch).ok).toBe(false);
   });
 });

@@ -22,6 +22,9 @@ export default defineSchema({
     consent: v.object({ notifyOnComplete: v.boolean(), notifyOnStuck: v.boolean() }),
     origin: v.optional(v.union(v.literal("self"), v.literal("caregiver"))),
     createdAt: v.optional(v.number()),
+    // "Type it for me" on search boxes. Unset until she (or a linked caregiver) chooses.
+    assistTyping: v.optional(v.boolean()),
+    assistSetBy: v.optional(v.union(v.literal("self"), v.literal("caregiver"))),
   }),
   careLinks: defineTable({ caregiverId: v.id("caregivers"), seniorId: v.id("seniors"), relation: v.string(), linkedAt: v.optional(v.number()) })
     .index("by_caregiver", ["caregiverId"])

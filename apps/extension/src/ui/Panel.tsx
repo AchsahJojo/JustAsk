@@ -23,6 +23,7 @@ export function Panel({ pinnedTabId }: { pinnedTabId: number | null }) {
   const [tasks, setTasks] = useState<TaskList>({ open: [], done: [] });
   const [resume, setResume] = useState<{ request: string; taskId: string | null } | null>(null);
   const [access, setAccess] = useState(true);
+  const [assist, setAssist] = useState<boolean | null>(null);
   const captionRef = useRef<HTMLParagraphElement>(null);
 
   // Host access is optional and user-revocable. Check it on open and whenever it changes.
@@ -41,7 +42,14 @@ export function Panel({ pinnedTabId }: { pinnedTabId: number | null }) {
     host.speech.onSpeaking = setSpeaking;
     const off = host.controller.subscribe(setView);
     void host.init();
-    void getSettings().then((s) => setName(s.displayName));
+    void getSettings().then((s) => {
+      setName(s.displayName);
+      setAssist(s.assistTyping);
+    });
+    const onSettings = (changes: Record<string, unknown>) => {
+      if ("settings" in changes) void getSettings().then((s) => setAssist(s.assistTyping));
+    };
+    browser.storage.onChanged.addListener(onSettings);
     void browser.storage.local.get("resume").then((r) => {
       const res = (r as { resume?: { request: string; taskId: string | null } }).resume;
       if (res && host.controller.state.phase === "idle") setResume(res);
@@ -50,12 +58,14 @@ export function Panel({ pinnedTabId }: { pinnedTabId: number | null }) {
     const poll = async () => {
       const list = await backend.taskList();
       if (list) setTasks(list);
+      void backend.syncAssist(); // a helper may have turned "Type it for me" on or off
     };
     void poll();
     const iv = setInterval(poll, 15_000);
     return () => {
       off();
       clearInterval(iv);
+      browser.storage.onChanged.removeListener(onSettings);
     };
   }, [host]);
 
@@ -100,6 +110,17 @@ export function Panel({ pinnedTabId }: { pinnedTabId: number | null }) {
   const finishTask = (t: Task, status: "done" | "dismissed") => {
     setTasks((ts) => ({ open: ts.open.filter((x) => x.id !== t.id), done: status === "done" ? [{ ...t, status: "done" }, ...ts.done] : ts.done }));
     void backend.setTaskStatus(t.id, status);
+  };
+
+  const typeForMe = async () => {
+    setNote("");
+    if (!(await host.controller.fillForMe())) setNote("I couldn't type in that box. Please type it yourself.");
+  };
+
+  const chooseAssist = async (on: boolean) => {
+    setAssist(on);
+    await backend.setAssist(on);
+    if (on) await typeForMe();
   };
 
   const onTyped = (e: FormEvent) => {
@@ -196,6 +217,21 @@ export function Panel({ pinnedTabId }: { pinnedTabId: number | null }) {
               </div>
             </div>
 
+            {phase === "guiding" && view.fill && assist === null && (
+              <section className="card assist-ask" aria-live="polite">
+                <p className="task-title">Want me to type searches for you?</p>
+                <p className="soft">I'll put “{view.fill}” in the search box. You still press Search yourself. You can change this in Settings.</p>
+                <div className="row">
+                  <button className="btn primary" onClick={() => void chooseAssist(true)}>
+                    Yes, type for me
+                  </button>
+                  <button className="btn ghost" onClick={() => void chooseAssist(false)}>
+                    No thanks
+                  </button>
+                </div>
+              </section>
+            )}
+
             {phase === "guiding" && <p className="hint">{view.expect === "type" ? "Type in the box with the glowing outline. I can't see what you type." : "Look for the glowing box. Take your time."}</p>}
             {phase === "done" && <p className="hint big">You made {view.clicks} {view.clicks === 1 ? "click" : "clicks"} yourself.</p>}
 
@@ -264,6 +300,11 @@ export function Panel({ pinnedTabId }: { pinnedTabId: number | null }) {
             </button>
           ) : (
             <>
+              {phase === "guiding" && view.fill && assist === true && (
+                <button className="btn primary huge" onClick={() => void typeForMe()}>
+                  Type “{view.fill}” for me
+                </button>
+              )}
               {phase === "guiding" && view.expect === "type" && (
                 <button className="btn primary huge" onClick={() => host.controller.doneTyping()}>
                   I'm done typing

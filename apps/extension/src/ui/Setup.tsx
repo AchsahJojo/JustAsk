@@ -19,12 +19,15 @@ export function Setup() {
   const [pairMsg, setPairMsg] = useState("");
   const [advanced, setAdvanced] = useState(false);
   const [helpers, setHelpers] = useState<Helper[]>([]);
+  const [assistBy, setAssistBy] = useState<"self" | "caregiver" | null>(null);
 
   const refreshMe = async () => {
     const me = await backend.me();
     if (!me) return;
     // Save first, then show the helpers (and their consent boxes), so a quick click isn't overwritten.
-    setS(await saveSettings({ displayName: me.displayName || (await getSettings()).displayName, consent: me.consent }));
+    const local = await getSettings();
+    setS(await saveSettings({ displayName: me.displayName || local.displayName, consent: me.consent, assistTyping: me.assistTyping ?? local.assistTyping }));
+    setAssistBy(me.assistSetBy);
     setHelpers(me.helpers);
   };
 
@@ -200,6 +203,23 @@ export function Setup() {
               <p className="soft small">Your helper never sees the pages you visit, what you type, or what you ask JustAsk yourself.</p>
             </div>
           )}
+        </li>
+        <li className={`step ${s.assistTyping !== null ? "ok" : ""}`}>
+          <h2>5. Help with typing (optional)</h2>
+          <p>When you search for something, JustAsk can type the words into the search box for you. You still press Search yourself. It never types passwords or personal details.</p>
+          <label className="toggle">
+            <input
+              type="checkbox"
+              checked={s.assistTyping === true}
+              onChange={(e) => {
+                setS({ ...s, assistTyping: e.target.checked });
+                setAssistBy("self");
+                void backend.setAssist(e.target.checked);
+              }}
+            />
+            <span>Type searches for me</span>
+          </label>
+          {assistBy === "caregiver" && helpers.length > 0 && <p className="soft small">Your helper set this for you. You can change it.</p>}
         </li>
       </ol>
 

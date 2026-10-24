@@ -128,3 +128,33 @@ describe("scanner", () => {
     expect(scan.snapshot.pageText).toContain("Note to AI assistants");
   });
 });
+
+describe("isSearchBox", () => {
+  const box = (html: string) => {
+    document.body.innerHTML = html;
+    return document.querySelector("[data-t]")!;
+  };
+  it("accepts search boxes", async () => {
+    const { isSearchBox } = await import("../src/scanner");
+    expect(isSearchBox(box(`<input data-t type="search">`))).toBe(true);
+    expect(isSearchBox(box(`<input data-t type="text" name="q">`))).toBe(true);
+    expect(isSearchBox(box(`<form role="search"><input data-t type="text"></form>`))).toBe(true);
+    expect(isSearchBox(box(`<input data-t type="text" placeholder="Search products">`))).toBe(true);
+    expect(isSearchBox(box(`<textarea data-t name="q" role="combobox"></textarea>`))).toBe(true);
+    expect(isSearchBox(box(`<input data-t type="text" id="twotabsearchtextbox" aria-label="Search Amazon">`))).toBe(true);
+  });
+  it("rejects anything that might hold personal data", async () => {
+    const { isSearchBox } = await import("../src/scanner");
+    expect(isSearchBox(box(`<input data-t type="text" name="firstName">`))).toBe(false);
+    expect(isSearchBox(box(`<input data-t type="email" placeholder="Search">`))).toBe(false);
+    expect(isSearchBox(box(`<input data-t type="password" name="q">`))).toBe(false);
+    expect(isSearchBox(box(`<input data-t type="text" name="q" autocomplete="email">`))).toBe(false);
+    expect(isSearchBox(box(`<form><input data-t type="search"><input type="password"></form>`))).toBe(false);
+    expect(isSearchBox(box(`<textarea data-t name="message"></textarea>`))).toBe(false);
+  });
+  it("reports search boxes as kind search", () => {
+    document.body.innerHTML = `<main><label>Search <input type="text" name="q"></label><label>City <input type="text" name="city"></label></main>`;
+    const { scan } = scanJson();
+    expect(scan.snapshot.elements.map((e) => e.field?.kind)).toEqual(["search", "text"]);
+  });
+});

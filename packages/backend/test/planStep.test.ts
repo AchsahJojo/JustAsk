@@ -48,7 +48,7 @@ function client(replies: unknown[], seen: Array<{ headers: Headers; body: any }>
   });
 }
 
-const good = JSON.stringify({ kind: "guide", say: "Click the blue Refill button.", target: 1, expect: "click", option: null, risk: "none" });
+const good = JSON.stringify({ kind: "guide", say: "Click the blue Refill button.", target: 1, expect: "click", option: null, fill: null, risk: "none" });
 
 describe("planStep request shape (plan §4.2)", () => {
   it("uses the beta endpoint with fallbacks default, low effort, json_schema, cached system, no sampling params or thinking", async () => {
