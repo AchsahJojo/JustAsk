@@ -1,8 +1,12 @@
 import type { FieldInfo, FieldKind, SnapshotElement } from "@justask/shared";
 import { colorName } from "./color";
 import { fingerprint, normalize } from "./fingerprint";
+import { isSensitive } from "./sensitive";
+import { closestComposed, containsComposed, inViewport, isVisible, pickModal } from "./visibility";
 
-// Mana's SEL, extended per plan §3.3.
+export { closestComposed, isVisible };
+
+// Mana's SEL, extended per plan §3.3 and ARCHITECTURE §10 P1/P2.
 export const CLICKABLE_SELECTOR = [
   "a[href]",
   "button",
@@ -12,11 +16,16 @@ export const CLICKABLE_SELECTOR = [
   "summary",
   "[contenteditable=true]",
   "[contenteditable='']",
+  "[contenteditable=plaintext-only]",
   "[tabindex]:not([tabindex='-1'])",
-  ...["button", "link", "tab", "menuitem", "checkbox", "radio", "switch", "option", "combobox", "textbox", "listbox", "treeitem"].map((r) => `[role=${r}]`),
+  ...[
+    "button", "link", "tab", "menuitem", "menuitemcheckbox", "menuitemradio", "checkbox", "radio", "switch", "option",
+    "combobox", "textbox", "searchbox", "listbox", "treeitem", "spinbutton", "slider",
+  ].map((r) => `[role=${r}]`),
 ].join(", ");
 
-const MODAL_SELECTOR = "dialog[open], [aria-modal=true]";
+/** Editable regions whose typed text must never be read. */
+const EDITABLE_SELECTOR = "[contenteditable=true], [contenteditable=''], [contenteditable=plaintext-only], [role=textbox], [role=searchbox]";
 const TEXT_MAX = 80;
 export const ELEMENT_CAP = 150;
 
@@ -52,22 +61,38 @@ export function collectComposed(root: Document | ShadowRoot | Element, opts: Sca
   return out;
 }
 
-export function isVisible(el: Element): boolean {
-  const r = el.getBoundingClientRect();
-  if (r.width <= 2 || r.height <= 2) {
-    // Visually hidden native radios/checkboxes are often styled through a label; keep if the label is visible.
-    if (el instanceof HTMLInputElement && (el.type === "checkbox" || el.type === "radio" || el.type === "file")) {
-      const lab = el.labels?.[0];
-      if (lab) return isVisible(lab);
-    }
-    return false;
-  }
-  const cs = getComputedStyle(el);
-  if (cs.visibility === "hidden" || cs.display === "none" || (cs.opacity !== "" && Number(cs.opacity) === 0)) return false;
-  return true;
+/** A contenteditable host or a [role=textbox|searchbox] that is not a native control. */
+export function isEditableHost(el: Element): boolean {
+  if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement || el instanceof HTMLSelectElement) return false;
+  return (el as HTMLElement).isContentEditable === true || el.matches(EDITABLE_SELECTOR);
+}
+
+const TEXT_INPUT_TYPES = new Set(["text", "search", ""]);
+const SEARCH_WORD = /(?:^|\s)(search|query|find|keywords?)(?:\s|$)/;
+
+function searchWords(s: string): string {
+  return s
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .replace(/[_\-.[\]]+/g, " ")
+    .toLowerCase();
+}
+
+/**
+ * A search field: type=search, role=searchbox, a text input inside [role=search] / <search>,
+ * or a text input whose name/id/aria-label/placeholder means search (q, query, search, find, keyword).
+ */
+export function isSearchBox(el: Element): boolean {
+  if (el.getAttribute("role") === "searchbox") return true;
+  if (!(el instanceof HTMLInputElement)) return false;
+  if (el.type === "search") return true;
+  if (!TEXT_INPUT_TYPES.has(el.type)) return false;
+  if (closestComposed(el, "[role=search], search")) return true;
+  for (const a of ["name", "id"]) if (/^q$/i.test(el.getAttribute(a) ?? "")) return true;
+  return ["name", "id", "aria-label", "placeholder"].some((a) => SEARCH_WORD.test(searchWords(el.getAttribute(a) ?? "")));
 }
 
 export function roleOf(el: Element): string {
+  if (isSearchBox(el)) return "search box";
   const explicit = el.getAttribute("role");
   if (explicit) return explicit;
   const tag = el.tagName.toLowerCase();
@@ -84,7 +109,7 @@ export function roleOf(el: Element): string {
     if (t === "range") return "slider";
     return "text box";
   }
-  if ((el as HTMLElement).isContentEditable) return "text box";
+  if (isEditableHost(el)) return "text box";
   return tag;
 }
 
@@ -100,7 +125,7 @@ export function visibleText(el: Element): string {
   }
   if (el instanceof HTMLTextAreaElement) return clip(el.placeholder || "");
   if (el instanceof HTMLSelectElement) return "";
-  if ((el as HTMLElement).isContentEditable || el.getAttribute("role") === "textbox") {
+  if (isEditableHost(el)) {
     return clip(el.getAttribute("aria-placeholder") || el.getAttribute("data-placeholder") || el.getAttribute("placeholder") || "");
   }
   const t = (el as HTMLElement).innerText ?? el.textContent ?? "";
@@ -162,7 +187,7 @@ export function fieldKind(el: Element): FieldKind | null {
     if (t === "datetime-local" || t === "week") return "date";
     return "text";
   }
-  if ((el as HTMLElement).isContentEditable || el.getAttribute("role") === "textbox") return "contenteditable";
+  if (isEditableHost(el)) return "contenteditable";
   return null;
 }
 
@@ -175,7 +200,7 @@ export function hasValue(el: Element): boolean {
   }
   if (el instanceof HTMLTextAreaElement) return el.value !== "";
   if (el instanceof HTMLSelectElement) return el.selectedIndex > 0 || (el.selectedIndex === 0 && el.options[0]?.value !== "");
-  if ((el as HTMLElement).isContentEditable || el.getAttribute("role") === "textbox") return (el.textContent ?? "").trim() !== "";
+  if (isEditableHost(el)) return (el.textContent ?? "").trim() !== "";
   return false;
 }
 
@@ -214,31 +239,19 @@ export function fieldInfo(el: Element): FieldInfo | undefined {
   if (el instanceof HTMLInputElement && (el.type === "checkbox" || el.type === "radio")) info.checked = el.checked;
   const hint = dateHint(kind);
   if (hint) info.formatHint = hint;
+  if (isSensitive(el)) info.sensitive = true;
   return info;
 }
 
-function regionOf(el: Element): SnapshotElement["region"] {
-  if (closestComposed(el, MODAL_SELECTOR)) return "modal";
+/** Landmark region. "modal" only for the modal `pickModal` chose, never for an off-screen drawer. */
+function regionOf(el: Element, modal: Element | null): SnapshotElement["region"] {
+  if (modal && containsComposed(modal, el)) return "modal";
   if (closestComposed(el, "main, [role=main]")) return "main";
   if (closestComposed(el, "nav, [role=navigation]")) return "nav";
   if (closestComposed(el, "footer, [role=contentinfo]")) return "footer";
   if (closestComposed(el, "aside, [role=complementary]")) return "aside";
   if (closestComposed(el, "header, [role=banner]")) return "header";
   return "other";
-}
-
-/** `closest` that crosses shadow boundaries. */
-export function closestComposed(el: Element, selector: string): Element | null {
-  let cur: Node | null = el;
-  while (cur) {
-    if (cur instanceof Element) {
-      const hit = cur.closest(selector);
-      if (hit) return hit;
-    }
-    const root: Node = (cur as Element).getRootNode?.() ?? cur;
-    cur = root instanceof ShadowRoot ? root.host : null;
-  }
-  return null;
 }
 
 /** Nearest heading or row text, for context ("Refill" next to "Lisinopril"). */
@@ -252,10 +265,6 @@ export function nearbyText(el: Element, ownText: string): string | null {
     }
   }
   return null;
-}
-
-function inViewport(r: DOMRect): boolean {
-  return r.bottom > 0 && r.right > 0 && r.top < innerHeight && r.left < innerWidth;
 }
 
 function isDisabled(el: Element): boolean {
@@ -287,10 +296,8 @@ export function scanDocument(doc: Document, opts: ScanOptions = {}): { elements:
     return true;
   });
 
-  const modal = (() => {
-    const all = Array.from(doc.querySelectorAll(MODAL_SELECTOR)).filter(isVisible);
-    return all[all.length - 1] ?? null;
-  })();
+  const modal = pickModal(doc);
+  const win = doc.defaultView ?? window;
 
   const ctxWords = words((opts.context ?? []).join(" "));
   const focusForm = (doc.activeElement as HTMLElement | null)?.closest?.("form") ?? null;
@@ -298,7 +305,7 @@ export function scanDocument(doc: Document, opts: ScanOptions = {}): { elements:
   const scored: ScannedElement[] = [];
   const dupKeys = new Set<string>();
   for (const el of filtered) {
-    const inModal = !!(modal && closestComposed(el, MODAL_SELECTOR));
+    const inModal = !!modal && containsComposed(modal, el);
     if (modal && !inModal) continue; // plan §3.3: if a modal is open, elements outside it are dropped
     const r = el.getBoundingClientRect();
     const role = roleOf(el);
@@ -307,14 +314,16 @@ export function scanDocument(doc: Document, opts: ScanOptions = {}): { elements:
     if (name === text) name = "";
     const field = fieldInfo(el);
     if (!text && !name && !field) continue;
-    const region = inModal ? "modal" : regionOf(el);
+    const region = inModal ? "modal" : regionOf(el, modal);
     const disabled = isDisabled(el);
-    const vis = inViewport(r);
+    const vis = inViewport(r, win);
     const cs = getComputedStyle(el);
     const color = colorName(cs.backgroundColor);
     const big = r.width * r.height > 9000;
+    const nearby = nearbyText(el, text);
 
-    const dupKey = `${role}|${text}|${(el as HTMLAnchorElement).href ?? ""}`;
+    // Same control in different rows ("Add to cart" under each product) stays distinct via `nearby`.
+    const dupKey = `${role}|${text}|${name}|${(el as HTMLAnchorElement).href ?? ""}|${nearby ?? ""}`;
     if (!field && dupKeys.has(dupKey)) continue;
     dupKeys.add(dupKey);
 
@@ -342,7 +351,7 @@ export function scanDocument(doc: Document, opts: ScanOptions = {}): { elements:
         role,
         text,
         label: name || null,
-        nearby: nearbyText(el, text),
+        nearby,
         color,
         big,
         disabled,
@@ -371,8 +380,7 @@ export function scanDocument(doc: Document, opts: ScanOptions = {}): { elements:
 export function pageText(doc: Document, max = 1400): string {
   const seen = new Set<string>();
   const out: string[] = [];
-  const modal = Array.from(doc.querySelectorAll(MODAL_SELECTOR)).filter(isVisible).pop();
-  const root: ParentNode = modal ?? doc;
+  const root: ParentNode = pickModal(doc) ?? doc; // same modal choice as scanDocument
   for (const e of Array.from(root.querySelectorAll("h1,h2,h3,p,li,label,legend,[role=alert],[role=status]"))) {
     if (!isVisible(e)) continue;
     if (e.closest("script,style,noscript")) continue;
@@ -399,7 +407,7 @@ export function strippedUrl(loc: Location | URL): string {
 /** True for nodes *inside* an editable region (not the editable root itself). */
 export function insideEditable(el: Element): boolean {
   const p = el.parentElement;
-  return !!p && (p.isContentEditable || !!p.closest("[role=textbox]"));
+  return !!p && (p.isContentEditable || !!closestComposed(p, EDITABLE_SELECTOR));
 }
 
 /** The parts a fingerprint is built from. Shared by the scanner and the resolver. */

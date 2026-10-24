@@ -1,0 +1,17 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><link rel="stylesheet" href="/site.css"><title>Store | Home</title>
+<style>#drawer{position:fixed;top:0;left:0;height:100%;width:300px;background:#fff;box-shadow:2px 0 12px rgba(0,0,0,.2);padding:20px;transform:translateX(-100%);transition:transform .2s}#drawer.open{transform:none}#drawer a{display:block;padding:10px 0;font-size:16px}</style></head><body>
+<header class="site"><span class="logo">Home Store</span>
+<form role="search" action="/gaps/store-results" class="row" style="flex:1 1 260px"><input name="q" placeholder="Search products" style="flex:1 1 160px;border:1px solid #d1d5db;border-radius:8px;padding:8px 12px;font-size:13px"><button class="cart">Search</button></form>
+<nav><button class="cart" id="rooms" aria-controls="drawer" aria-expanded="false">Shop by room</button><a href="/gaps/store">Deals</a><a href="/gaps/checkout">Cart</a></nav></header>
+<!-- Off-canvas drawer: visible CSS, off-screen, aria-modal and not aria-hidden (a common real-site pattern). -->
+<div id="drawer" role="dialog" aria-modal="true" aria-label="Shop by room"><p class="muted">Browse by room</p>
+<a href="/gaps/store-results">Shop by room</a><a href="/gaps/store-results">Living room</a><a href="/gaps/store-results">Kitchen</a>
+<button class="btn outline" id="close-drawer">Close</button></div>
+<main><h1>Everything for your home</h1><p class="muted">Free shipping on orders over $35.</p>
+<div class="cards"><a href="/gaps/store-results">Steel water bottle</a><a href="/gaps/store-results">Coffee mug</a><a href="/gaps/store-results">Throw pillow</a><a href="/gaps/store-results">Table lamp</a></div></main>
+<script>
+const drawer=document.getElementById("drawer"), rooms=document.getElementById("rooms");
+function setDrawer(open){drawer.classList.toggle("open",open);rooms.setAttribute("aria-expanded",String(open));}
+rooms.onclick=()=>setDrawer(!drawer.classList.contains("open"));
+document.getElementById("close-drawer").onclick=()=>setDrawer(false);
+</script></body></html>

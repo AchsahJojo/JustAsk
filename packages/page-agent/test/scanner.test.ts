@@ -128,3 +128,62 @@ describe("scanner", () => {
     expect(scan.snapshot.pageText).toContain("Note to AI assistants");
   });
 });
+
+describe("scanner: search boxes and new roles (P1/P2)", () => {
+  const roleOfText = (t: string) => scanDocument(document).elements.find((e) => e.data.text === t || e.data.label === t)?.data.role;
+
+  it("labels search fields 'search box'", () => {
+    document.body.innerHTML = `
+      <input type="search" aria-label="Site search">
+      <div role="searchbox" contenteditable="true" aria-label="Ask anything"></div>
+      <form role="search"><input aria-label="Look up"><button>Go</button></form>
+      <search><input aria-label="Inside search element"></search>
+      <input name="q" aria-label="Plain q">
+      <input placeholder="Search products">
+      <input name="searchTerm" aria-label="Term">
+      <input aria-label="Find a store">
+      <input id="keywords" aria-label="Words">
+      <label for="e">Email</label><input id="e" type="email">
+      <input aria-label="Full name">`;
+    for (const t of ["Site search", "Ask anything", "Look up", "Inside search element", "Plain q", "Search products", "Term", "Find a store", "Words"]) {
+      expect([t, roleOfText(t)]).toEqual([t, "search box"]);
+    }
+    expect(roleOfText("Go")).toBe("button");
+    expect(roleOfText("Email")).toBe("text box");
+    expect(roleOfText("Full name")).toBe("text box");
+  });
+
+  it("includes plaintext-only editors and the new ARIA roles", () => {
+    document.body.innerHTML = `
+      <div contenteditable="plaintext-only" aria-label="Plain editor"></div>
+      <div role="menuitemcheckbox" aria-label="Bold"></div>
+      <div role="menuitemradio" aria-label="Large"></div>
+      <div role="spinbutton" aria-label="Quantity"></div>
+      <div role="slider" aria-label="Volume"></div>`;
+    const els = scanDocument(document).elements.map((e) => e.data);
+    expect(els.map((e) => e.label)).toEqual(["Plain editor", "Bold", "Large", "Quantity", "Volume"]);
+    expect(els[0].field?.kind).toBe("contenteditable");
+  });
+
+  it("leak test: text in plaintext-only and searchbox editors never appears", () => {
+    document.body.innerHTML = `
+      <main><h1>Compose</h1>
+        <div id="a" contenteditable="plaintext-only" aria-label="Note"></div>
+        <div id="b" role="searchbox" aria-label="Ask"></div>
+      </main>`;
+    document.getElementById("a")!.innerHTML = `<p>${SENTINEL}</p>`;
+    document.getElementById("b")!.innerHTML = `<li>${SENTINEL}</li>`;
+    const { scan, json } = scanJson();
+    expect(json).not.toContain(SENTINEL);
+    expect(scan.snapshot.elements.every((e) => e.field?.hasValue === true)).toBe(true);
+  });
+
+  it("keeps the same button in different rows apart (nearby heading)", () => {
+    document.body.innerHTML = `<main>
+      <div><h3>Steel water bottle</h3><button>Add to cart</button></div>
+      <div><h3>Coffee mug</h3><button>Add to cart</button></div>
+      <div><h3>Throw pillow</h3><button>Add to cart</button></div></main>`;
+    const els = scanDocument(document).elements.map((e) => e.data);
+    expect(els.map((e) => e.nearby)).toEqual(["Steel water bottle", "Coffee mug", "Throw pillow"]);
+  });
+});

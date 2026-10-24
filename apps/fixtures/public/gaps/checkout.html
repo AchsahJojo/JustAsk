@@ -1,0 +1,7 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><link rel="stylesheet" href="/site.css"><title>Checkout</title></head><body><main><h1>Checkout</h1><p class="muted">Order total: $42.10</p>
+<form id="pay" onsubmit="event.preventDefault(); document.querySelector('main').innerHTML='<h1>Order placed</h1><p>Thank you for your order.</p>'">
+<p><label for="cc">Card number</label><br><input id="cc" name="cardnumber" autocomplete="cc-number" inputmode="numeric" required></p>
+<p><label for="exp">Expiry</label><br><input id="exp" name="exp" autocomplete="cc-exp" placeholder="MM/YY" required></p>
+<p><label for="cvv">CVV</label><br><input id="cvv" name="cvv" autocomplete="cc-csc" inputmode="numeric" required></p>
+<button class="btn green">Place order $42.10</button>
+</form></main></body></html>
