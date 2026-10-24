@@ -1,0 +1,32 @@
+{
+  "name": "@justask/extension",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wxt",
+    "build": "npm run animations && wxt build",
+    "build:e2e": "npm run animations && JUSTASK_E2E=1 wxt build --mode development",
+    "build:edge": "wxt build -b edge",
+    "zip": "wxt zip",
+    "animations": "tsx animations/build.ts",
+    "typecheck": "tsc --noEmit -p ."
+  },
+  "dependencies": {
+    "@clayzo/webgl-player": "0.3.18",
+    "@justask/core": "*",
+    "@justask/page-agent": "*",
+    "@justask/shared": "*",
+    "convex": "^1.48.0",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1"
+  },
+  "devDependencies": {
+    "@clayzo/animation": "0.3.18",
+    "@types/chrome": "^0.3.6",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "@wxt-dev/module-react": "^1.2.2",
+    "wxt": "^0.21.4"
+  }
+}

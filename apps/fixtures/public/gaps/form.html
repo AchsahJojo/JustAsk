@@ -1,0 +1,16 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><link rel="stylesheet" href="/site.css"><title>Form | Fixtures</title></head><body><main><h1>Create your account</h1>
+<form id="f" onsubmit="event.preventDefault(); document.querySelector('main').innerHTML='<h1>Account created</h1>'">
+<p><label for="name">Full name</label><br><input id="name" required></p>
+<p><label for="email">Email</label><br><input id="email" type="email" required></p>
+<p><label for="pw">Password</label><br><input id="pw" type="password" required></p>
+<p><label for="state">State</label><br><select id="state"><option value="">Choose a state</option></select></p>
+<p><label for="dob">Date of birth</label><br><input id="dob" type="date"></p>
+<p><label for="photo">Profile photo</label><br><input id="photo" type="file"></p>
+<p><label for="bio">About you</label><br><div id="bio" contenteditable="true" role="textbox" aria-label="About you" style="border:1px solid #ccc;min-height:40px;padding:6px"></div></p>
+<p><label><input type="checkbox" id="terms" required> I agree to the terms</label></p>
+<button class="btn">Create account</button>
+</form>
+<script>
+const states=["Alabama","Alaska","Arizona","Arkansas","California","Colorado","Connecticut","Delaware","Florida","Georgia","Hawaii","Idaho","Illinois","Indiana","Iowa","Kansas","Kentucky","Louisiana","Maine","Maryland","Massachusetts","Michigan","Minnesota","Mississippi","Missouri","Montana","Nebraska","Nevada","New Hampshire","New Jersey","New Mexico","New York","North Carolina","North Dakota","Ohio","Oklahoma","Oregon","Pennsylvania","Rhode Island","South Carolina","South Dakota","Tennessee","Texas","Utah","Vermont","Virginia","Washington","West Virginia","Wisconsin","Wyoming"];
+const s=document.getElementById("state"); for (const n of states) s.add(new Option(n, n.slice(0,2).toUpperCase()));
+</script></main></body></html>

@@ -1,1 +1,9 @@
-.claude 
+.claude
+node_modules
+.env*
+!.env.example
+.output
+.wxt
+dist
+.convex
+e2e/screenshots
