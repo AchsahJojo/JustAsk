@@ -1,0 +1,40 @@
+{
+  "snapshotId": "eval-gaps-dialog",
+  "url": "http://localhost:6174/gaps/dialog",
+  "title": "Dialog | Fixtures",
+  "heading": "News",
+  "pageText": "We use cookies\nChoose what to allow.",
+  "elements": [
+    {
+      "n": 1,
+      "role": "button",
+      "text": "Accept all",
+      "label": null,
+      "nearby": "We use cookies",
+      "color": "blue",
+      "big": false,
+      "disabled": false,
+      "inModal": true,
+      "inViewport": true,
+      "region": "modal"
+    },
+    {
+      "n": 2,
+      "role": "button",
+      "text": "Only necessary",
+      "label": null,
+      "nearby": "We use cookies",
+      "color": null,
+      "big": false,
+      "disabled": false,
+      "inModal": true,
+      "inViewport": true,
+      "region": "modal"
+    }
+  ],
+  "omitted": {
+    "count": 0,
+    "regions": []
+  },
+  "surface": "web"
+}

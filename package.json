@@ -16,7 +16,9 @@
     "fixtures": "node apps/fixtures/serve.mjs",
     "planner:dev": "npm run dev -w @justask/backend",
     "test:e2e": "npm run build -w @justask/extension && npm run build:e2e -w @justask/extension && node e2e/run.mjs",
-    "test:convex": "node packages/backend/test/convex.int.mjs"
+    "test:convex": "node packages/backend/test/convex.int.mjs",
+    "eval": "tsx eval/run.ts",
+    "eval:capture": "node eval/capture.mjs"
   },
   "devDependencies": {
     "happy-dom": "^21.0.4",
