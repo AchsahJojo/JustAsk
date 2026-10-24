@@ -58,6 +58,8 @@ export interface ControllerDeps {
   store?: SessionStore;
   events?: EventSink;
   deviceToken?: () => string | null;
+  /** Synced account preferences. `showMeInstead`: turn every act step into a guide step. */
+  prefs?: () => { showMeInstead: boolean };
   /** Ids for snapshots; injectable for tests. */
   newId?: () => string;
   timing?: Partial<typeof DEFAULT_TIMING>;
