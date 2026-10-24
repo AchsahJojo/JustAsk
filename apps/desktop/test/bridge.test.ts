@@ -94,6 +94,23 @@ describe("NativeBridge", () => {
     expect(await b.waitForChange(700)).toBe(false);
   });
 
+  it("openBrowser calls open_browser with no arguments", async () => {
+    invoke.mockResolvedValueOnce(true);
+    expect(await new NativeBridge().openBrowser()).toBe(true);
+    expect(invoke).toHaveBeenCalledWith("open_browser");
+    expect(invoke.mock.calls[0]).toHaveLength(1);
+    invoke.mockResolvedValueOnce(false);
+    expect(await new NativeBridge().openBrowser()).toBe(false);
+  });
+
+  it("openBrowser is false and warns on error", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    invoke.mockRejectedValueOnce(new Error("no browser"));
+    expect(await new NativeBridge().openBrowser()).toBe(false);
+    expect(warn).toHaveBeenCalledWith("[bridge] open browser failed:", expect.any(Error));
+    warn.mockRestore();
+  });
+
   it("clear and pulse swallow errors", async () => {
     invoke.mockRejectedValue(new Error("x"));
     const b = new NativeBridge();

@@ -11,8 +11,10 @@ export interface MockRule {
   unlessFilled?: boolean;
   /** Only when the history contains this text. */
   afterHistory?: string;
+  /** Only when her request contains this text (case-insensitive). */
+  request?: string;
   /**
-   * Any step kind, including `act` (drive mode). `text` is what an act + type step types; it
+   * Any step kind, including `act` (drive mode) and `open_browser` (native only). `text` is what an act + type step types; it
    * may be left out of the script and defaults to null. Rules that fail `checkStep` are skipped.
    */
   step: Omit<StepResponse, "target" | "text"> & { text?: string | null; targetText?: string };
@@ -32,6 +34,7 @@ export function mockPlan(req: PlanRequest, rules: MockRule[]): PlanResponse {
   for (const r of rules) {
     if (!s.title.includes(r.title)) continue;
     if (r.afterHistory && !hist.includes(r.afterHistory)) continue;
+    if (r.request && !req.request.toLowerCase().includes(r.request.toLowerCase())) continue;
     const { targetText, ...rest } = r.step;
     let target: number | null = null;
     if (targetText) {

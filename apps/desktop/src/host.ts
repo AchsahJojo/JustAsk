@@ -9,7 +9,7 @@ import { CartesiaListener } from "./stt";
 import { DesktopBackend, type PendingHandoff, type PendingTask } from "./backend";
 import { deviceInfo, detectPlatform, newMachineId, type DeviceInfo } from "./device";
 import { handoffUrl, isOpenableUrl } from "./links";
-import { getSaved, save } from "./store";
+import { getSaved, persist, save } from "./store";
 import { notify, openExternal, showWindow } from "./os";
 
 export const HEARTBEAT_MS = 60_000;
@@ -103,15 +103,21 @@ export class DesktopHost {
 
   async createAccount(displayName: string) {
     const name = displayName.trim();
+    const t0 = performance.now();
+    const socketOpen = this.backend.connected;
     const { token } = await this.backend.createSelf(name, this.device());
-    await this.signedIn(token, name);
+    console.info(`[host] createSelf took ${Math.round(performance.now() - t0)} ms (socket ${socketOpen ? "open" : "not open"} at click)`);
+    this.signedIn(token, name);
   }
 
   /** Returns false when the code didn't work. Throws on lockout. */
   async redeem(code: string): Promise<boolean> {
+    const t0 = performance.now();
+    const socketOpen = this.backend.connected;
     const res = await this.backend.redeemCode(code, this.device());
+    console.info(`[host] redeemCode took ${Math.round(performance.now() - t0)} ms (socket ${socketOpen ? "open" : "not open"} at click)`);
     if (!res) return false;
-    await this.signedIn(res.token, res.displayName);
+    this.signedIn(res.token, res.displayName);
     return true;
   }
 
@@ -127,16 +133,22 @@ export class DesktopHost {
     this.set({ token: null, displayName: "", tasks: [] });
   }
 
-  private async signedIn(token: string, displayName: string) {
-    await save({ deviceToken: token, displayName });
+  /** Show the main screen right away; write the token to disk in the background. */
+  private signedIn(token: string, displayName: string) {
     this.set({ token, displayName });
-    this.goOnline(token);
+    // createSelf / redeemCode just set lastSeenAt, so the first heartbeat can wait.
+    this.goOnline(token, { heartbeatNow: false });
+    const t0 = performance.now();
+    persist({ deviceToken: token, displayName }).then(
+      () => console.info(`[host] saved sign-in in ${Math.round(performance.now() - t0)} ms`),
+      (e) => console.warn("[host] could not save sign-in; she may need to link again after a restart", e),
+    );
   }
 
-  private goOnline(token: string) {
+  private goOnline(token: string, opts: { heartbeatNow?: boolean } = {}) {
     this.goOffline();
     if (!this.backend.configured) return;
-    void this.backend.heartbeat(token);
+    if (opts.heartbeatNow !== false) void this.backend.heartbeat(token);
     const iv = setInterval(() => void this.backend.heartbeat(token), HEARTBEAT_MS);
     this.offline.push(() => clearInterval(iv));
     this.offline.push(this.backend.onTasks(token, (t) => this.onTasks(t)));

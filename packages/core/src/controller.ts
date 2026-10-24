@@ -39,6 +39,8 @@ export interface PageBridge {
   act(ref: TargetRef, spec: ActSpec): Promise<ActResult>;
   /** While on, report settled page changes as `ja:page-changed` (used in the waiting phase). */
   watch(on: boolean): void;
+  /** Open her default web browser at its start page (no URL). Resolves false when it could not. */
+  openBrowser?(): Promise<boolean>;
 }
 
 export interface Planner {
@@ -147,6 +149,8 @@ export class SessionController {
   /** Drive mode was switched off for this session (3 actions that changed nothing). */
   private guideMode = false;
   private noChange = 0;
+  /** JustAsk already opened her browser once this session; a second open_browser asks her instead. */
+  private browserOpened = false;
   private pending: Pending | null = null;
   private waiting: WaitState | null = null;
   private sleeps = new Set<() => void>();
@@ -581,6 +585,9 @@ export class SessionController {
         return;
       case "wait":
         return this.enterWait(step);
+      case "open_browser":
+        this.deps.events?.log("step_shown", { latencyMs });
+        return this.openBrowser(step);
       case "done": {
         this.deps.events?.log("done");
         await this.deps.bridge.clear();
@@ -668,6 +675,49 @@ export class SessionController {
     }
     this.set({ stepNo: this.view.stepNo + 1 });
     await this.plan(gen);
+  }
+
+  /**
+   * Desktop: open her default browser at its own start page. There is never a URL: the bridge
+   * opens the browser, and the next steps use its search box. Says the fixed line, not Claude's.
+   */
+  private async openBrowser(step: StepResponse) {
+    const bridge = this.deps.bridge;
+    const open = bridge.openBrowser;
+    const showMe = this.deps.prefs?.().showMeInstead ?? false;
+    if (!open || showMe || this.guideMode || this.browserOpened) return this.openBrowserGuide(step);
+    const gen = this.gen;
+    this.target = null;
+    this.set({ phase: "acting", line: L.OPENING_BROWSER, expect: null, risk: "none", note: "" });
+    this.say(L.OPENING_BROWSER);
+    if (!(await this.sleep(this.t.actBeatMs, gen))) return;
+
+    let opened: boolean;
+    try {
+      opened = await open.call(bridge);
+    } catch {
+      opened = false;
+    }
+    if (gen !== this.gen) return;
+    if (!opened) {
+      this.history.push(this.onPage(L.ACT_FAILED_NOTE));
+      return this.openBrowserGuide(step);
+    }
+
+    this.browserOpened = true;
+    this.history.push(this.onPage(L.OPENED_BROWSER_NOTE));
+    this.set({ phase: "verifying", line: L.LOOKING_NEXT, actions: this.view.actions + 1, note: "" });
+    await bridge.waitForChange(this.t.changeTimeoutMs);
+    if (gen !== this.gen) return;
+    this.set({ stepNo: this.view.stepNo + 1 });
+    await this.plan(gen);
+  }
+
+  /** She opens the browser herself. The waiting phase re-plans when the window changes. */
+  private openBrowserGuide(step: StepResponse) {
+    const wait: StepResponse = { ...step, kind: "wait", say: L.OPEN_BROWSER_GUIDE, target: null, expect: null, option: null, text: null, risk: "none" };
+    this.step = wait;
+    return this.enterWait(wait);
   }
 
   // ───────────── waiting (docs/ARCHITECTURE.md §10 P1) ─────────────
@@ -811,6 +861,7 @@ export class SessionController {
     this.lostCount = 0;
     this.guideMode = false;
     this.noChange = 0;
+    this.browserOpened = false;
     this.pending = null;
   }
 }

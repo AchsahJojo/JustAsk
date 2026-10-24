@@ -16,7 +16,9 @@ export class NativeBridge implements PageBridge {
       const scan = await native.scanForeground();
       if (!scan || !scan.snapshot) return [];
       return [{ ...scan, frameId: NATIVE_FRAME_ID, isTop: true }];
-    } catch {
+    } catch (e) {
+      // The native error says why (no window, UI Automation failed). It holds no page content.
+      console.warn("[bridge] scan failed:", e);
       return [];
     }
   }
@@ -52,6 +54,16 @@ export class NativeBridge implements PageBridge {
       return { ok: res?.ok === true };
     } catch {
       return { ok: false };
+    }
+  }
+
+  /** Open her default browser at its start page (no URL). False on any failure. */
+  async openBrowser(): Promise<boolean> {
+    try {
+      return (await native.openBrowser()) === true;
+    } catch (e) {
+      console.warn("[bridge] open browser failed:", e);
+      return false;
     }
   }
 

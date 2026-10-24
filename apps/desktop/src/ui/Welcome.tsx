@@ -10,6 +10,7 @@ export function Welcome({ host }: { host: DesktopHost }) {
   const [code, setCode] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [slow, setSlow] = useState(false);
 
   if (!host.backend.configured) {
     return (
@@ -27,12 +28,16 @@ export function Welcome({ host }: { host: DesktopHost }) {
   const run = async (fn: () => Promise<void>) => {
     setBusy(true);
     setError("");
+    // On a slow connection, say so, so the screen doesn't look frozen.
+    const slowTimer = setTimeout(() => setSlow(true), 2000);
     try {
       await fn();
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       setError(/too many/i.test(msg) ? "Too many tries. Please wait a few minutes and try again." : "That didn't work. Check your internet and try again.");
     } finally {
+      clearTimeout(slowTimer);
+      setSlow(false);
       setBusy(false);
     }
   };
@@ -107,6 +112,12 @@ export function Welcome({ host }: { host: DesktopHost }) {
               Back
             </button>
           </form>
+        )}
+
+        {busy && slow && (
+          <p className="soft" role="status">
+            Still working on it. Your internet is a little slow.
+          </p>
         )}
 
         {error && (

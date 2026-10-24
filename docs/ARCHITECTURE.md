@@ -106,6 +106,7 @@ Only Convex calls the Claude API, in [`packages/backend/lib/planStep.ts`](../pac
      4. It replies `ja:acted {ok}`. If `ok` is false, the step falls back to `guide`.
    - **guide (today's only mode):** an optional risk confirmation, then `showGuide`. That calls `PageAgent.highlight`, which re-finds the element (WeakRef, then fingerprint, then role + text) and draws a top-layer ring with click and typing observers.
    - **clarify, wait, done, blocked:** go to the phases `asking`, `waiting`, `done` and `blocked`.
+   - **open_browser (desktop only):** says the line, then calls `bridge.openBrowser()`. See §11.
 8. **The step finishes.**
    - After an `act`, the step finishes when `ja:acted` comes back.
    - After a `guide`, it finishes when she acts: the page agent sends `ja:step-done`, `ja:wrong` or `ja:lost`, and `SessionHost` relays it to `controller.onContent`.
@@ -139,6 +140,7 @@ These are the seams between parts. Change one only in `packages/shared`, and the
   - `kind: "act"`
   - `expect: "scroll" | "submit"`
   - `text: string | null` (what JustAsk types)
+- `kind: "open_browser"` is valid only when `snapshot.surface` is `"native"`. Its `target`, `expect`, `option` and `text` are null, and `risk` is `none`. `checkStep` enforces this.
 
 **`PageSnapshot`** ([snapshot.ts](../packages/shared/src/snapshot.ts))
 - `url` with the query and fragment stripped, `title` and `heading`.
@@ -245,7 +247,7 @@ apps/desktop/
   src-tauri/src/
     main.rs           app, tray, windows, command registration
     native/mod.rs     fixed command surface: scan_foreground, highlight, act, clear,
-                      pulse, wait_for_change; events ja:step-done / wrong / lost / page-changed
+                      pulse, wait_for_change, open_browser (no URL argument); events ja:step-done / wrong / lost / page-changed
     native/windows/   UIA scan of the foreground window (uiautomation crate),
                       UIA patterns for acting, WH_MOUSE_LL hook for guide steps,
                       DPI-aware rects, tree-hash change polling
@@ -363,7 +365,7 @@ Solved by drive mode (§11).
   - If it adds words she didn't say (for example, a message Claude drafted), she confirms first: "I'll type: Happy birthday, Sam! Okay?"
   - Search text that uses only her words goes straight in.
 - **Personal-data guard on text.** Reject SSNs, card numbers (Luhn check), phone numbers, emails and the word "password". JustAsk doesn't store her personal details, so it can't type them anyway.
-- **Navigation.** Only by clicking links on the page, or opening the recipe's `startUrl`. Never a URL from Claude.
+- **Navigation.** Only by clicking links on the page, or opening the recipe's `startUrl`. Never a URL from Claude. `open_browser` (below) carries no URL at all.
 - **Runaway protection.**
   - The existing caps stay: 40 steps per session, and 60 per device per hour.
   - After 3 actions in a row that don't change the page, JustAsk switches to guide mode.
@@ -374,6 +376,15 @@ Solved by drive mode (§11).
 - A name, id or label that looks like an SSN or bank field (`ssn`, `social security`, `routing`, `account number`, `pin`).
 
 When unsure, it treats the field as sensitive.
+
+**Opening her browser (desktop)**
+
+Some tasks start in a native app but need the web, for example "find a banana bread recipe" asked in Notepad. Claude then returns `kind: "open_browser"`.
+- It is valid only on a native snapshot. The extension never gets one: `checkStep` rejects it on web pages.
+- The step has no URL, no target and no text. The desktop app opens her default browser at its own start page. A URL from Claude is never opened.
+- JustAsk opens it only in drive mode, and announces it first with a fixed line: "I'm opening your web browser." Claude's `say` is not used. Stop works during the beat.
+- Otherwise she opens it herself: "Please open your web browser, like Chrome or Edge. I'll wait." This happens with **Show me instead** on, in guide mode, when `PageBridge.openBrowser` is missing or fails, and for any second `open_browser` (JustAsk opens it at most once per session).
+- After it opens, the next steps use the browser's search box. The waiting phase re-plans when the window changes.
 
 **UX**
 - Every action is visible: the ring, the caption and the voice.

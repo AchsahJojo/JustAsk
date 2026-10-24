@@ -8,7 +8,8 @@
 use std::collections::hash_map::DefaultHasher;
 use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
-use std::sync::{Mutex, OnceLock};
+use std::sync::atomic::{AtomicIsize, Ordering};
+use std::sync::{mpsc, Mutex, OnceLock};
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -19,17 +20,27 @@ use uiautomation::patterns::{
 };
 use uiautomation::types::{ControlType, Handle, ScrollAmount};
 use uiautomation::{UIAutomation, UIElement, UITreeWalker};
-use windows::core::{w, PWSTR};
-use windows::Win32::Foundation::CloseHandle;
-use windows::Win32::Foundation::{COLORREF, LPARAM, LRESULT, WPARAM};
+use windows::core::{w, HSTRING, PCWSTR, PWSTR};
+use windows::Win32::Foundation::{CloseHandle, ERROR_SUCCESS};
+use windows::Win32::System::Registry::{
+    RegGetValueW, HKEY, HKEY_CLASSES_ROOT, HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE, RRF_RT_REG_SZ,
+};
+use windows::Win32::Foundation::{COLORREF, HWND, LPARAM, LRESULT, WPARAM};
 use windows::Win32::Graphics::Gdi::{
     CreatePen, DeleteObject, GetDC, GetStockObject, Rectangle, ReleaseDC, SelectObject, HGDIOBJ,
     NULL_BRUSH, PS_SOLID,
 };
 use windows::Win32::System::Threading::{
-    OpenProcess, QueryFullProcessImageNameW, PROCESS_NAME_FORMAT, PROCESS_QUERY_LIMITED_INFORMATION,
+    GetCurrentProcessId, OpenProcess, QueryFullProcessImageNameW, PROCESS_NAME_FORMAT,
+    PROCESS_QUERY_LIMITED_INFORMATION,
 };
+use windows::Win32::UI::Accessibility::{SetWinEventHook, UnhookWinEvent, HWINEVENTHOOK};
 use windows::Win32::UI::WindowsAndMessaging::{CallNextHookEx, GetForegroundWindow};
+use windows::Win32::UI::WindowsAndMessaging::{
+    GetTopWindow, GetWindow, GetWindowLongW, GetWindowTextLengthW, GetWindowThreadProcessId,
+    IsIconic, IsWindow, IsWindowVisible, EVENT_SYSTEM_FOREGROUND, GWL_EXSTYLE, GW_HWNDNEXT,
+    WINEVENT_OUTOFCONTEXT, WINEVENT_SKIPOWNPROCESS,
+};
 use windows::Win32::UI::WindowsAndMessaging::{
     CreateWindowExW, DestroyWindow, GetMessageW, SetLayeredWindowAttributes, SetWindowPos,
     SetWindowsHookExW, ShowWindow, UnhookWindowsHookEx, HWND_TOPMOST,
@@ -55,6 +66,9 @@ static OVERLAY: OnceLock<Mutex<isize>> = OnceLock::new();
 static APP_HANDLE: OnceLock<Mutex<Option<tauri::AppHandle>>> = OnceLock::new();
 static GUIDE_RECT: OnceLock<Mutex<Option<(i32, i32, i32, i32)>>> = OnceLock::new();
 static MOUSE_HOOK: OnceLock<()> = OnceLock::new();
+static FOREGROUND_HOOK: OnceLock<()> = OnceLock::new();
+/// The last foreground window that belonged to another app (0 = none seen yet).
+static LAST_FOREIGN: AtomicIsize = AtomicIsize::new(0);
 
 fn cache() -> &'static Mutex<LastScan> {
     LAST_SCAN.get_or_init(|| Mutex::new(LastScan::default()))
@@ -121,18 +135,115 @@ fn start_mouse_hook() {
     });
 }
 
-fn foreground_hwnd() -> Result<windows::Win32::Foundation::HWND, String> {
-    let hwnd = unsafe { GetForegroundWindow() };
-    if hwnd.0.is_null() {
-        return Err("There is no foreground window to scan".into());
+fn is_own_window(hwnd: HWND) -> bool {
+    let mut pid = 0u32;
+    unsafe { GetWindowThreadProcessId(hwnd, Some(&mut pid)) };
+    pid != 0 && pid == unsafe { GetCurrentProcessId() }
+}
+
+/// A top-level window she could be working in: visible, not minimized, titled,
+/// not a tool window, and not one of ours.
+fn is_usable_target(hwnd: HWND) -> bool {
+    unsafe {
+        !hwnd.0.is_null()
+            && IsWindow(Some(hwnd)).as_bool()
+            && IsWindowVisible(hwnd).as_bool()
+            && !IsIconic(hwnd).as_bool()
+            && GetWindowTextLengthW(hwnd) > 0
+            && (GetWindowLongW(hwnd, GWL_EXSTYLE) as u32 & WS_EX_TOOLWINDOW.0) == 0
+            && !is_own_window(hwnd)
     }
-    Ok(hwnd)
+}
+
+unsafe extern "system" fn on_foreground(
+    _hook: HWINEVENTHOOK,
+    _event: u32,
+    hwnd: HWND,
+    _id_object: i32,
+    _id_child: i32,
+    _thread: u32,
+    _time: u32,
+) {
+    if !hwnd.0.is_null() && !is_own_window(hwnd) {
+        LAST_FOREIGN.store(hwnd.0 as isize, Ordering::Relaxed);
+    }
+}
+
+/// Remember the last foreground window of another app, so that while she types or talks
+/// in JustAsk, JustAsk still helps with the window she came from.
+pub fn start_foreground_tracking() {
+    FOREGROUND_HOOK.get_or_init(|| {
+        let current = unsafe { GetForegroundWindow() };
+        if !current.0.is_null() && !is_own_window(current) {
+            LAST_FOREIGN.store(current.0 as isize, Ordering::Relaxed);
+        }
+        let _ = thread::Builder::new()
+            .name("justask-foreground-hook".into())
+            .spawn(|| unsafe {
+                let hook = SetWinEventHook(
+                    EVENT_SYSTEM_FOREGROUND,
+                    EVENT_SYSTEM_FOREGROUND,
+                    None,
+                    Some(on_foreground),
+                    0,
+                    0,
+                    WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS,
+                );
+                if hook.is_invalid() {
+                    return;
+                }
+                let mut message = MSG::default();
+                while GetMessageW(&mut message, None, 0, 0).as_bool() {}
+                let _ = UnhookWinEvent(hook);
+            });
+    });
+}
+
+/// Highest usable window in Z-order. Fallback when no other app has been in front yet.
+fn topmost_usable_window() -> Option<HWND> {
+    unsafe {
+        let mut next = GetTopWindow(None).ok();
+        let mut steps = 0;
+        while let Some(hwnd) = next {
+            steps += 1;
+            if steps > 1_000 {
+                break;
+            }
+            if is_usable_target(hwnd) {
+                return Some(hwnd);
+            }
+            next = GetWindow(hwnd, GW_HWNDNEXT).ok();
+        }
+        None
+    }
+}
+
+/// The window JustAsk helps with: the foreground window, or, while JustAsk itself is in
+/// front, the last window of another app she used.
+fn target_hwnd() -> Result<HWND, String> {
+    let foreground = unsafe { GetForegroundWindow() };
+    if !foreground.0.is_null() && !is_own_window(foreground) {
+        return Ok(foreground);
+    }
+    let last = HWND(LAST_FOREIGN.load(Ordering::Relaxed) as *mut _);
+    if is_usable_target(last) {
+        return Ok(last);
+    }
+    topmost_usable_window().ok_or_else(|| "There is no other window to look at yet".into())
+}
+
+/// A UI Automation client. `UIAutomation::new()` asks COM for a multithreaded apartment; if
+/// this thread already joined another one (RPC_E_CHANGED_MODE), COM still works, so connect
+/// directly.
+fn automation() -> Result<UIAutomation, String> {
+    UIAutomation::new()
+        .or_else(|_| UIAutomation::new_direct())
+        .map_err(|e| format!("Could not start UI Automation: {e}"))
 }
 
 fn current_automation() -> Result<(UIAutomation, UIElement, isize), String> {
-    let hwnd = foreground_hwnd()?;
-    let automation =
-        UIAutomation::new().map_err(|e| format!("Could not start UI Automation: {e}"))?;
+    let hwnd = target_hwnd()?;
+    let automation = automation()?;
     let root = automation
         .element_from_handle(Handle::from(hwnd))
         .map_err(|e| format!("Could not inspect the foreground window: {e}"))?;
@@ -507,26 +618,42 @@ fn find_scanned_target(local_id: u32) -> Result<UIElement, String> {
         .ok_or_else(|| "The target disappeared; scan again".into())
 }
 
-pub fn highlight(local_id: u32, _label: String) -> bool {
+/// Find the element (UI Automation, on a worker thread), then draw the ring on the main
+/// thread. A window belongs to the thread that creates it: only that thread can destroy it
+/// (`clear`, also on the main thread), and it dies when that thread exits.
+pub fn highlight(app: tauri::AppHandle, local_id: u32, _label: String) -> bool {
     let Ok(element) = find_scanned_target(local_id) else {
         return false;
     };
-    if element.set_focus().is_err() {
-        return false;
-    }
+    // Focus helps her next keystroke land there; the ring doesn't need it, so failure is fine.
+    let _ = element.set_focus();
     let Ok(rect) = element.get_bounding_rectangle() else {
         return false;
     };
-    let left = rect.get_left();
-    let top = rect.get_top();
-    let right = rect.get_right();
-    let bottom = rect.get_bottom();
-    let width = (right - left).max(1);
-    let height = (bottom - top).max(1);
+    let (left, top, right, bottom) = (
+        rect.get_left(),
+        rect.get_top(),
+        rect.get_right(),
+        rect.get_bottom(),
+    );
     if right <= left || bottom <= top {
         return false;
     }
+    let (tx, rx) = mpsc::channel();
+    if app
+        .run_on_main_thread(move || {
+            let _ = tx.send(draw_overlay(left, top, right, bottom));
+        })
+        .is_err()
+    {
+        return false;
+    }
+    rx.recv_timeout(Duration::from_secs(2)).unwrap_or(false)
+}
 
+fn draw_overlay(left: i32, top: i32, right: i32, bottom: i32) -> bool {
+    let width = (right - left).max(1);
+    let height = (bottom - top).max(1);
     unsafe {
         if let Ok(mut old) = overlay_handle().lock() {
             if *old != 0 {
@@ -730,12 +857,12 @@ pub fn wait_for_change(timeout_ms: u64) -> bool {
         .map(|state| (state.signature, state.hwnd))
         .unwrap_or((0, 0));
     let deadline = Instant::now() + Duration::from_millis(timeout_ms.min(30_000));
-    let Ok(automation) = UIAutomation::new() else {
+    let Ok(automation) = automation() else {
         return false;
     };
     while Instant::now() < deadline {
         thread::sleep(Duration::from_millis(150));
-        let Ok(hwnd) = foreground_hwnd() else {
+        let Ok(hwnd) = target_hwnd() else {
             return true;
         };
         if hwnd.0 as isize != initial_hwnd {
@@ -761,10 +888,131 @@ pub fn wait_for_change(timeout_ms: u64) -> bool {
     false
 }
 
+/// Read a string value from the registry. `value` None reads the key's default value.
+fn reg_string(root: HKEY, subkey: &str, value: Option<&str>) -> Option<String> {
+    let subkey = HSTRING::from(subkey);
+    let value = value.map(HSTRING::from);
+    let value_ptr = value
+        .as_ref()
+        .map(|v| PCWSTR(v.as_ptr()))
+        .unwrap_or(PCWSTR::null());
+    unsafe {
+        let mut size = 0u32;
+        let first = RegGetValueW(
+            root,
+            &subkey,
+            value_ptr,
+            RRF_RT_REG_SZ,
+            None,
+            None,
+            Some(&mut size),
+        );
+        if first != ERROR_SUCCESS || size < 2 {
+            return None;
+        }
+        let mut buffer = vec![0u16; (size as usize).div_ceil(2)];
+        let second = RegGetValueW(
+            root,
+            &subkey,
+            value_ptr,
+            RRF_RT_REG_SZ,
+            None,
+            Some(buffer.as_mut_ptr().cast()),
+            Some(&mut size),
+        );
+        if second != ERROR_SUCCESS {
+            return None;
+        }
+        let len = buffer.iter().position(|&c| c == 0).unwrap_or(buffer.len());
+        Some(String::from_utf16_lossy(&buffer[..len]))
+    }
+}
+
+/// The program path from a shell open command, like `"C:\...\chrome.exe" --single-argument %1`.
+/// Takes the quoted part, or everything up to the first space. Must end in `.exe`.
+fn exe_from_command(command: &str) -> Option<String> {
+    let command = command.trim();
+    let path = if let Some(rest) = command.strip_prefix('"') {
+        &rest[..rest.find('"')?]
+    } else {
+        command.split_whitespace().next()?
+    };
+    let path = path.trim();
+    (!path.is_empty() && path.to_ascii_lowercase().ends_with(".exe")).then(|| path.to_string())
+}
+
+/// Start `exe` with no arguments and don't wait for it.
+fn launch_exe(exe: &str) -> bool {
+    let path = std::path::Path::new(exe);
+    if !path.is_file() || !exe.to_ascii_lowercase().ends_with(".exe") {
+        return false;
+    }
+    std::process::Command::new(path).spawn().is_ok()
+}
+
+fn default_browser_exe() -> Option<String> {
+    let prog_id = reg_string(
+        HKEY_CURRENT_USER,
+        r"Software\Microsoft\Windows\Shell\Associations\UrlAssociations\https\UserChoice",
+        Some("ProgId"),
+    )?;
+    let prog_id = prog_id.trim();
+    if prog_id.is_empty() || prog_id.contains('\\') {
+        return None;
+    }
+    let command = reg_string(
+        HKEY_CLASSES_ROOT,
+        &format!(r"{prog_id}\shell\open\command"),
+        None,
+    )?;
+    exe_from_command(&command)
+}
+
+/// Open her default browser at its own start page. No URL is ever passed: the browser is
+/// started with no arguments. Falls back to Microsoft Edge.
+pub fn open_browser() -> bool {
+    if default_browser_exe().is_some_and(|exe| launch_exe(&exe)) {
+        return true;
+    }
+    reg_string(
+        HKEY_LOCAL_MACHINE,
+        r"SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\msedge.exe",
+        None,
+    )
+    .and_then(|value| exe_from_command(&value))
+    .is_some_and(|exe| launch_exe(&exe))
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{field_kind, is_candidate, looks_sensitive, role};
+    use super::{exe_from_command, field_kind, is_candidate, looks_sensitive, role};
     use uiautomation::types::ControlType;
+
+    #[test]
+    fn browser_command_parser_takes_only_the_program_path() {
+        assert_eq!(
+            exe_from_command(
+                r#""C:\Program Files\Google\Chrome\Application\chrome.exe" --single-argument %1"#
+            ),
+            Some(r"C:\Program Files\Google\Chrome\Application\chrome.exe".into())
+        );
+        assert_eq!(
+            exe_from_command(r#""C:\Program Files\Mozilla Firefox\firefox.exe""#),
+            Some(r"C:\Program Files\Mozilla Firefox\firefox.exe".into())
+        );
+        assert_eq!(
+            exe_from_command(r"C:\Browsers\browser.exe"),
+            Some(r"C:\Browsers\browser.exe".into())
+        );
+        assert_eq!(
+            exe_from_command(r#"C:\Browsers\browser.exe -osint -url "%1""#),
+            Some(r"C:\Browsers\browser.exe".into())
+        );
+        assert_eq!(exe_from_command(r#""C:\Tools\open.cmd" %1"#), None);
+        assert_eq!(exe_from_command(r#""C:\unterminated.exe %1"#), None);
+        assert_eq!(exe_from_command("   "), None);
+        assert_eq!(exe_from_command(r#""" %1"#), None);
+    }
 
     #[test]
     fn secure_fields_are_sensitive_and_have_password_kind() {

@@ -78,6 +78,15 @@ export class DesktopBackend {
     return !!this.client;
   }
 
+  /** True while the WebSocket to Convex is open (used for latency logs). */
+  get connected(): boolean {
+    try {
+      return !!this.client?.connectionState().isWebSocketConnected;
+    } catch {
+      return false;
+    }
+  }
+
   private need(): ConvexClient {
     if (!this.client) throw new Error("JustAsk isn't set up to connect yet.");
     return this.client;

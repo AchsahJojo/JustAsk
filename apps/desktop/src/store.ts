@@ -64,6 +64,13 @@ export async function getSaved(): Promise<Saved> {
   return out;
 }
 
+/** Merge and write to disk, without reading everything back. */
+export async function persist(patch: Partial<Saved>): Promise<void> {
+  const s = await open();
+  await Promise.all(Object.entries(patch).map(([k, v]) => s.set(k, v)));
+  await s.save();
+}
+
 /** Merge and persist. */
 export async function save(patch: Partial<Saved>): Promise<Saved> {
   const s = await open();

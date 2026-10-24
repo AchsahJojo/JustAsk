@@ -14,6 +14,8 @@ export const clear = () => invoke<void>("clear");
 export const pulse = () => invoke<void>("pulse");
 /** Resolves true once the foreground window changed and settled, false on timeout. */
 export const waitForChange = (timeoutMs: number) => invoke<boolean>("wait_for_change", { timeoutMs });
+/** Open her default browser at its own start page. Takes no URL on purpose. True if it started. */
+export const openBrowser = () => invoke<boolean>("open_browser");
 
 /** Events from the native layer, same shapes as the extension's content-script events. */
 export const NATIVE_EVENTS = ["ja:step-done", "ja:wrong", "ja:lost", "ja:page-changed"] as const;

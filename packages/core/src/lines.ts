@@ -42,6 +42,15 @@ export const GUIDE_MODE_NOTE = "JustAsk's last 3 actions did not change the page
 export const SHOW_ME_NOTE = "She chose Show me instead: she does every step herself (use guide steps)";
 export const TEXT_DECLINED_NOTE = "She did not want JustAsk to type that, so she will type it herself";
 
+// ───────────── open_browser (desktop) ─────────────
+
+/** Said while JustAsk opens her default browser. Fixed: Claude's `say` is never used here. */
+export const OPENING_BROWSER = "I'm opening your web browser.";
+/** Said when she opens the browser herself (no bridge support, Show me instead, or it failed). */
+export const OPEN_BROWSER_GUIDE = "Please open your web browser, like Chrome or Edge. I'll wait.";
+/** History note (for Claude, not spoken). */
+export const OPENED_BROWSER_NOTE = "JustAsk did: opened her web browser at its start page";
+
 /** Asked before typing text that has words she didn't say. */
 export function typeConfirm(text: string) {
   return `I'll type: ${text}. Okay?`;

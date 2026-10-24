@@ -166,6 +166,21 @@ describe("mock-script drive-mode rules (titles are a contract with the fixture p
     expect(plan("Composer", [el("button", "Close"), el("text box", "What's on your mind?", { kind: "contenteditable", hasValue: false, valid: true })])).toMatchObject({ kind: "act", expect: "click", target: 2 });
   });
 
+  it("Notepad (native): opens the browser for a web task, with no URL", () => {
+    const snapshot: PageSnapshot = {
+      snapshotId: "s", url: "", title: "Untitled - Notepad", heading: "", pageText: "", elements: [{ ...el("document", "Text editor"), n: 1 }],
+      omitted: { count: 0, regions: [] }, surface: "native", app: { name: "Notepad", window: "Untitled - Notepad" },
+    };
+    const run = (history: string[] = []) => {
+      const res = mockPlan({ ...req, request: "find a banana bread recipe", history, snapshot }, rules);
+      if (!res.ok) throw new Error("mock failed");
+      return res.step;
+    };
+    expect(run()).toEqual({ kind: "open_browser", say: "I'm opening your web browser.", target: null, expect: null, option: null, text: null, risk: "none" });
+    // The history note core writes after a successful open (packages/core/src/lines.ts OPENED_BROWSER_NOTE).
+    expect(run(['On "Untitled - Notepad": JustAsk did: opened her web browser at its start page'])).toMatchObject({ kind: "done" });
+  });
+
   it("existing fixture rules stay guide steps", () => {
     expect(plan("Maple Pharmacy | Home", [el("button", "Refill a prescription")])).toMatchObject({ kind: "guide" });
   });

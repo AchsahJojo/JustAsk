@@ -40,6 +40,11 @@ Use **PowerShell** for every command below. If you see "running scripts is disab
 2. Create an account, or use **Add another device** in the extension to get a code.
 3. Open Windows **Settings → Accessibility → Text size**. In JustAsk, ask "make the text bigger".
 4. **Tray:** closing the window hides it to the tray. Use **Quit** from the tray icon.
+5. **Opening the browser:**
+   1. Open Notepad and ask "find a banana bread recipe".
+   2. JustAsk should say "I'm opening your web browser." Then your default browser opens at its own start page, not at a web address.
+   3. Turn on **Show me instead** and ask again. Now it should ask you to open the browser yourself and wait.
+   4. This needs the latest Convex functions. If JustAsk never opens the browser, run `cd packages/backend` and then `npx convex dev` once.
 
 ## Report what you find
 

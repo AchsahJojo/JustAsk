@@ -45,6 +45,8 @@ interface HarnessOpts {
   showMeInstead?: boolean;
   responseSnapshotId?: string;
   timing?: Record<string, number>;
+  /** Give the bridge an openBrowser that resolves this value (or throws). Omitted: no openBrowser. */
+  openBrowser?: boolean | "throw";
 }
 
 function harness(steps: StepResponse[], scans: FrameScan[][] = [[frame(0, ["A", "B"])]], opts: HarnessOpts = {}) {
@@ -63,6 +65,14 @@ function harness(steps: StepResponse[], scans: FrameScan[][] = [[frame(0, ["A", 
     act: vi.fn(async () => (ops.push("act"), { ok: opts.actOk ?? false })),
     watch: vi.fn(),
   };
+  if (opts.openBrowser !== undefined) {
+    const result = opts.openBrowser;
+    bridge.openBrowser = vi.fn(async () => {
+      ops.push("openBrowser");
+      if (result === "throw") throw new Error("no browser");
+      return result;
+    });
+  }
   const planner: Planner = {
     plan: vi.fn(async (req: PlanRequest) => {
       plans.push(req);
@@ -459,6 +469,82 @@ describe("waiting (P1)", () => {
     await tick(40);
     expect(h.plans.length).toBe(1);
     expect(h.bridge.watch).toHaveBeenLastCalledWith(false);
+  });
+});
+
+describe("open_browser (desktop)", () => {
+  const OPENING = "I'm opening your web browser.";
+  const GUIDE = "Please open your web browser, like Chrome or Edge. I'll wait.";
+  const open = step("open_browser", "Opening Chrome for you now.");
+  const done = step("done", "All done.");
+  function nativeFrame(app: string, texts: string[]): FrameScan {
+    const f = frame(0, texts);
+    f.snapshot.surface = "native";
+    f.snapshot.url = "";
+    f.snapshot.title = app;
+    f.snapshot.app = { name: app, window: app };
+    return f;
+  }
+  const notepad = [nativeFrame("Notepad", ["File", "Edit"])];
+  const browser = [nativeFrame("Edge", ["Search box"])];
+
+  it("opens the browser with the fixed line, then re-plans", async () => {
+    const h = harness([open, done], [notepad, browser], { openBrowser: true });
+    await h.c.start("find a recipe for banana bread");
+    expect(h.bridge.openBrowser).toHaveBeenCalledTimes(1);
+    expect(h.ops).toContain(`say:${OPENING}`);
+    expect(h.ops.indexOf(`say:${OPENING}`)).toBeLessThan(h.ops.indexOf("openBrowser"));
+    expect(h.spoken).not.toContain(open.say);
+    expect(h.bridge.waitForChange).toHaveBeenCalledWith(10);
+    expect(h.plans).toHaveLength(2);
+    expect(h.plans[1].history).toEqual(['On "Notepad": JustAsk did: opened her web browser at its start page']);
+    expect(h.events).toEqual(["step_shown", "done"]);
+    expect(h.c.state.phase).toBe("done");
+    expect(h.c.state.actions).toBe(1);
+  });
+
+  it.each([
+    ["the bridge has no openBrowser", {}],
+    ["openBrowser resolves false", { openBrowser: false }],
+    ["openBrowser throws", { openBrowser: "throw" as const }],
+    ["Show me instead is on", { openBrowser: true, showMeInstead: true }],
+  ])("asks her to open it and waits when %s", async (_name, opts) => {
+    const h = harness([open], [notepad], opts);
+    await h.c.start("find a recipe for banana bread");
+    expect(h.c.state.phase).toBe("waiting");
+    expect(h.c.state.line).toBe(GUIDE);
+    expect(h.spoken.at(-1)).toBe(GUIDE);
+    expect(h.bridge.watch).toHaveBeenCalledWith(true);
+    expect(h.c.state.actions).toBe(0);
+    if ("showMeInstead" in opts) expect(h.bridge.openBrowser).not.toHaveBeenCalled();
+  });
+
+  it("a second open_browser in the same session asks her instead; a new session acts again", async () => {
+    const h = harness([open, open], [notepad, notepad], { openBrowser: true });
+    await h.c.start("find a recipe");
+    expect(h.bridge.openBrowser).toHaveBeenCalledTimes(1);
+    expect(h.c.state.phase).toBe("waiting");
+    expect(h.c.state.line).toBe(GUIDE);
+    await h.c.stop();
+    await h.c.start("find a recipe");
+    expect(h.bridge.openBrowser).toHaveBeenCalledTimes(2);
+  });
+
+  it("Stop during the beat cancels opening the browser", async () => {
+    const h = harness([open], [notepad], { openBrowser: true, timing: { actBeatMs: 50 } });
+    const p = h.c.start("x");
+    await tick(10);
+    expect(h.c.state.phase).toBe("acting");
+    expect(h.c.state.line).toBe(OPENING);
+    await h.c.stop();
+    await p;
+    expect(h.bridge.openBrowser).not.toHaveBeenCalled();
+    expect(h.c.state.phase).toBe("idle");
+  });
+
+  it("the prompt teaches open_browser with no web address", () => {
+    expect(SYSTEM_PROMPT).toContain('"open_browser": only when the turn shows "App" and "window"');
+    expect(SYSTEM_PROMPT).toContain('{"kind":"open_browser","say":"I\'m opening your web browser.","target":null,"expect":null,"option":null,"text":null,"risk":"none"}');
   });
 });
 

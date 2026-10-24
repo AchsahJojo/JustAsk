@@ -4,8 +4,10 @@ import type { PageSnapshot } from "./snapshot";
 /**
  * `act`: JustAsk performs the step itself (drive mode, docs/ARCHITECTURE.md §11).
  * `guide`: she performs it (sensitive fields, failed actions, "Show me instead").
+ * `open_browser`: desktop only. JustAsk opens her default web browser at its own start page.
+ * It carries no URL, target or text: JustAsk never navigates to an address Claude produced.
  */
-export const StepKind = z.enum(["act", "guide", "clarify", "wait", "done", "blocked"]);
+export const StepKind = z.enum(["act", "guide", "clarify", "wait", "done", "blocked", "open_browser"]);
 /** `scroll` brings the target into view; `submit` presses Enter in (or submits the form of) the target field. */
 export const Expect = z.enum(["click", "type", "choose", "hover", "file", "scroll", "submit"]);
 export const Risk = z.enum(["none", "money", "personal_info", "account_change", "suspicious"]);
@@ -69,6 +71,15 @@ export function checkStep(step: StepResponse, snapshot: PageSnapshot): StepCheck
     if (step.expect === "type" && !step.text?.trim()) return { ok: false, reason: "act with type needs text" };
     if (step.expect === "hover" || step.expect === "file") return { ok: false, reason: `act can't ${step.expect}; use guide` };
   }
+  if (step.kind === "open_browser") {
+    if (step.target !== null) return { ok: false, reason: "open_browser must not have a target" };
+    if (step.expect !== null) return { ok: false, reason: "open_browser must have expect null" };
+    if (step.text !== null) return { ok: false, reason: "open_browser must have text null; it never takes a web address" };
+    if (step.option !== null) return { ok: false, reason: "open_browser must have option null" };
+    if (step.risk !== "none") return { ok: false, reason: 'open_browser must have risk "none"' };
+    if (snapshot.surface !== "native") return { ok: false, reason: "open_browser is only for desktop app windows; this is already a web page" };
+    return { ok: true };
+  }
   if (step.target !== null) {
     const el = snapshot.elements.find((e) => e.n === step.target);
     if (!el) return { ok: false, reason: `target ${step.target} is not in the current list` };
@@ -87,7 +98,8 @@ export function checkStep(step: StepResponse, snapshot: PageSnapshot): StepCheck
       }
     }
   }
-  if (step.kind !== "guide" && step.kind !== "act" && step.target !== null && step.kind !== "clarify") {
+  // Only act and guide point at a target (clarify may mention one). open_browser returned above.
+  if (step.kind !== "guide" && step.kind !== "act" && step.kind !== "clarify" && step.target !== null) {
     return { ok: false, reason: `${step.kind} must not have a target` };
   }
   return { ok: true };

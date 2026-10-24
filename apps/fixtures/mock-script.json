@@ -31,5 +31,8 @@
   { "title": "Sign in", "step": { "kind": "act", "say": "I'm clicking the Sign in button.", "targetText": "Sign in", "expect": "click", "option": null, "text": null, "risk": "none" } },
   { "title": "Composer", "afterHistory": "the post box", "step": { "kind": "done", "say": "The post box is open. You can start writing.", "expect": null, "option": null, "risk": "none" } },
   { "title": "Composer", "step": { "kind": "act", "say": "I'm clicking the post box.", "targetText": "What's on your mind?", "expect": "click", "option": null, "text": null, "risk": "none" } },
-  { "title": "Composer", "step": { "kind": "wait", "say": "The post box is opening.", "expect": null, "option": null, "risk": "none" } }
+  { "title": "Composer", "step": { "kind": "wait", "say": "The post box is opening.", "expect": null, "option": null, "risk": "none" } },
+
+  { "title": "Notepad", "request": "recipe", "afterHistory": "opened her web browser", "step": { "kind": "done", "say": "Your web browser is open. Ask me again there.", "expect": null, "option": null, "risk": "none" } },
+  { "title": "Notepad", "request": "recipe", "step": { "kind": "open_browser", "say": "I'm opening your web browser.", "expect": null, "option": null, "risk": "none" } }
 ]
