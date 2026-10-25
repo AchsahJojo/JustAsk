@@ -64,7 +64,7 @@ export const get = query({
       .sort((a, b) => b.createdAt - a.createdAt)
       .slice(0, 50);
 
-    let stats: { finished: number; stuck: number | null; medianStepMs: number | null } | null = null;
+    let stats: { finished: number; stuck: number | null; medianStepMs: number | null; stepsPerTask: number | null; repeats: number } | null = null;
     if (s.consent.notifyOnComplete) {
       // Sessions for tasks this caregiver sent. Sessions the user started themselves stay private.
       const myTaskIds = new Set(tasks.map((t) => t._id));
@@ -73,10 +73,25 @@ export const get = query({
       );
       const latencies: number[] = [];
       let stuck = 0;
+      let repeats = 0;
+      // Steps per finished task: step_shown events in sessions that ended done.
+      let doneSessions = 0;
+      let doneSteps = 0;
       for (const x of mineSessions) {
+        let steps = 0;
+        let done = false;
         for (const e of await ctx.db.query("events").withIndex("by_session", (q) => q.eq("sessionId", x._id)).collect()) {
           if (e.type === "stuck") stuck++;
-          if (e.type === "step_shown" && e.latencyMs !== undefined) latencies.push(e.latencyMs);
+          if (e.type === "repeat") repeats++;
+          if (e.type === "done") done = true;
+          if (e.type === "step_shown") {
+            steps++;
+            if (e.latencyMs !== undefined) latencies.push(e.latencyMs);
+          }
+        }
+        if (done) {
+          doneSessions++;
+          doneSteps += steps;
         }
       }
       latencies.sort((a, b) => a - b);
@@ -84,6 +99,8 @@ export const get = query({
         finished: tasks.filter((t) => t.status === "done").length,
         stuck: s.consent.notifyOnStuck ? stuck : null,
         medianStepMs: latencies.length ? latencies[Math.floor(latencies.length / 2)] : null,
+        stepsPerTask: doneSessions ? Math.round((doneSteps / doneSessions) * 10) / 10 : null,
+        repeats,
       };
     }
 
@@ -119,8 +136,9 @@ export const update = mutation({
 });
 
 /**
- * Caregiver: turn "Show me instead" on or off for someone they help. On, JustAsk shows the user each click
- * and the user does it themselves. Off (the default), JustAsk clicks and types for the user, except sensitive fields.
+ * Caregiver: turn "Show me instead" on or off for someone they help. On (the default), JustAsk shows the
+ * user each step and the user does it themselves. The shipped extension is guide only and ignores "off"
+ * (`allowDrive` in packages/core); the pref is kept so drive mode can come back later.
  */
 export const setShowMe = mutation({
   args: { seniorId: v.id("seniors"), on: v.boolean() },

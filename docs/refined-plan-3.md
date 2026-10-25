@@ -1,4 +1,6 @@
-# JustAsk: finish for judging
+# JustAsk: finish for judging (refined plan 3)
+
+_Saved 2026-10-24. Replaces refined-plan-2's drive mode and desktop app: guide only, extension only._
 
 ## Context
 The planning doc (brief, build plan, repo review, Demo tab) and `docs/STATUS.md` show the product is mostly built: extension, caregiver app, Convex backend, Cartesia voice, scam check, 428 unit + 15 e2e tests. What's missing for judging is mostly not features:
@@ -19,9 +21,9 @@ The planning doc (brief, build plan, repo review, Demo tab) and `docs/STATUS.md`
 - Point CLAUDE.md's "current build plan" line at it.
 
 ## 1. Guide only (~1 h)
-- **Core gate:** in `packages/core/src/drive.ts` `gateAct` (line ~85), always return guide. Every act step passes through it (`controller.ts:684-690`), and `asGuide` (`controller.ts:734`) already converts it.
+- **Core gate:** `SessionController` acts only with `allowDrive: true` (a new dep). The extension never sets it, so every act step goes through `gateAct` → `asGuide`. Tests opt in to keep the drive suite.
 - **Prompt:** `packages/core/src/prompt.ts:14-15,24` says "act is the usual choice". Change it to guide only, so Claude stops proposing acts. Keep the `act` schema kind so nothing else breaks.
-- **Backend:** `packages/backend/convex/people.ts:125-134` `setShowMe` always stores `true`. Fix the comment at `:121-124`. `DEFAULT_PREFS` (`lib.ts:14`) is already `true`.
+- **Backend:** fix the `setShowMe` comment in `packages/backend/convex/people.ts`. Behavior is unchanged: the core `allowDrive` gate already ignores the pref, and keeping it saves the pref tests.
 - **Extension UI:** remove the "Let JustAsk click and type for me" checkbox (`apps/extension/src/ui/SetupSettings.tsx:36-38`). Make sure `Panel.tsx` drive-only bits (big red Stop while acting, "I did N steps for you") can't appear.
 - **Caregiver UI:** remove the `HowItHelps` toggle in `apps/caregiver/src/ui/Person.tsx:417-453`.
 - **Tests:** update the drive-mode tests in `packages/core/test/controller.test.ts` and `drive.test.ts` to expect guide. The e2e drive scenarios in `e2e/run.mjs` either expect guide or are skipped.
@@ -36,7 +38,7 @@ The planning doc (brief, build plan, repo review, Demo tab) and `docs/STATUS.md`
 **Caregiver:** sign up → add person → 6-digit code → send task (recipe + `https://` start page) → feed shows "finished" note → person page shows stats.
 **Senior:** install → I have a code → consent switches → task card → Start → guided 4 steps on the fixture pharmacy → "All done, you did it!" → I did it.
 
-- **Completion note:** change `sessions.ts:45` and `tasks.ts:103` to "`${name}` did "`${title}`" herself/themselves" style: `"${displayName} finished "${title}" by themself."` is awkward. Use `"${displayName} did "${title}" on their own."` and keep the consent checks at `sessions.ts:41` and `tasks.ts:101`.
+- **Completion note:** `sessions.ts:45` now reads `Joanie finished "Refill a prescription" and did every step themselves.` (gender-neutral, true in guide only). The consent checks at `sessions.ts:41` and `tasks.ts:101` are unchanged.
 - **Metrics:** extend `people.ts:67-88` and `Person.tsx:393-411` with steps per task and "Say that again" presses. Reuse the existing `events`, consent-gated as now.
   - Assigned vs self-started stays private by design. For the slide, use aggregate counts from the dashboard.
 - **Voice:** if Cartesia fails, captions and typing still work, and the step loop never blocks (confirmed). Add one visible note, "Voice is off right now — read the words below", when token minting returns null.

@@ -1,13 +1,16 @@
 # JustAsk: where we are
 
-_As of 2026-10-24, branch `feature/cg-desktop-merge`. This merges `feature/caregvier` (Ami) with `feature/xander` (Xander)._
+_As of 2026-10-24 (evening), after `docs/refined-plan-3.md`: **guide only, Chrome extension only**. The desktop app was removed, and drive mode is switched off in code._
 
 This page is a snapshot of the project. It covers what works today, how the pieces fit together, and what is missing. The other docs stay authoritative for detail:
 
 | Doc | What it is |
 |---|---|
 | `docs/ARCHITECTURE.md` | System design. Sections marked "(target)" are partly built; see below. |
-| `docs/refined-plan-2.md` | The current build plan (drive mode, desktop, accounts, agent waves). |
+| `docs/HOW-IT-WORKS.md` | The short version: pieces, flows, safety, decisions. |
+| `docs/refined-plan-3.md` | The current plan: guide only, extension only, deploy, judging. |
+| `docs/refined-plan-2.md` | The previous plan (drive mode, desktop, accounts, agent waves). Drive and desktop are superseded. |
+| `docs/DEPLOY.md` | One-command deploy for any teammate. |
 | `docs/MANUAL_SETUP.md` | How to run everything locally, plus manual test checklists. |
 | `docs/eval.md` | The prompt eval harness. |
 | `docs/possible_bugs.md` | An older bug audit. Most items are now fixed; see "Known bugs" below. |
@@ -16,9 +19,9 @@ This page is a snapshot of the project. It covers what works today, how the piec
 
 ## 1. The product in one paragraph
 
-An older adult says or types what they want to do ("refill my prescription"). JustAsk reads the page and does it for them one step at a time (**drive mode**). It says what it's doing and highlights each element before acting. The user can press **Stop** at any time. It never types passwords, card numbers or other sensitive fields; for those it shows the user where to type. It asks before payments and account changes. With **Show me instead** turned on, it guides every step and the user does the clicking.
+An older adult says or types what they want to do ("refill my prescription"). JustAsk reads the page, puts a glowing box around the one thing to use next, and says one short line about it ("Click the big blue Refill button"). **The user does every click and keystroke. JustAsk never does.** It moves on when it sees their click, typing or choice. It never reads passwords, card numbers or other sensitive fields; it points at them and says it can't see them. It asks before payments and account changes, and blocks pages that look like scams. **Stop** always works.
 
-A caregiver is optional. When there is one, the caregiver can set JustAsk up for the user, send them tasks, and hear when they finish. Everything runs as a Chrome extension today. A Windows desktop app adds the same help inside native apps (Settings, Zoom, the print dialog).
+A caregiver is optional. When there is one, the caregiver can set JustAsk up for the user, send them tasks, and hear when they finish. Everything runs as a Chrome extension plus a caregiver web app.
 
 ---
 
@@ -28,12 +31,7 @@ A caregiver is optional. When there is one, the caregiver can set JustAsk up for
 - **Side panel:**
   - voice (Cartesia, listening and speaking) or typed requests
   - the step loop with an orb, spoken captions, Say that again, I'm stuck and Stop
-  - a big red Stop while JustAsk acts
-- **Guide by default:** JustAsk shows each step and the user clicks. "Let JustAsk click and type for me" (settings) or "Click and type for …" (caregiver app) turns drive mode on. Older accounts where nobody chose are guided.
-- **Drive mode (opt-in):**
-  - `act` steps click, type, choose, scroll and submit, each announced first
-  - it falls back to guiding for sensitive fields, failed actions and Show me instead
-  - it switches to guiding after 3 actions that change nothing
+- **Guide only:** every step is a guide step. The core only acts with `allowDrive: true`, which the extension never sets, and the prompt tells Claude never to use `act`. Drive-mode code stays in `packages/core/src/drive.ts` and `packages/page-agent/src/act.ts` for later.
 - **Guide mode:** highlights an element and waits for the user's click, typing or choice. "I'm done typing" checks that the field really has a value.
 - **Safety:**
   - money, personal-info and account-change steps ask first, and say exactly what would be pressed and where ("Next, I'd press “Place order” on pharmacy.example.")
@@ -49,13 +47,12 @@ A caregiver is optional. When there is one, the caregiver can set JustAsk up for
   - **Your devices** (add or remove)
   - **Your helpers** (Stop per helper)
   - **Share with my helper** (makes a helper code)
-  - **I have a code**: a code from the JustAsk desktop app, another browser or a helper links this browser into that account, after confirming whose it is
+  - **I have a code**: a code from another browser or a helper links this browser into that account, after confirming whose it is
 - **Persistent task list:** open tasks stay until the user finishes or removes them.
   - The first task is a card with Start (or Keep going) and I did it. The rest go under "Also on your list", plus a Done / Manage list.
   - The list updates live over a `ConvexClient` subscription, with a polling fallback.
   - The toolbar badge counts open tasks.
 - **Handoffs and links:**
-  - `#justask=<id>` claims a handoff from the desktop app and shows an in-page Start banner
   - `#justask-link=<code>` asks "Link to Alex's JustAsk?" before linking
 - **Resilience:** survives rerenders (fingerprint rebinding), open and closed shadow roots, same- and cross-origin iframes, new tabs, `<dialog>` modals, late-loading editors (watches until the page settles), and resume after the panel reloads.
 - **Starting from nothing:**
@@ -79,26 +76,11 @@ A caregiver is optional. When there is one, the caregiver can set JustAsk up for
   - **Send a task:** title, spoken prompt, an optional recipe of steps and an `https://` start page
   - **Tasks you sent:** take one back while it's still waiting
   - **What they share with you:** consent-gated status and stats
-  - **How JustAsk helps:** turn Show me instead on or off for the person
+  - **How JustAsk helps:** a plain note that JustAsk only guides and they do the clicking
   - **Computers:** add another computer
   - **Details:** edit, or Stop helping
 - **Home:** the people you help, plus an activity feed (finished, stuck, disconnected) with mark-all-read.
 - **Layout:** works at phone width and in dark mode, with a not-found page and redirects after profiles merge.
-
-### Desktop app (`apps/desktop`, Tauri 2)
-- **Windows:**
-  - Ask window with the orb, a tray menu, and Welcome and Settings screens
-  - pairing (create an account, or link with a code)
-  - a Convex client, OS task alerts and handoffs
-  - Cartesia voice for listening and speaking (`packages/voice`, token minted by Convex)
-- **`NativeBridge`:** the same `PageBridge` the extension uses, over Tauri commands.
-- **Windows UI Automation** (`src-tauri/src/native/windows.rs`):
-  - scans the foreground window
-  - highlights the target with an overlay
-  - acts through UIA patterns, never on secure fields
-  - polls for changes (`wait_for_change`)
-  - `dump_snapshot` CLI for debugging
-- Unit tests for the backend client, bridge, device, links and STT.
 
 ### Backend (`packages/backend`, Convex)
 - **Planner:** the `/plan` HTTP action calls Claude with structured output, prompt caching and model fallbacks, with a per-device hourly step budget. A local planner runs on :8787 (Claude if `ANTHROPIC_API_KEY` is set, otherwise a scripted mock).
@@ -110,7 +92,7 @@ A caregiver is optional. When there is one, the caregiver can set JustAsk up for
   - stopped or blocked tasks go back to pending
   - "I did it" sends a consent-gated note
 - **Prefs:** voice, speed, Show me instead and consent, synced across installs. `showMeSetBy` records whether the user or a caregiver set it.
-- **Handoffs** between the extension and the desktop app, matched by `machineId`.
+- **Handoffs** (desktop to browser): the code is still there but unused since the desktop app was removed.
 - **Platform features:**
   - `@convex-dev/rate-limiter`: code attempts per prefix, globally and per caregiver, plus account creation
   - hourly cleanup cron
@@ -120,13 +102,13 @@ A caregiver is optional. When there is one, the caregiver can set JustAsk up for
 ### Shared packages
 - `packages/shared`: Zod `StepResponse` (single source for the JSON Schema), `checkStep`, message and API types, caregiver task limits.
 - `packages/core`: `SessionController` (plan → check → act or guide → verify), the prompt, spoken lines and voice commands. No browser APIs.
-- `packages/voice`: JustAsk's voice, **Cartesia only**: Sonic TTS and `ink-whisper` STT over WebSockets with one shared short-lived token, used by the extension and the desktop app. No browser speech APIs anywhere.
-- `packages/page-agent`: scanner, visibility, sensitive-field classifier, the `act` executor, `watch`, and fingerprint rebinding. DOM only.
+- `packages/voice`: JustAsk's voice, **Cartesia only**: Sonic TTS and `ink-whisper` STT over WebSockets with one shared short-lived token, used by the extension. No browser speech APIs anywhere. If Cartesia fails, the panel says the voice is off; captions and typing keep working.
+- `packages/page-agent`: scanner, visibility, sensitive-field classifier, `watch`, and fingerprint rebinding (plus the unused `act` executor). DOM only.
 
 ### Tests and tooling
 | Command | What | Status |
 |---|---|---|
-| `npm test` | 428 unit tests (Vitest), including the convex-test backend suites | passing |
+| `npm test` | 415 unit tests (Vitest), including the convex-test backend suites | passing |
 | `npm run test:e2e` | 15 Puppeteer scenarios with the real extension and the mock planner on :8788 | passing |
 | `CONVEX_CODE=… npm run test:e2e` | adds pairing, task card, recipe and completion against local Convex | passing |
 | `npm run test:accounts` | accounts against local Convex (auth, merge, helper codes, Show me instead, task list) | passing |
@@ -141,21 +123,20 @@ A caregiver is optional. When there is one, the caregiver can set JustAsk up for
 ## 3. Architecture
 
 ```
-                      ┌──────────────────────────── Convex ─────────────────────────────┐
-                      │  /plan (HTTP action) ──► Claude (structured StepResponse)        │
-                      │  accounts · devices · careLinks · tasks · prefs · handoffs       │
-                      │  sessions/events · notifications · rate limiter · cron · auth    │
-                      └────▲──────────────▲──────────────────▲──────────────────▲────────┘
-          device token     │              │ live queries     │ Convex Auth      │ device token
-                           │              │                  │                  │
-┌──────────── Chrome extension ───────────┴──┐   ┌── Caregiver web app ──┐   ┌── Desktop app (Tauri) ──┐
-│ side panel (React) ── SessionController ───┤   │ people · tasks ·      │   │ Ask window ── Session-  │
-│        (packages/core)      │              │   │ activity · setup      │   │ Controller ── Native-   │
-│                     ExtensionBridge        │   └───────────────────────┘   │ Bridge ── Rust UIA scan │
-│                             │ messages     │                               │ / overlay / act         │
-│ content script ── page-agent (scan, act,   │◄────── handoff links ────────►│                         │
-│                   highlight, watch)        │                               └─────────────────────────┘
-└────────────────────────────────────────────┘
+              ┌──────────────────────────── Convex ────────────────────────────┐
+              │  /plan (HTTP action) ──► Claude (structured StepResponse)       │
+              │  accounts · devices · careLinks · tasks · prefs · events        │
+              │  notifications · rate limiter · cron · auth · Cartesia token    │
+              └──────▲──────────────────────▲───────────────────────▲──────────┘
+       device token  │         live queries │            Convex Auth │
+┌──────────── Chrome extension ─────────────┴──────┐   ┌── Caregiver web app ──┐
+│ side panel (React) ── SessionController ─────────┤   │ people · tasks ·      │
+│        (packages/core)      │                    │   │ activity · stats      │
+│                     ExtensionBridge              │   └───────────────────────┘
+│                             │ messages           │
+│ content script ── page-agent (scan, highlight,   │
+│                   watch)                         │
+└──────────────────────────────────────────────────┘
 ```
 
 **One step:**
@@ -163,7 +144,7 @@ A caregiver is optional. When there is one, the caregiver can set JustAsk up for
 2. The controller sends `{request, history, recipe, snapshot}` to `/plan`.
 3. Claude returns a `StepResponse` that names an element **number**, never a selector.
 4. `checkStep` validates it. The deterministic gates run: sensitive field → guide, risk → ask, suspicious → block.
-5. JustAsk acts (`act`) or highlights and waits (`guide`).
+5. JustAsk highlights the target, says the line, and waits for the user (`guide`).
 6. The page reports done, wrong or changed, and the loop continues.
 
 **Accounts:**
@@ -173,7 +154,6 @@ A caregiver is optional. When there is one, the caregiver can set JustAsk up for
 
 **Where code goes:** see `CLAUDE.md` and `ARCHITECTURE.md` §4 and §13.
 - Browser APIs only in `apps/extension`.
-- OS APIs only in `apps/desktop/src-tauri`.
 - `packages/core` and `packages/page-agent` stay platform-free.
 
 ---
@@ -184,29 +164,21 @@ A caregiver is optional. When there is one, the caregiver can set JustAsk up for
 - [ ] **The cloud dev Convex (`aromatic-salamander-969`) has none of the merged code.** Someone with access runs `npx convex dev` (or deploys), then `npx @convex-dev/auth` to set `JWT_PRIVATE_KEY`, `JWKS` and `SITE_URL`. Until then, everything runs against the local anonymous Convex.
 - [ ] `ANTHROPIC_API_KEY` in the cloud Convex env, so `/plan` uses Claude (local currently answers "server not configured").
 - [ ] **Email verification and password reset** for caregivers: Resend (`AUTH_RESEND_KEY` plus a verified domain) in the Convex project, then wire `Password({ verify, reset })`.
-- [ ] Hosting the caregiver app, and a real link origin (`VITE_LINK_ORIGIN`) for `#justask-link=` codes from the desktop app.
-- [ ] Code signing (Windows, and Apple if macOS ships). Owner not decided.
+- [ ] Hosting the caregiver app and fixtures: `npm run deploy -- --vercel` (see `docs/DEPLOY.md`).
 
 ### Planned in refined-plan-2 but not done
 - [ ] **Wave 2 e2e scenarios:**
-  - driven store search plus add-to-cart
+  - guided store search plus add-to-cart
   - login (password guided, never typed)
   - payment (asks first; card entry guided)
   - late-loading composer (P1)
   - off-canvas drawer (P2)
-  - the handoff link
-  - the sentinel leak test with drive mode on
 
   The fixtures exist (`apps/fixtures/public/gaps/store*.html`, `checkout`, `login`, `composer`), and the mock script has the rules.
 - [ ] **Run the eval** before and after the prompt and scanner changes, and pick the model and effort from the data. Several cases are still marked "pending fixtures" in `docs/eval.md`.
-- [ ] **macOS native** (`native/macos`): only if a teammate runs it on a Mac.
-- [ ] **Desktop target apps checked by hand:** Windows Settings text size, Zoom join, print dialog.
-- [ ] **Desktop to browser and back,** tested end to end on one machine.
 
 ### Product decisions still open
-- [ ] Should **Show me instead** be on by default for new accounts? (It's off today. Caregivers can switch it per person.)
-- [ ] The pause before each action: 1 s by default. Should a caregiver be able to change it?
-- [ ] The first-run question. The old "Type it for me" asked the user once whether JustAsk should type for them; drive mode has no such question. Decide whether setup should ask "Should JustAsk do the clicking, or show you?"
+- [x] Guide or drive? **Decided: guide only** (refined-plan-3). The user always does the clicking.
 - [ ] Per-IP abuse limits on unauthenticated endpoints. This needs an HTTP action in front; today the limits are global and per code prefix.
 
 ### Known bugs and gaps
@@ -248,7 +220,7 @@ Still open:
 
 ## 5. Scam protection (plan)
 
-**Why it matters.** Older adults lose billions of dollars a year to online and phone fraud. The FBI's 2023 Elder Fraud Report counts over $3.4 billion reported by people over 60 in one year. The biggest losses are tech-support and government-impersonation scams, investment and crypto scams, romance scams, and "grandparent" emergencies. Many of these end with a scammer *talking the victim through* a payment on their own computer. JustAsk sits at exactly that moment. It hears what the user wants to do and sees the page they do it on, so it can notice the pattern and slow things down before money or codes leave.
+**Why it matters.** Older adults lose billions of dollars a year to online and phone fraud. People 60+ reported about $7.7 billion in losses to the FBI's IC3 in 2025, up 59% on 2024 (as summarized by AARP; confirm in the IC3 report before quoting). The biggest losses are tech-support and government-impersonation scams, investment and crypto scams, romance scams, and "grandparent" emergencies. Many of these end with a scammer *talking the victim through* a payment on their own computer. JustAsk sits at exactly that moment. It hears what the user wants to do and sees the page they do it on, so it can notice the pattern and slow things down before money or codes leave.
 
 ### Principles
 - **The user's choice, not ours.** JustAsk asks one plain question and explains why. It doesn't lecture, shame or silently refuse. The only hard lines are typing passwords, texted codes, card numbers and gift card codes for the user, which JustAsk never does anyway.
@@ -303,7 +275,7 @@ Still open:
 ### Phases
 | Phase | What | Size |
 |---|---|---|
-| 1 (done) | request check with plain question and stop screen; page rule in the prompt; gift card fields sensitive; desktop app uses the same buttons; unit + e2e tests | done |
+| 1 (done) | request check with plain question and stop screen; page rule in the prompt; gift card fields sensitive; unit + e2e tests | done |
 | 2 | check every answer, not just the first request; deterministic page signals; remote-tool downloads; the "slow down" screen; consented helper alert; fixtures and eval cases | ~2 days |
 | 3 | Safe Browsing / Web Risk, RDAP domain age, trusted-store list, all through a cached Convex action; measured false-alarm rate | ~2 days plus API keys |
 

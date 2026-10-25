@@ -1,0 +1,6 @@
+# Keep LF everywhere so tests that compare file text pass on Windows too.
+* text=auto eol=lf
+*.png binary
+*.jpg binary
+*.ico binary
+*.woff2 binary

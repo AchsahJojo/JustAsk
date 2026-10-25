@@ -46,7 +46,7 @@ export class SessionHost {
       planner: this.planner,
       speech: this.speech,
       deviceToken: () => this.settings?.deviceToken ?? null,
-      // Synced "Show me instead": guide every step rather than acting for the user.
+      // Guide only: no `allowDrive`, so every step is shown and the user does it. The synced pref stays for later.
       prefs: () => ({ showMeInstead: this.settings?.showMeInstead ?? false }),
       blankTab: () => this.onBlankTab(),
       // On an empty tab JustAsk asks first; after a yes, the user's words are searched with their default engine.

@@ -134,7 +134,7 @@ function HaveCode({ busy, onRedeem }: { busy: boolean; onRedeem: (code: string) 
       }}
     >
       <h3>I have a code</h3>
-      <label htmlFor="pair-code">The 6-digit code from the JustAsk app on your computer, another browser, or your helper</label>
+      <label htmlFor="pair-code">The 6-digit code from your helper, or from JustAsk on another browser</label>
       <div className="row">
         <input id="pair-code" inputMode="numeric" maxLength={7} value={code} onChange={(e) => setCode(e.target.value)} placeholder="123456" aria-label="Pairing code" autoComplete="one-time-code" />
         <button className="btn dark" type="submit" disabled={!ok || busy}>

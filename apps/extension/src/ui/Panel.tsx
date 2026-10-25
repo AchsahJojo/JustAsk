@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { browser } from "wxt/browser";
 import type { SessionView } from "@justask/core";
 import { SessionHost } from "../lib/session";
-import { newListener, voiceTokens } from "../lib/speech";
+import { newListener, onVoiceStatus, voiceTokens } from "../lib/speech";
 import { backend, type PendingTask, type Task, type TaskList } from "../lib/backend";
 import { getSettings } from "../lib/config";
 import { pullPrefs } from "../lib/prefsSync";
@@ -35,6 +35,8 @@ export function Panel({ pinnedTabId }: { pinnedTabId: number | null }) {
   const [tasks, setTasks] = useTaskList();
   const [resume, setResume] = useState<{ request: string; taskId: string | null } | null>(null);
   const [access, setAccess] = useState(true);
+  const [voiceUp, setVoiceUp] = useState(true);
+  useEffect(() => onVoiceStatus(setVoiceUp), []);
   const captionRef = useRef<HTMLParagraphElement>(null);
 
   // Host access is optional and user-revocable. Check it on open and whenever it changes.
@@ -338,6 +340,11 @@ export function Panel({ pinnedTabId }: { pinnedTabId: number | null }) {
           </>
         )}
         {note && <p className="note">{note}</p>}
+        {!voiceUp && (
+          <p className="note" role="status">
+            JustAsk's voice is off right now. Read the words above, and type what you want in the box.
+          </p>
+        )}
       </main>
 
       {phase !== "idle" && (

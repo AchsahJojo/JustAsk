@@ -162,15 +162,12 @@ try {
   await shot("09-person-done");
   step("consent on: task shows Done, stats appear");
 
-  // How JustAsk helps: guiding by default; the caregiver lets JustAsk click; the user's synced prefs see it.
-  assert.match(await text(), /can change this in Settings/);
-  assert.equal(await page.evaluate(() => [...document.querySelectorAll("label.check")].find((l) => l.textContent.includes("Click and type for"))?.querySelector("input")?.checked), false, "off by default");
-  await page.evaluate(() => [...document.querySelectorAll("label.check")].find((l) => l.textContent.includes("Click and type for"))?.querySelector("input")?.click());
-  await waitText("Set by a helper");
-  assert.equal((await senior.query("prefs:get", { token })).showMeInstead, false);
-  assert.equal((await senior.query("devices:me", { token })).showMeSetBy, "caregiver");
+  // How JustAsk helps: guide only. No "click and type" switch anywhere.
+  assert.match(await text(), /they do the clicking themselves/);
+  assert.equal(await page.evaluate(() => document.body.textContent.includes("Click and type for")), false, "no drive toggle");
+  assert.equal((await senior.query("prefs:get", { token })).showMeInstead, true);
   await shot("09b-how-it-helps");
-  step("JustAsk guides by default; the caregiver lets it click; the senior's synced prefs reflect it");
+  step("JustAsk is guide only: the caregiver sees no drive switch");
 
   // Take back a second task.
   await clickText("New task", "button");
@@ -188,7 +185,7 @@ try {
   await page.goto(APP + "#/");
   await waitText("People you help");
   await waitText("finished");
-  assert.match(await text(), /Joanie finished "Refill a prescription" on their own/);
+  assert.match(await text(), /Joanie finished "Refill a prescription" and did every step themselves/);
   await shot("10-home");
   await clickText("Mark all read", "button");
   await page.waitForFunction(() => !document.querySelector(".feed-list li.unread"), { timeout: 5000, polling: 100 });

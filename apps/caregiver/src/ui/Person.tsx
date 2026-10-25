@@ -87,7 +87,7 @@ function PersonPage({ id }: { id: Id<"seniors"> }) {
           </div>
           <div className="col side">
             <Sharing displayName={p.displayName} consent={p.consent} stats={p.stats} />
-            <HowItHelps seniorId={p.id} displayName={p.displayName} showMe={p.showMeInstead} setBy={p.showMeSetBy} />
+            <HowItHelps displayName={p.displayName} />
             <section className="card">
               <h2>Computers</h2>
               <p className="muted small">
@@ -372,7 +372,7 @@ function Sharing({
 }: {
   displayName: string;
   consent: { notifyOnComplete: boolean; notifyOnStuck: boolean };
-  stats: { finished: number; stuck: number | null; medianStepMs: number | null } | null;
+  stats: { finished: number; stuck: number | null; medianStepMs: number | null; stepsPerTask: number | null; repeats: number } | null;
 }) {
   return (
     <section className="card">
@@ -402,6 +402,16 @@ function Sharing({
               <dd>{stats.stuck}</dd>
             </div>
           )}
+          {stats.stepsPerTask !== null && (
+            <div>
+              <dt>Steps per task</dt>
+              <dd>{stats.stepsPerTask}</dd>
+            </div>
+          )}
+          <div>
+            <dt>“Say that again”</dt>
+            <dd>{stats.repeats}</dd>
+          </div>
           {stats.medianStepMs !== null && (
             <div>
               <dt>Typical step</dt>
@@ -414,40 +424,15 @@ function Sharing({
   );
 }
 
-/** Drive mode or "Show me instead". A helper may know clicking and typing is hard for them, or that they'd rather learn. */
-function HowItHelps({ seniorId, displayName, showMe, setBy }: { seniorId: Id<"seniors">; displayName: string; showMe: boolean; setBy: "self" | "caregiver" | null }) {
-  const setShowMe = useMutation(api.people.setShowMe);
-  const [error, setError] = useState("");
-  const toggle = async () => {
-    setError("");
-    try {
-      await setShowMe({ seniorId, on: !showMe });
-    } catch (e) {
-      setError(errorText(e));
-    }
-  };
+/** How JustAsk helps: guide only. It points at each step and the person does the clicking. */
+function HowItHelps({ displayName }: { displayName: string }) {
   return (
     <section className="card">
       <h2>How JustAsk helps</h2>
-      <label className="check">
-        <input type="checkbox" checked={!showMe} onChange={() => void toggle()} />
-        <span>
-          <strong>Click and type for {displayName}</strong>
-          <span className="muted small">
-            {" "}
-            JustAsk does each step for them and says what it's doing. It asks first before payments or account changes, and never types passwords, card numbers or other private details.
-          </span>
-        </span>
-      </label>
       <p className="muted small">
-        {showMe ? `Off (the default): JustAsk shows ${displayName} each step, and they do the clicking. It still searches the web for them when they say yes. ` : ""}
-        {setBy === "caregiver" ? `Set by a helper. ${displayName} can change it in Settings.` : setBy === "self" ? `${displayName} chose this. You can change it if it suits them better.` : `${displayName} can change this in Settings.`}
+        JustAsk shows {displayName} each step with a glowing box and one spoken line, and they do the clicking themselves. It never clicks or
+        types for them, never reads passwords or card numbers, and asks first before payments or account changes.
       </p>
-      {error && (
-        <p className="error" role="alert">
-          {error}
-        </p>
-      )}
     </section>
   );
 }

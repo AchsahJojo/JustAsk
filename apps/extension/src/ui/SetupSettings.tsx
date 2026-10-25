@@ -14,39 +14,18 @@ const SPEEDS = [
 
 /** Setup step 4 (once connected): synced preferences, linked devices and the helper code. */
 export function SettingsStep({ s, onChange }: { s: Settings; onChange: (s: Settings) => void }) {
-  const set = async (patch: Parameters<typeof pushPrefs>[0]) => {
-    if (patch.showMeInstead !== undefined) setShowMeBy("self");
-    onChange(await pushPrefs(patch));
-  };
+  const set = async (patch: Parameters<typeof pushPrefs>[0]) => onChange(await pushPrefs(patch));
   const [helpers, setHelpers] = useState<Helper[] | null>(null);
-  const [showMeBy, setShowMeBy] = useState<"self" | "caregiver" | null>(null);
   const loadMe = async () => {
     const me = await backend.me();
     setHelpers(me?.helpers ?? []);
-    setShowMeBy(me?.showMeSetBy ?? null);
   };
   useEffect(() => void loadMe(), []);
   return (
     <li className="step">
       <h2>4. Your settings</h2>
-      <p>These follow you to every computer and browser where you use JustAsk.</p>
-
-      <div className="toggles">
-        <label className="toggle">
-          <input type="checkbox" checked={!s.showMeInstead} onChange={(e) => set({ showMeInstead: !e.target.checked })} />
-          <span>
-            <strong>Let JustAsk click and type for me</strong>
-            <br />
-            <span className="soft">Off: JustAsk shows you each step and you do the clicking. It can always search the web for you when you say yes.</span>
-            {showMeBy === "caregiver" && (
-              <>
-                <br />
-                <span className="soft">Your helper set this. You can still change it.</span>
-              </>
-            )}
-          </span>
-        </label>
-      </div>
+      <p>These follow you to every browser where you use JustAsk.</p>
+      <p className="soft">JustAsk shows you each step and you do the clicking. It never clicks or types for you.</p>
 
       <fieldset className="speeds">
         <legend>How fast JustAsk talks</legend>
@@ -258,7 +237,7 @@ function Helpers({ helpers, onChanged }: { helpers: Helper[] | null; onChanged: 
 }
 
 /**
- * A 6-digit code from the JustAsk desktop app, another computer, or a helper, typed on a browser that
+ * A 6-digit code from another browser or a helper, typed on a browser that
  * already has an account. It shows whose JustAsk the code belongs to first, then links them into one
  * account (`devices:redeemCode` with this browser's token): nothing set up here is lost.
  */
@@ -306,7 +285,7 @@ function HaveCode({ onJoined }: { onJoined: () => Promise<void> }) {
   return (
     <section className="sub" aria-label="I have a code">
       <h3>I have a code</h3>
-      <p className="soft">From the JustAsk app on your computer, another browser, or your helper.</p>
+      <p className="soft">From JustAsk on another browser, or from your helper.</p>
       {owner ? (
         <div className="confirm" role="group" aria-label="Link this browser?">
           <p>Link this browser to {owner}'s JustAsk? Only say yes if you just asked for this code.</p>

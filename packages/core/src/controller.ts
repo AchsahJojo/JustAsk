@@ -72,6 +72,11 @@ export interface ControllerDeps {
   deviceToken?: () => string | null;
   /** Synced account preferences. `showMeInstead`: turn every act step into a guide step. */
   prefs?: () => { showMeInstead: boolean };
+  /**
+   * Drive mode (JustAsk clicks and types) only runs when this is true. JustAsk ships guide only, so
+   * the extension never sets it: every act step becomes a guide step and the user does the clicking.
+   */
+  allowDrive?: boolean;
   /** True when the session tab is empty (New Tab page, about:blank), so a failed scan can offer to look it up. */
   blankTab?: () => Promise<boolean>;
   /**
@@ -259,7 +264,7 @@ export class SessionController {
     const gen = this.gen;
     this.recipe = opts.recipe ?? null;
     this.sessionId = opts.sessionId ?? null;
-    if (this.deps.prefs?.().showMeInstead) this.history.push(L.SHOW_ME_NOTE);
+    if (this.showMe()) this.history.push(L.SHOW_ME_NOTE);
     // The user's own words first: a request that looks like a common scam gets one plain question
     // before JustAsk opens, searches or presses anything. Only the user's answer decides.
     const flag = scamCheck(text);
@@ -682,7 +687,7 @@ export class SessionController {
         let next: Pending = "guide";
         if (step.kind === "act") {
           const gate = gateAct(step, this.element(step.target), {
-            showMeInstead: this.deps.prefs?.().showMeInstead ?? false,
+            showMeInstead: this.showMe(),
             guideMode: this.guideMode,
             said: userWords(this.view.request, this.history, this.recipe),
           });
@@ -731,6 +736,11 @@ export class SessionController {
    * The same step, for the user to do. A first-person act line ("I'm clicking…") becomes a fixed guide
    * line. With `keepText` false (personal data, or the user declined), the text is never said.
    */
+  /** Guide every step: always, unless drive mode is allowed and the user turned Show me instead off. */
+  private showMe(): boolean {
+    return !this.deps.allowDrive || (this.deps.prefs?.().showMeInstead ?? false);
+  }
+
   private asGuide(step: StepResponse, keepText: boolean): StepResponse {
     if (step.kind === "guide") return step;
     const el = this.element(step.target);

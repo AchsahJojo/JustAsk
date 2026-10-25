@@ -72,3 +72,27 @@ describe("task status follows its session lifecycle", () => {
     expect(notifications[0].text).not.toContain("page content");
   });
 });
+
+describe("caregiver impact stats", () => {
+  test("finished task: completion note, steps per task and Say that again counts", async () => {
+    const t = setup();
+    const token = await newAccount(t);
+    const { caregiverId, as } = await caregiver(t);
+    const seniorId = await t.run(async (ctx) => (await ctx.db.query("seniors").first())!._id);
+    await t.run((ctx) => ctx.db.insert("careLinks", { caregiverId, seniorId, relation: "son" }));
+    await t.mutation(api.prefs.set, { token, consent: { notifyOnComplete: true, notifyOnStuck: true } });
+    const taskId = await t.run((ctx) =>
+      ctx.db.insert("tasks", { seniorId, assignedBy: caregiverId, title: "Refill", spokenPrompt: "Refill", status: "active", createdAt: Date.now() }),
+    );
+    const sessionId = await t.mutation(api.sessions.start, { token, request: "Refill", taskId });
+    for (const ms of [900, 1200, 1500, 2000]) await t.mutation(api.sessions.logEvent, { token, sessionId, type: "step_shown", latencyMs: ms });
+    await t.mutation(api.sessions.logEvent, { token, sessionId, type: "repeat" });
+    await t.mutation(api.sessions.logEvent, { token, sessionId, type: "done" });
+
+    const note = (await t.run((ctx) => ctx.db.query("notifications").collect()))[0];
+    expect(note.text).toBe('Margaret finished "Refill" and did every step themselves.');
+    const page = await as.query(api.people.get, { seniorId });
+    if (page.moved) throw new Error("moved");
+    expect(page.stats).toEqual({ finished: 1, stuck: 0, medianStepMs: 1500, stepsPerTask: 4, repeats: 1 });
+  });
+});

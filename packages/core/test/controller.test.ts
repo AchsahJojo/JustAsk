@@ -43,6 +43,8 @@ interface HarnessOpts {
   actOk?: boolean;
   changed?: boolean;
   showMeInstead?: boolean;
+  /** Drive-mode tests opt in; false is the shipped guide-only build. */
+  allowDrive?: boolean;
   responseSnapshotId?: string;
   timing?: Record<string, number>;
 }
@@ -79,6 +81,7 @@ function harness(steps: StepResponse[], scans: FrameScan[][] = [[frame(0, ["A", 
     speech,
     events: { log: (t) => events.push(t) },
     prefs: () => ({ showMeInstead: opts.showMeInstead ?? false }),
+    allowDrive: opts.allowDrive ?? true,
     timing: { changeTimeoutMs: 10, quietChangeMs: 7, actBeatMs: 0, waitRecheckMs: 60_000, ...opts.timing },
   });
   return { c, bridge, planner, plans, spoken, highlights, events, ops };
@@ -238,14 +241,16 @@ describe("prompt", () => {
     expect(turn).toContain("Caregiver's recipe");
     expect(turn).toContain('[1] button: "Go"');
   });
-  it("is drive mode: act by default, search first, no menu bias, native paragraph", () => {
-    expect(SYSTEM_PROMPT).toContain('"act" is the usual choice');
+  it("is guide only: guide by default, never act, search first, no menu bias, no desktop paragraph", () => {
+    expect(SYSTEM_PROMPT).toContain('"guide" is the usual choice');
+    expect(SYSTEM_PROMPT).toContain('Never use "act"');
+    expect(SYSTEM_PROMPT.slice(SYSTEM_PROMPT.indexOf("Worked examples"))).not.toContain('"kind":"act"');
     expect(SYSTEM_PROMPT).toContain('role "search box"');
     expect(SYSTEM_PROMPT).toContain("don't open category menus to find a specific item");
     expect(SYSTEM_PROMPT).not.toContain("prefer guiding the user to scroll or open a menu");
-    expect(SYSTEM_PROMPT).toContain("Desktop apps:");
+    expect(SYSTEM_PROMPT).not.toContain("Desktop apps:");
     expect(SYSTEM_PROMPT).toContain('"kind":"guide","say":"Type your password here. I can\'t see it."');
-    expect(SYSTEM_PROMPT).toContain('"text":"water bottle"');
+    expect(SYSTEM_PROMPT).not.toContain('"text":"water bottle"');
   });
   it("marks sensitive fields", () => {
     const f = frame(0, ["Password"]);
@@ -264,6 +269,16 @@ describe("prompt", () => {
     expect(turn).toContain("App: Settings, window: System > Display");
     expect(turn).not.toContain("Page address");
     expect(buildTurn("x", [], null, mergeScans([frame(0, ["A"])], "t").snapshot)).toContain("Page address: https://x.test/");
+  });
+});
+
+describe("guide only (the shipped build)", () => {
+  it("never acts without allowDrive, even with Show me instead off", async () => {
+    const h = harness([act(1, "I'm clicking A."), step("done", "All done, you did it!")], undefined, { actOk: true, allowDrive: false, showMeInstead: false });
+    await h.c.start("help me");
+    expect(h.bridge.act).not.toHaveBeenCalled();
+    expect(h.c.state.phase).toBe("guiding");
+    expect(h.plans[0].history[0]).toMatch(/Show me instead/);
   });
 });
 

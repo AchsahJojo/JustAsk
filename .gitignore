@@ -8,3 +8,4 @@ dist
 .convex
 e2e/screenshots
 .DS_Store
+.vercel
