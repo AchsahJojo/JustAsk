@@ -56,7 +56,7 @@ JUSTASK_CONVEX_URL=https://<name>.convex.cloud
 JUSTASK_EXTENSION_URL=https://github.com/AchsahJojo/JustAsk/releases
 ```
 
-**6. First Vercel publish.** It asks you to link or create a project for each folder: `caregiver` and `fixtures`.
+**6. First Vercel publish.** On a new machine it links (or creates) the Vercel projects `justask-caregiver` and `justask-fixtures` under your account. Live today: https://justask-caregiver.vercel.app and https://justask-fixtures.vercel.app.
 
 ```bash
 npm run deploy -- --vercel

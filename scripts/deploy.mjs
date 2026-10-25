@@ -52,22 +52,24 @@ run("npm run build -w @justask/caregiver", ROOT, cgEnv);
 
 /**
  * Publish an already-built static folder with Vercel's Build Output API, so Vercel never has to
- * build our monorepo. The first run asks you to link a Vercel project for that folder.
+ * build our monorepo. The first run links (or creates) a Vercel project for that folder.
  */
-function vercelStatic(appDir, staticDir, routes) {
+function vercelStatic(appDir, staticDir, routes, project) {
+  // First run on this machine: link (or create) the named project under your Vercel account.
+  if (!existsSync(join(appDir, ".vercel/project.json"))) run(`npx vercel link --yes --project ${project}`, appDir);
   const out = join(appDir, ".vercel/output");
   rmSync(out, { recursive: true, force: true });
   mkdirSync(out, { recursive: true });
   cpSync(staticDir, join(out, "static"), { recursive: true });
   writeFileSync(join(out, "config.json"), JSON.stringify({ version: 3, routes }, null, 2));
-  run("npx vercel deploy --prebuilt --prod", appDir);
+  run("npx vercel deploy --prebuilt --prod --yes", appDir);
 }
 
 if (args.has("--vercel")) {
   // Caregiver app: hash routes, so every path serves index.html.
-  vercelStatic(join(ROOT, "apps/caregiver"), join(ROOT, "apps/caregiver/dist"), [{ handle: "filesystem" }, { src: "/(.*)", dest: "/index.html" }]);
+  vercelStatic(join(ROOT, "apps/caregiver"), join(ROOT, "apps/caregiver/dist"), [{ handle: "filesystem" }, { src: "/(.*)", dest: "/index.html" }], "justask-caregiver");
   // Fixture sites (test pages only): "/pharmacy/refill" serves pharmacy/refill.html, like serve.mjs.
-  vercelStatic(join(ROOT, "apps/fixtures"), join(ROOT, "apps/fixtures/public"), [{ handle: "filesystem" }, { src: "/(.*[^/])$", dest: "/$1.html" }]);
+  vercelStatic(join(ROOT, "apps/fixtures"), join(ROOT, "apps/fixtures/public"), [{ handle: "filesystem" }, { src: "/(.*[^/])$", dest: "/$1.html" }], "justask-fixtures");
 }
 
 console.log(`
