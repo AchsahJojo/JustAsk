@@ -47,8 +47,13 @@ const outDir = join(ROOT, "apps/extension/.output");
 const zip = readdirSync(outDir).find((f) => f.endsWith("-chrome.zip"));
 
 // 3. Caregiver web app.
-const cgEnv = { VITE_CONVEX_URL: convexUrl, ...(process.env.JUSTASK_EXTENSION_URL ? { VITE_EXTENSION_URL: process.env.JUSTASK_EXTENSION_URL } : {}) };
+// "Get JustAsk for Chrome" goes to the caregiver site's own install page (not in the Web Store yet).
+// Set explicitly so a local apps/caregiver/.env.local can't point it somewhere else.
+const cgEnv = { VITE_CONVEX_URL: convexUrl, VITE_EXTENSION_URL: process.env.JUSTASK_EXTENSION_URL || "/install.html" };
 run("npm run build -w @justask/caregiver", ROOT, cgEnv);
+// The install page downloads this zip from the same site.
+if (zip) cpSync(join(outDir, zip), join(ROOT, "apps/caregiver/dist/justask-extension.zip"));
+else console.warn("No extension zip found; the install page's download link will 404.");
 
 /**
  * Publish an already-built static folder with Vercel's Build Output API, so Vercel never has to

@@ -53,7 +53,7 @@ Without `CARTESIA_API_KEY`, JustAsk still works but is silent. The panel says "J
 ```bash
 JUSTASK_CONVEX_URL=https://<name>.convex.cloud
 # optional: where caregivers get the extension (shown in their setup steps)
-JUSTASK_EXTENSION_URL=https://github.com/AchsahJojo/JustAsk/releases
+# JUSTASK_EXTENSION_URL=/install.html   (default: the caregiver site hosts the zip and install steps)
 ```
 
 **6. First Vercel publish.** On a new machine it links (or creates) the Vercel projects `justask-caregiver` and `justask-fixtures` under your account. Live today: https://justask-caregiver.vercel.app and https://justask-fixtures.vercel.app.
@@ -79,6 +79,8 @@ npm run deploy -- --vercel
 The script prints where everything ended up. The extension zip is at `apps/extension/.output/justask-<version>-chrome.zip`.
 
 ## Installing the extension (judges and testers)
+
+Easiest: open https://justask-caregiver.vercel.app/install.html on that computer. It has the download and these steps.
 
 1. Unzip the file.
 2. Open `chrome://extensions` and turn on **Developer mode**.

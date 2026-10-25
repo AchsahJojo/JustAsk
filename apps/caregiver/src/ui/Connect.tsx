@@ -5,7 +5,8 @@ import { Clay } from "./Clay";
 import { useNow } from "./bits";
 import link from "../assets/link.json";
 
-const EXTENSION_URL = (import.meta.env.VITE_EXTENSION_URL as string | undefined) || "https://chromewebstore.google.com/";
+// Not in the Chrome Web Store yet: the caregiver site hosts the zip and install steps (public/install.html).
+const EXTENSION_URL = (import.meta.env.VITE_EXTENSION_URL as string | undefined) || "/install.html";
 
 /** Step 2 of setup: the code to type on their computer, and a live "connected" state. */
 export function ConnectPanel({ seniorId, displayName, connected, another }: { seniorId: Id<"seniors">; displayName: string; connected: boolean; another?: boolean }) {

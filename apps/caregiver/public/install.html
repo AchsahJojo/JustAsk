@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Install JustAsk</title>
+    <link rel="icon" href="/icon.svg" />
+    <style>
+      /* Same palette as the caregiver app (src/styles.css). */
+      :root {
+        --accent: #e8654a;
+        --accent-hover: #d9573d;
+        --accent-ink: #b8432b;
+        --ink: #1c1d19;
+        --ink-3: #6b6457;
+        --cream: #fbf7ef;
+        --paper: #ffffff;
+        --sand: #f3ede1;
+        --line: #e7dfcf;
+        --focus: #1d5bbf;
+        --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        color-scheme: light;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root:not([data-theme="light"]) {
+          --ink: #f6f1e7;
+          --ink-3: #b3aa9a;
+          --cream: #171613;
+          --paper: #211f1b;
+          --sand: #2c2a25;
+          --line: #36332d;
+          --accent-ink: #ff9a82;
+          --focus: #8fb4ff;
+          color-scheme: dark;
+        }
+      }
+      * { box-sizing: border-box; }
+      body { margin: 0; background: var(--cream); color: var(--ink); font: 18px/1.55 var(--font); }
+      main { max-width: 640px; margin: 0 auto; padding: 40px 16px 64px; }
+      h1 { font-size: 32px; line-height: 1.2; margin: 0 0 8px; }
+      .lede { color: var(--ink-3); margin: 0 0 28px; }
+      .card { background: var(--paper); border: 1px solid var(--line); border-radius: 18px; padding: 24px; }
+      .btn { display: inline-block; background: var(--accent); color: #fff; text-decoration: none; font-weight: 600; padding: 14px 22px; border-radius: 999px; }
+      .btn:hover { background: var(--accent-hover); }
+      a:focus-visible { outline: 3px solid var(--focus); outline-offset: 3px; }
+      ol { padding-left: 0; list-style: none; counter-reset: s; margin: 24px 0 0; }
+      li { counter-increment: s; position: relative; padding: 0 0 18px 44px; }
+      li::before { content: counter(s); position: absolute; left: 0; top: 0; width: 30px; height: 30px; border-radius: 50%; background: var(--sand); color: var(--accent-ink); font-weight: 700; display: grid; place-items: center; font-size: 16px; }
+      code { background: var(--sand); padding: 2px 6px; border-radius: 6px; font-size: 16px; overflow-wrap: anywhere; }
+      .note { color: var(--ink-3); font-size: 16px; margin-top: 20px; }
+      .back { display: inline-block; margin-top: 24px; color: var(--accent-ink); }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Add JustAsk to Chrome</h1>
+      <p class="lede">JustAsk isn't in the Chrome Web Store yet. For now, you install it from this file. It takes about a minute, on the computer of the person you help.</p>
+      <div class="card">
+        <a class="btn" href="/justask-extension.zip" download>Download JustAsk (.zip)</a>
+        <ol>
+          <li><strong>Unzip the file.</strong> Right-click it and choose <em>Extract All</em> (Windows), or double-click it (Mac).</li>
+          <li><strong>Open Chrome's extensions page.</strong> Type <code>chrome://extensions</code> in the address bar and press Enter.</li>
+          <li><strong>Turn on Developer mode,</strong> using the switch at the top right.</li>
+          <li><strong>Click Load unpacked</strong> and pick the unzipped folder (the one with <code>manifest.json</code> inside).</li>
+          <li><strong>The “Set up JustAsk” page opens.</strong> Turn on JustAsk and the microphone, then type the 6-digit code from your helper page.</li>
+        </ol>
+        <p class="note">Tip: pin JustAsk with the puzzle-piece icon in Chrome's toolbar, so the button is always one click away.</p>
+      </div>
+      <a class="back" href="/">Back to JustAsk for helpers</a>
+    </main>
+  </body>
+</html>
