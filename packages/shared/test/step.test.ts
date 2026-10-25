@@ -8,7 +8,6 @@ const snap: PageSnapshot = {
   heading: "H",
   pageText: "",
   omitted: { count: 0, regions: [] },
-  surface: "web",
   elements: [
     { n: 1, role: "button", text: "Go", label: null, nearby: null, color: "blue", big: true, disabled: false, inModal: false, inViewport: true, region: "main" },
     {
@@ -104,25 +103,5 @@ describe("checkStep: guide on boxes", () => {
   it("only guide and clarify may have a target", () => {
     expect(checkStep({ ...base, kind: "clarify", expect: null }, s2).ok).toBe(true);
     for (const kind of ["wait", "done", "blocked"] as const) expect(checkStep({ ...base, kind, expect: null }, s2).ok).toBe(false);
-  });
-});
-
-describe("checkStep: open_browser (desktop)", () => {
-  const native: PageSnapshot = { ...snap, url: "", surface: "native", app: { name: "Notepad", window: "Untitled - Notepad" } };
-  const open = { kind: "open_browser", say: "Please open your web browser, like Chrome or Edge.", target: null, expect: null, option: null, risk: "none" } as const;
-
-  it("is in the schema enum", () => {
-    expect(JSON.stringify((stepJsonSchema() as any).properties.kind)).toContain('"open_browser"');
-    expect(StepResponse.parse(open)).toEqual(open);
-  });
-  it("is valid on a native window", () => expect(checkStep(open, native)).toEqual({ ok: true }));
-  it("is rejected on a web page", () => {
-    expect(checkStep(open, snap)).toMatchObject({ ok: false, reason: expect.stringContaining("already a web page") });
-  });
-  it("never takes a target, expect, option or risk", () => {
-    expect(checkStep({ ...open, target: 1 }, native).ok).toBe(false);
-    expect(checkStep({ ...open, expect: "click" }, native).ok).toBe(false);
-    expect(checkStep({ ...open, option: "Arizona" }, native).ok).toBe(false);
-    expect(checkStep({ ...open, risk: "money" }, native).ok).toBe(false);
   });
 });

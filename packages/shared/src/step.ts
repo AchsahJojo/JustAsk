@@ -4,10 +4,8 @@ import type { PageSnapshot } from "./snapshot";
 /**
  * JustAsk never acts for her: she does every step herself.
  * `guide`: JustAsk highlights one thing on the screen and says what to do; she does it.
- * `open_browser`: desktop only. JustAsk asks her to open her web browser and waits.
- * It carries no URL or target: JustAsk never opens anything or navigates to an address Claude produced.
  */
-export const StepKind = z.enum(["guide", "clarify", "wait", "done", "blocked", "open_browser"]);
+export const StepKind = z.enum(["guide", "clarify", "wait", "done", "blocked"]);
 /** What she does to the target. `scroll`: she brings it into view; `submit`: she presses Enter in the target field. */
 export const Expect = z.enum(["click", "type", "choose", "hover", "file", "scroll", "submit"]);
 export const Risk = z.enum(["none", "money", "personal_info", "account_change", "suspicious"]);
@@ -65,14 +63,6 @@ export function checkStep(step: StepResponse, snapshot: PageSnapshot): StepCheck
     if (step.target === null) return { ok: false, reason: "guide needs a target" };
     if (step.expect === null) return { ok: false, reason: "guide needs expect" };
   }
-  if (step.kind === "open_browser") {
-    if (step.target !== null) return { ok: false, reason: "open_browser must not have a target" };
-    if (step.expect !== null) return { ok: false, reason: "open_browser must have expect null" };
-    if (step.option !== null) return { ok: false, reason: "open_browser must have option null" };
-    if (step.risk !== "none") return { ok: false, reason: 'open_browser must have risk "none"' };
-    if (snapshot.surface !== "native") return { ok: false, reason: "open_browser is only for desktop app windows; this is already a web page" };
-    return { ok: true };
-  }
   if (step.target !== null) {
     const el = snapshot.elements.find((e) => e.n === step.target);
     if (!el) return { ok: false, reason: `target ${step.target} is not in the current list` };
@@ -87,7 +77,7 @@ export function checkStep(step: StepResponse, snapshot: PageSnapshot): StepCheck
       }
     }
   }
-  // Only guide points at a target (clarify may mention one). open_browser returned above.
+  // Only guide points at a target (clarify may mention one).
   if (step.kind !== "guide" && step.kind !== "clarify" && step.target !== null) {
     return { ok: false, reason: `${step.kind} must not have a target` };
   }

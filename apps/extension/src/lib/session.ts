@@ -7,17 +7,8 @@ import { BrowserSpeech } from "./speech";
 import { getSettings, type Settings } from "./config";
 import { backend } from "./backend";
 import { isInjectable } from "../platform";
-import type { Handoff } from "./prefs";
 
 const FOLLOW_WINDOW_MS = 5000;
-/** A claimed handoff older than this is dropped instead of started. */
-const HANDOFF_TTL_MS = 10 * 60 * 1000;
-
-/** What the background stores in storage.session after claiming a handoff. */
-export interface PendingHandoff extends Handoff {
-  tabId: number | null;
-  at: number;
-}
 
 /**
  * Hosts the SessionController in the side panel: owns the session tab id, relays
@@ -111,24 +102,6 @@ export class SessionHost {
   /** The recipe of the current session (for the dev snapshot capture). */
   get currentRecipe(): Recipe | null {
     return this.recipe;
-  }
-
-  /**
-   * Start the session the background claimed from a `#justask=` handoff link, if any.
-   * The handoff is cleared first so it can never start twice. Returns true if it started.
-   */
-  async startFromHandoff(): Promise<boolean> {
-    const got = (await browser.storage.session.get("pendingHandoff").catch(() => ({}))) as { pendingHandoff?: PendingHandoff };
-    const h = got.pendingHandoff;
-    if (!h) return false;
-    await browser.storage.session.remove("pendingHandoff").catch(() => {});
-    if (Date.now() - h.at > HANDOFF_TTL_MS || this.controller.state.phase !== "idle") return false;
-    if (h.tabId !== null && this.pinnedTabId === null) {
-      // The banner's Start opened this panel on the handoff tab; make sure that tab is the session tab.
-      await browser.tabs.update(h.tabId, { active: true }).catch(() => {});
-    }
-    await this.start(h.request, { recipe: h.recipe, taskId: h.taskId });
-    return true;
   }
 
   /** "Yes, here": move the session to the tab she is on now. */

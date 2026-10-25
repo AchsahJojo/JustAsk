@@ -2,7 +2,7 @@
 
 This is the list of things a person has to do by hand. Everything else has an automated test (see "What is already tested" at the end).
 
-Status: the Chrome extension, the step loop, the page agent, the Convex backend, the fixtures and the caregiver web app are built. The desktop app is not built yet.
+Status: the Chrome extension, the step loop, the page agent, the Convex backend, the fixtures and the caregiver web app are built.
 
 ## 1. Keys and accounts you need
 
@@ -96,7 +96,6 @@ Run these in a real, headed Chrome with the production build (`apps/extension/.o
 - **Dock mode** (Phase 1): the in-page panel for Opera, Safari and popup windows. The panel already accepts `?tabId=` and `sidepanel.html` is web-accessible.
 - **Firefox and Safari** builds compile (`wxt build -b firefox`) but are not tested.
 - `matchOriginAsFallback` for `about:blank` / `srcdoc` frames: `executeScript` doesn't support it. A registered content script would.
-- Desktop companion app (Phase 4).
 - Muting recognition while JustAsk speaks. Using `storage.local` to resume after a browser restart is built but not e2e-tested.
 
 ## 5b. Accounts (how they work)

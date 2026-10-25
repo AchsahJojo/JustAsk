@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { friendlyError, mergePrefs, parseCode, parseDevices, parseHandoff, seenAgo, spacedCode, type SyncedPrefs } from "../src/lib/prefs";
+import { friendlyError, mergePrefs, parseCode, parseDevices, seenAgo, spacedCode, type SyncedPrefs } from "../src/lib/prefs";
 
 const LOCAL: SyncedPrefs = { voice: "browser", rate: 0.9, consent: { notifyOnComplete: false, notifyOnStuck: false } };
 
@@ -54,37 +54,19 @@ describe("friendlyError", () => {
   });
 });
 
-describe("parseHandoff", () => {
-  it("keeps request, taskId and a valid recipe", () => {
-    expect(parseHandoff({ request: " join my zoom ", taskId: "t1", recipe: { startUrl: "https://zoom.us/j/1", steps: ["Join"] } })).toEqual({
-      request: "join my zoom",
-      taskId: "t1",
-      recipe: { startUrl: "https://zoom.us/j/1", steps: ["Join"] },
-    });
-  });
-  it("drops a bad recipe and empty task id", () => {
-    expect(parseHandoff({ request: "x", taskId: "", recipe: { steps: "nope" } })).toEqual({ request: "x", taskId: null, recipe: null });
-  });
-  it("rejects null and missing requests", () => {
-    expect(parseHandoff(null)).toBeNull();
-    expect(parseHandoff({ request: "  " })).toBeNull();
-    expect(parseHandoff({ taskId: "t1" })).toBeNull();
-  });
-});
-
 describe("parseDevices", () => {
   it("normalises id variants and flags", () => {
     expect(
       parseDevices([
         { _id: "d1", label: "Chrome on Windows", kind: "extension", lastSeenAt: 5, current: true },
-        { id: "d2", kind: "desktop" },
+        { id: "d2", kind: "extension" },
         { deviceId: "d3", label: "Edge on Mac", isCurrent: false },
         { label: "no id" },
         "junk",
       ]),
     ).toEqual([
       { id: "d1", label: "Chrome on Windows", kind: "extension", lastSeenAt: 5, current: true },
-      { id: "d2", label: "JustAsk app", kind: "desktop", lastSeenAt: null, current: false },
+      { id: "d2", label: "A browser", kind: "extension", lastSeenAt: null, current: false },
       { id: "d3", label: "Edge on Mac", kind: "extension", lastSeenAt: null, current: false },
     ]);
   });

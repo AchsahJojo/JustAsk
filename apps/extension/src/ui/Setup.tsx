@@ -8,12 +8,6 @@ import { Orb } from "./Orb";
 
 const ALL_SITES = { origins: ["<all_urls>"] };
 
-/** A 6-digit `?link=` code, set when the background saw `#justask-link=` on the link page. */
-function linkCodeFromUrl(): string | null {
-  const v = new URLSearchParams(location.search).get("link");
-  return v && /^\d{6}$/.test(v) ? v : null;
-}
-
 /**
  * Setup and settings tab: host access (the gesture lives here, never mid-session), the mic
  * prompt (side panels can't show it reliably), her account, and synced settings.
@@ -23,7 +17,6 @@ export function Setup() {
   const [access, setAccess] = useState(false);
   const [mic, setMic] = useState<"unknown" | "on" | "off">("unknown");
   const [advanced, setAdvanced] = useState(false);
-  const [linkCode, setLinkCode] = useState<string | null>(linkCodeFromUrl);
 
   useEffect(() => {
     void getSettings().then((x) => {
@@ -58,11 +51,6 @@ export function Setup() {
   const finish = async () => {
     await update({ setupDone: true });
     window.close();
-  };
-
-  const linkDone = () => {
-    setLinkCode(null);
-    history.replaceState(null, "", location.pathname);
   };
 
   return (
@@ -103,7 +91,7 @@ export function Setup() {
           )}
         </li>
 
-        <AccountStep s={s} onChange={setS} linkCode={linkCode} onLinkDone={linkDone} />
+        <AccountStep s={s} onChange={setS} />
         {s.deviceToken && <SettingsStep s={s} onChange={setS} />}
       </ol>
 

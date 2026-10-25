@@ -2,12 +2,11 @@
 
 ## Context
 
-This document builds on `docs/initial-plan.md` and does not repeat it. It changes that plan in four ways:
+This document builds on `docs/initial-plan.md` and does not repeat it. It changes that plan in three ways:
 
-1. **Every major browser, then Mac and Windows apps.** This is a phased roadmap. The hackathon (Oct 23–25 2026) still ships Chrome. The code is split so that each later browser, and the desktop app, is an adapter rather than a rewrite.
+1. **Every major browser.** This is a phased roadmap. The hackathon (Oct 23–25 2026) still ships Chrome. The code is split so that each later browser is an adapter rather than a rewrite.
 2. **Six logic gaps found in review are closed:** typing steps, native pickers, Shadow DOM and iframes, rerenders, new tabs, and user gestures. Review also turned up more gaps (§3.7).
 3. **The `planStep` Claude call is corrected** against the current API docs. The fallback feature is beta-only and breaks the loop without its header (§4).
-4. **The desktop app has a direction:** first a companion tray app, then guidance for native apps (§5).
 
 Rules from the initial plan that still hold: guide mode only (she always clicks), no site-specific code, no keys in clients, never capture or send field values, and page text is untrusted.
 
@@ -29,7 +28,6 @@ apps/extension/          WXT. entrypoints: background, content, panel (html), se
   src/platform/          chromium.ts, firefox.ts, safari.ts: PanelHost, gestures, shadow-root access
 apps/caregiver/          unchanged
 apps/fixtures/           mock pharmacy + gap fixtures (§8)
-apps/desktop/            Phase 4: Tauri 2 companion app (Windows + macOS)
 packages/shared/         Zod schemas: PageSnapshot, StepResponse, messages, events
 packages/core/           NEW. Session state machine, step loop, interfaces. No browser APIs
 packages/page-agent/     NEW. Scanner, ranker, fingerprint, overlay, observers. DOM-only
@@ -41,15 +39,15 @@ reference/mana/          read-only reference
 
 ### Interfaces in `packages/core`
 
-| Interface | What it does | Chrome / Edge | Firefox | Safari | Desktop (Phase 5) |
-|---|---|---|---|---|---|
-| `PanelHost` | show, focus and close the panel | `sidePanel` | `sidebarAction` | dock iframe | app window |
-| `PageBridge` | scan, highlight, observe, resolve | content script | content script | content script | UIA / AX |
-| `SpeechOut` | speak, stop | speechSynthesis → Cartesia | same | same | same |
-| `SpeechIn` | listen | Web Speech (Chrome, Edge) or Cartesia STT | Cartesia STT | Cartesia STT | Cartesia STT |
-| `Store` | session and local state | `storage.session` / `local` | same | same | app storage |
-| `Notifier` | badge, toast | `action` + `notifications` | same | badge only | OS notifications |
-| `TabWatcher` | new tabs, navigation | `tabs` + `webNavigation` | same | same (verify) | n/a |
+| Interface | What it does | Chrome / Edge | Firefox | Safari |
+|---|---|---|---|---|
+| `PanelHost` | show, focus and close the panel | `sidePanel` | `sidebarAction` | dock iframe |
+| `PageBridge` | scan, highlight, observe, resolve | content script | content script | content script |
+| `SpeechOut` | speak, stop | speechSynthesis → Cartesia | same | same |
+| `SpeechIn` | listen | Web Speech (Chrome, Edge) or Cartesia STT | Cartesia STT | Cartesia STT |
+| `Store` | session and local state | `storage.session` / `local` | same | same |
+| `Notifier` | badge, toast | `action` + `notifications` | same | badge only |
+| `TabWatcher` | new tabs, navigation | `tabs` + `webNavigation` | same | same (verify) |
 
 **Where the controller runs.** In panel mode it runs in the panel page, which lives through navigations. In dock mode it runs in the background (a Chrome service worker or Firefox event page). The open port from the dock keeps the background alive, and state is saved at every transition, so a restart resumes at the current step. The loop is event-driven (one short request per step), so neither home has to stay up for long.
 
@@ -76,7 +74,7 @@ Text-to-speech (`speechSynthesis`) works everywhere. Cartesia Sonic is the same 
 - **WXT builds every target:** `wxt build -b chrome|edge|firefox|safari|opera`. Per-browser manifest differences go in `wxt.config.ts` keyed by `browser`: `side_panel` vs `sidebar_action`, `browser_specific_settings.gecko.id`, and background type. Use WXT's `browser` global, not `chrome.*` directly, outside `src/platform/`.
 - **Feature detection beats browser sniffing.** For example: `if (browser.sidePanel) … else if (browser.sidebarAction) … else dock`. Opera and Arc then fall into the right path automatically.
 - **Firefox:** MV3 background is an event page, so no `chrome.offscreen`. Host permissions are user-revocable. Request them in setup and re-check before every session. AMO needs the readable source uploaded with each version, because WXT output is bundled. Check AMO's current rules on data-collection consent, since JustAsk sends page text to a server and must say so in the manifest and listing.
-- **Safari:** package with Xcode's Safari web extension packager. The containing macOS app is required, and it later becomes the macOS companion app (§5). This needs a paid Apple Developer account. Safari asks per site for host access, so the setup copy must walk her (or the caregiver) through "Always allow on every website." There are no closed shadow roots, so some web components will be invisible and get a `blocked` reply.
+- **Safari:** package with Xcode's Safari web extension packager. The containing macOS app is required. This needs a paid Apple Developer account. Safari asks per site for host access, so the setup copy must walk her (or the caregiver) through "Always allow on every website." There are no closed shadow roots, so some web components will be invisible and get a `blocked` reply.
 - **Dock mode:** the content script inserts a fixed host on the right edge with Shadow DOM. Inside is an `<iframe src=chrome-extension://…/panel.html>` listed in `web_accessible_resources`, so the panel runs as an extension page with extension permissions. The dock is rebuilt after every navigation and rehydrates from `storage.session`. Mic in the iframe: *verify*. The page's Permissions-Policy may block it. Typed input and the big buttons always work.
 
 ## 3. Gaps closed
@@ -254,31 +252,6 @@ const res = await client.beta.messages.create({
 - Use `wait` when she has to do something away from the page.
 - The snapshot's `omitted` count means more controls exist. Prefer guiding her to scroll or open a menu over guessing.
 
-## 5. Mac and Windows apps
-
-### Phase 4: Companion app (Tauri 2, `apps/desktop`)
-
-Tauri is chosen over Electron for small signed installers and Rust access to OS APIs. Speech recognition doesn't work in either webview, so voice uses Cartesia either way.
-
-- **Tray / menu-bar icon** with a big **Ask** window. It starts at login.
-- **Task alerts with the browser closed:** the app holds the Convex subscription and shows OS notifications for "Sam sent you a task." Clicking **Start** opens her default browser to the recipe `startUrl`, or to the last page.
-- **Pairing once:** the app pairs with the 6-digit code and hands the device token to the extension over **native messaging** (`runtime.connectNative`). The installer registers the host manifest in each browser's location: registry keys on Windows for Chrome and Edge, JSON files in each browser's NativeMessagingHosts folder on macOS, and Firefox's own location.
-- **On macOS the Safari extension's containing app *is* this app,** so Phase 3 and Phase 4 share one Xcode target.
-- **Voice in the app** (optional): a steadier mic than browser panels. The extension still owns highlighting.
-- **Signing and updates:** Windows needs Authenticode (Azure Trusted Signing, or an EV certificate to avoid SmartScreen warnings). macOS needs Developer ID plus notarization. Both use Tauri's updater with signed manifests.
-- **Installer** detects installed browsers and opens the right store page for the extension.
-
-### Phase 5: Native-app guidance
-
-The step loop is the same. Only `PageBridge` changes.
-
-- **Scanner:** Windows UI Automation (Rust `windows` / `uiautomation` crates) or the macOS Accessibility API (`AXUIElement`). Map their roles to the same snapshot vocabulary and add `surface: "web" | "native"` to `PageSnapshot`.
-- **Overlay:** a transparent, click-through, always-on-top window per monitor, placed from element screen rects.
-- **Click observation:** UIA Invoke events and a low-level mouse hook (`WH_MOUSE_LL`) on Windows. AX notifications and a `CGEventTap` on macOS. macOS needs the Accessibility permission (and possibly Input Monitoring), so setup must explain it plainly.
-- **Privacy:** never read secure fields (`IsPassword` in UIA, `AXSecureTextField` in AX). Same `hasValue`-only rule.
-- **Coverage varies.** Apps with poor accessibility trees get `blocked`. The opt-in screenshot fallback from §3.7 applies here too.
-- First targets: Zoom desktop, Mail / Outlook, and System Settings / Windows Settings.
-
 ## 6. Store and distribution checklist
 
 | Store | Needs |
@@ -287,7 +260,6 @@ The step loop is the same. Only `PageBridge` changes.
 | Edge Add-ons | same zip and same privacy answers |
 | AMO (Firefox) | readable source plus build steps, `gecko.id`, data-collection disclosure (check current AMO policy) |
 | Mac App Store (Safari) | Apple Developer account, Xcode wrapper app, App Privacy label, review notes explaining the guide-only design |
-| Windows / macOS direct download (desktop) | code signing, notarization (macOS), signed updater feed |
 
 All stores get one privacy policy: page text goes to Claude through Convex for the current step only. It isn't stored. Field values are never collected. Caregivers see outcomes only.
 
@@ -304,7 +276,7 @@ All stores get one privacy policy: page text goes to Claude through Convex for t
 | Sat 2–6 PM | CP4, accounts | `risk` confirmations; notification fallback ladder (§3.6) |
 | Sat 6 PM | Feature freeze | **Load-unpacked smoke test in Edge** (no code changes expected) |
 
-Not in the hackathon: dock mode, Firefox, Safari, desktop, screenshot fallback.
+Not in the hackathon: dock mode, Firefox, Safari, screenshot fallback.
 
 ### After the hackathon
 
@@ -313,8 +285,6 @@ Not in the hackathon: dock mode, Firefox, Safari, desktop, screenshot fallback.
 | 1 | Dock mode; Cartesia STT as the default where Web Speech is missing; publish to Chrome Web Store and Edge Add-ons; Brave, Opera and Vivaldi checks | fixture suite passes in Chrome, Edge, Brave and Opera |
 | 2 | Firefox adapter (sidebar, event page), AMO listing | fixture suite passes under `web-ext run` |
 | 3 | Safari macOS (dock mode, Xcode wrapper), App Store | fixture suite passes in Safari; review approved |
-| 4 | Tauri companion app for Windows and macOS, native messaging, signed installers | task alert with the browser closed → Start → guided in browser |
-| 5 | Native-app guidance through UIA and AX | 3 target apps finish one task each |
 | Later | Opt-in screenshot fallback, other languages, iPad/iOS Safari, Firefox for Android | — |
 
 ## 8. Verification (added to the initial plan)

@@ -32,8 +32,3 @@ export function choiceMismatch(option: string) {
 
 export const LOOKING_NEXT = "Let me look at the next page…";
 export const SEE_IT_NOW = "Do you see it now?";
-
-// ───────────── open_browser (desktop) ─────────────
-
-/** Said when an open_browser step comes in: she opens the browser herself. JustAsk never opens it. */
-export const OPEN_BROWSER_GUIDE = "Please open your web browser, like Chrome or Edge. I'll wait.";

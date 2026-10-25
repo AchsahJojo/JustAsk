@@ -111,7 +111,7 @@ interface WaitState {
 /**
  * The session state machine and step loop. No browser APIs: everything goes through
  * the injected PageBridge / Planner / SpeechOut, so the same controller runs in the
- * side panel, in the desktop app, or in tests.
+ * side panel or in tests.
  */
 export class SessionController {
   private view: SessionView = { ...INITIAL };
@@ -522,9 +522,6 @@ export class SessionController {
         return;
       case "wait":
         return this.enterWait(step);
-      case "open_browser":
-        this.deps.events?.log("step_shown", { latencyMs });
-        return this.openBrowserGuide(step);
       case "done": {
         this.deps.events?.log("done");
         await this.deps.bridge.clear();
@@ -537,18 +534,6 @@ export class SessionController {
         this.deps.events?.log("blocked");
         return this.block(step.say);
     }
-  }
-
-  // ───────────── open_browser (desktop) ─────────────
-
-  /**
-   * Desktop: she opens her web browser herself. JustAsk never opens it. Says the fixed line,
-   * not Claude's; the waiting phase re-plans when the window changes.
-   */
-  private openBrowserGuide(step: StepResponse) {
-    const wait: StepResponse = { ...step, kind: "wait", say: L.OPEN_BROWSER_GUIDE, target: null, expect: null, option: null, risk: "none" };
-    this.step = wait;
-    return this.enterWait(wait);
   }
 
   // ───────────── waiting (docs/ARCHITECTURE.md §10 P1) ─────────────

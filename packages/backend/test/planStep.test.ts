@@ -20,7 +20,6 @@ const req: PlanRequest = {
     heading: "",
     pageText: "",
     omitted: { count: 0, regions: [] },
-    surface: "web",
     elements: [{ n: 1, role: "button", text: "Refill", label: null, nearby: null, color: "blue", big: true, disabled: false, inModal: false, inViewport: true, region: "main" }],
   },
 };
@@ -151,7 +150,7 @@ describe("mock-script guide rules (titles are a contract with the fixture pages)
     n: ++n, role, text, label, nearby: null, color: null, big: false, disabled: false, inModal: false, inViewport: true, region: "main", ...(field ? { field } : {}),
   });
   const plan = (title: string, elements: SnapshotElement[], history: string[] = [], request = "find me a water bottle") => {
-    const snapshot: PageSnapshot = { snapshotId: "s", url: "http://localhost/", title, heading: "", pageText: "", elements: elements.map((e, i) => ({ ...e, n: i + 1 })), omitted: { count: 0, regions: [] }, surface: "web" };
+    const snapshot: PageSnapshot = { snapshotId: "s", url: "http://localhost/", title, heading: "", pageText: "", elements: elements.map((e, i) => ({ ...e, n: i + 1 })), omitted: { count: 0, regions: [] } };
     const res = mockPlan({ ...req, request, history, snapshot }, rules);
     if (!res.ok) throw new Error("mock failed");
     expect(res.step).not.toHaveProperty("text");
@@ -161,7 +160,7 @@ describe("mock-script guide rules (titles are a contract with the fixture pages)
 
   it("every rule is a guide-only kind with no text field", () => {
     for (const r of rules) {
-      expect(["guide", "clarify", "wait", "done", "blocked", "open_browser"]).toContain(r.step.kind);
+      expect(["guide", "clarify", "wait", "done", "blocked"]).toContain(r.step.kind);
       expect(r.step).not.toHaveProperty("text");
     }
   });
@@ -203,24 +202,6 @@ describe("mock-script guide rules (titles are a contract with the fixture pages)
     expect(step).toMatchObject({ kind: "guide", expect: "click", target: 2 });
     const clicked = [`On "Composer": She did: ${JSON.stringify(step.say)} (click)`];
     expect(plan("Composer", [el("button", "Close"), box], clicked)).toMatchObject({ kind: "done" });
-  });
-
-  it("Notepad (native): asks her to open the browser, with no URL; the browser window then finishes", () => {
-    const native = (title: string, app: string): PageSnapshot => ({
-      snapshotId: "s", url: "", title, heading: "", pageText: "", elements: [{ ...el("document", "Text editor"), n: 1 }],
-      omitted: { count: 0, regions: [] }, surface: "native", app: { name: app, window: title },
-    });
-    const run = (snapshot: PageSnapshot) => {
-      const res = mockPlan({ ...req, request: "find a banana bread recipe", history: [], snapshot }, rules);
-      if (!res.ok) throw new Error("mock failed");
-      return res.step;
-    };
-    expect(run(native("Untitled - Notepad", "Notepad"))).toEqual({
-      kind: "open_browser", say: "Please open your web browser, like Chrome or Edge.", target: null, expect: null, option: null, risk: "none",
-    });
-    // She opened it herself: the next snapshot is the browser window (app name is the exe stem).
-    expect(run(native("New tab - Microsoft​ Edge", "msedge"))).toMatchObject({ kind: "done" });
-    expect(run(native("New Tab - Google Chrome", "chrome"))).toMatchObject({ kind: "done" });
   });
 
   it("existing fixture rules stay guide steps", () => {

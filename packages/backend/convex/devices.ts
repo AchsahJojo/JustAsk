@@ -8,7 +8,6 @@ import {
   findLiveCode,
   insertDevice,
   isCaregiverCode,
-  kindOf,
   mergeSenior,
   newCode as freshCode,
   newPairingCode,
@@ -75,7 +74,7 @@ export const activeCode = query({
 
 /**
  * A linked install: "Add another device". A 6-digit code, single use, 15 minutes.
- * Records the creating device and its machineId (used for desktop-to-browser linking).
+ * Records the creating device.
  */
 export const createLinkCode = mutation({
   args: { token: v.string() },
@@ -90,7 +89,6 @@ export const createLinkCode = mutation({
       expiresAt,
       purpose: "device",
       createdByDeviceId: device._id,
-      ...(device.machineId !== undefined ? { machineId: device.machineId } : {}),
     });
     return { code, expiresAt };
   },
@@ -125,8 +123,6 @@ export const peekCode = mutation({
  *   she set up is lost, and the install keeps its token.
  * Returns `null` for a wrong or expired code instead of throwing, so the failure is recorded.
  * Throws only while rate limited ("Too many tries...").
- * The new device inherits the code's machineId when the code was made on a desktop install
- * (the desktop opens the link page in browsers on the same machine).
  */
 export const redeemCode = mutation({
   args: { code: v.string(), device: v.optional(deviceInfo), token: v.optional(v.string()) },
@@ -134,7 +130,7 @@ export const redeemCode = mutation({
   handler: async (ctx, args) => {
     const code = normalizeCode(args.code.replace(/\s/g, ""));
     if (!code) return null;
-    const fields: { kind?: "extension" | "desktop"; platform?: string; label?: string; machineId?: string } = args.device ? cleanDevice(args.device) : {};
+    const fields: { kind?: "extension"; platform?: string; label?: string } = args.device ? cleanDevice(args.device) : {};
     await assertCodeAttemptAllowed(ctx, code);
     const row = await findLiveCode(ctx, code, "device");
     if (!row) {
@@ -148,12 +144,7 @@ export const redeemCode = mutation({
     if (args.token) current = await requireDevice(ctx, args.token).catch(() => null); // a stale token is a new install
 
     if (!args.token || !current) {
-      let machineId = fields.machineId;
-      if (machineId === undefined && row.machineId !== undefined && row.createdByDeviceId) {
-        const creator = await ctx.db.get(row.createdByDeviceId);
-        if (creator && kindOf(creator) === "desktop") machineId = row.machineId;
-      }
-      const { token } = await insertDevice(ctx, target, { ...fields, ...(machineId !== undefined ? { machineId } : {}) });
+      const { token } = await insertDevice(ctx, target, fields);
       const senior = await ctx.db.get(target);
       return { token, displayName: senior?.displayName ?? "" };
     }
@@ -269,7 +260,6 @@ const deviceSummary = v.object({
   kind: deviceKind,
   platform: v.string(),
   label: v.string(),
-  machineId: v.union(v.string(), v.null()),
   pairedAt: v.number(),
   lastSeenAt: v.union(v.number(), v.null()),
   isThisDevice: v.boolean(),
@@ -289,10 +279,9 @@ export const list = query({
       .filter((d) => d.revokedAt === undefined)
       .map((d) => ({
         deviceId: d._id,
-        kind: kindOf(d),
+        kind: "extension" as const,
         platform: d.platform ?? "unknown",
-        label: d.label ?? (kindOf(d) === "desktop" ? "JustAsk app" : "Web browser"),
-        machineId: d.machineId ?? null,
+        label: d.label ?? "Web browser",
         pairedAt: d.pairedAt,
         lastSeenAt: d.lastSeenAt ?? null,
         isThisDevice: d._id === me._id,

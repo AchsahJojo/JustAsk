@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { api } from "../convex/_generated/api";
-import { caregiver, desk, ext, linkDevice, newAccount, setup } from "./helpers";
+import { caregiver, ext, linkDevice, newAccount, setup } from "./helpers";
 
 beforeEach(() => vi.useFakeTimers());
 afterEach(() => vi.useRealTimers());
@@ -19,7 +19,7 @@ describe("accounts:createSelf", () => {
     });
     const devices = await t.query(api.devices.list, { token: res.token });
     expect(devices).toHaveLength(1);
-    expect(devices[0]).toMatchObject({ kind: "extension", platform: "chrome-windows", label: "Chrome", machineId: null, isThisDevice: true });
+    expect(devices[0]).toMatchObject({ kind: "extension", platform: "chrome-windows", label: "Chrome", isThisDevice: true });
     expect(devices[0]).not.toHaveProperty("tokenHash");
     const seniors = await t.run((ctx) => ctx.db.query("seniors").collect());
     expect(seniors[0].createdBy).toBe("self");
@@ -33,7 +33,6 @@ describe("accounts:createSelf", () => {
     await expect(t.mutation(api.accounts.createSelf, { displayName: "   ", device: ext() })).rejects.toThrow(/displayName/);
     await expect(t.mutation(api.accounts.createSelf, { displayName: "x".repeat(61), device: ext() })).rejects.toThrow(/displayName/);
     await expect(t.mutation(api.accounts.createSelf, { displayName: "M", device: { ...ext(), label: "x".repeat(81) } })).rejects.toThrow(/label/);
-    await expect(t.mutation(api.accounts.createSelf, { displayName: "M", device: { ...ext(), machineId: "m".repeat(129) } })).rejects.toThrow(/machineId/);
   });
 
   test("global creation rate limit", async () => {
@@ -54,7 +53,7 @@ describe("link codes", () => {
     expect(await t.mutation(api.devices.peekCode, { code })).toEqual({ displayName: "Margaret" });
     expect(await t.mutation(api.devices.peekCode, { code })).toEqual({ displayName: "Margaret" });
 
-    const res = await t.mutation(api.devices.redeemCode, { code: ` ${code} `, device: desk("pc-1") });
+    const res = await t.mutation(api.devices.redeemCode, { code: ` ${code} `, device: ext("Edge") });
     expect(res?.displayName).toBe("Margaret");
     expect(await t.mutation(api.devices.redeemCode, { code })).toBeNull();
     expect(await t.mutation(api.devices.peekCode, { code })).toBeNull();
@@ -62,7 +61,7 @@ describe("link codes", () => {
     const list = await t.query(api.devices.list, { token: res!.token });
     expect(list).toHaveLength(2);
     const me = list.find((d) => d.isThisDevice)!;
-    expect(me).toMatchObject({ kind: "desktop", platform: "windows", label: "Margaret's PC", machineId: "pc-1" });
+    expect(me).toMatchObject({ kind: "extension", platform: "chrome-windows", label: "Edge" });
   });
 
   test("codes expire after 15 minutes", async () => {
@@ -78,30 +77,6 @@ describe("link codes", () => {
     const t = setup();
     expect(await t.mutation(api.devices.redeemCode, { code: "12ab" })).toBeNull();
     expect(await t.mutation(api.devices.peekCode, { code: "" })).toBeNull();
-  });
-
-  test("a browser inherits machineId from a code made on a desktop", async () => {
-    const t = setup();
-    const d = await newAccount(t, "Margaret", desk("pc-1"));
-    const e = await linkDevice(t, d, ext());
-    const mine = (await t.query(api.devices.list, { token: e })).find((x) => x.isThisDevice)!;
-    expect(mine.machineId).toBe("pc-1");
-  });
-
-  test("no machineId inheritance from an extension's code", async () => {
-    const t = setup();
-    const e1 = await newAccount(t, "Margaret", ext("browser-guess"));
-    const e2 = await linkDevice(t, e1, ext());
-    const mine = (await t.query(api.devices.list, { token: e2 })).find((x) => x.isThisDevice)!;
-    expect(mine.machineId).toBeNull();
-  });
-
-  test("an explicit machineId wins over the inherited one", async () => {
-    const t = setup();
-    const d = await newAccount(t, "Margaret", desk("pc-1"));
-    const d2 = await linkDevice(t, d, desk("pc-2"));
-    const mine = (await t.query(api.devices.list, { token: d2 })).find((x) => x.isThisDevice)!;
-    expect(mine.machineId).toBe("pc-2");
   });
 
   test("helper codes can't be redeemed as device codes", async () => {

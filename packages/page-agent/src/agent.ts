@@ -88,7 +88,6 @@ export class PageAgent {
         pageText: pageText(this.doc),
         elements: elements.map((e) => e.data),
         omitted,
-        surface: "web",
       },
     };
   }

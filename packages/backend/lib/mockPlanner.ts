@@ -7,8 +7,6 @@ import { checkStep, StepResponse, type PageSnapshot, type PlanRequest, type Plan
  */
 export interface MockRule {
   title: string;
-  /** Only for a desktop window from one of these apps (the exe name without .exe, any case). */
-  app?: string[];
   /** Skip this rule when the target field already has a value. */
   unlessFilled?: boolean;
   /** Only when the history contains this text. */
@@ -16,7 +14,7 @@ export interface MockRule {
   /** Only when her request contains this text (case-insensitive). */
   request?: string;
   /**
-   * A guide-only step kind (`guide`, `clarify`, `wait`, `done`, `blocked`, or `open_browser` for desktop).
+   * A guide-only step kind (`guide`, `clarify`, `wait`, `done` or `blocked`).
    * JustAsk never acts for her, so there is no `act` and no `text`. Rules that fail `checkStep` are skipped.
    */
   step: Omit<StepResponse, "target"> & { targetText?: string };
@@ -33,10 +31,8 @@ function findTarget(snapshot: PageSnapshot, text: string) {
 export function mockPlan(req: PlanRequest, rules: MockRule[]): PlanResponse {
   const s = req.snapshot;
   const hist = req.history.join("\n");
-  const appName = s.app?.name.toLowerCase();
   for (const r of rules) {
     if (!s.title.includes(r.title)) continue;
-    if (r.app && !(appName && r.app.some((a) => a.toLowerCase() === appName))) continue;
     if (r.afterHistory && !hist.includes(r.afterHistory)) continue;
     if (r.request && !req.request.toLowerCase().includes(r.request.toLowerCase())) continue;
     // Only the StepResponse fields are copied, so a stray key in the script (like an old `text`) never reaches the client.

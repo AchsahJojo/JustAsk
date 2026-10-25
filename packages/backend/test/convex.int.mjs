@@ -28,7 +28,7 @@ const after = await c.query("tasks:pendingForDevice", { token });
 assert.equal(after.some((t) => t.id === tasks[0].id), false);
 console.log("✓ done event closes the task");
 
-const snapshot = { snapshotId: "s1", url: "http://x/", title: "T", heading: "", pageText: "", elements: [], omitted: { count: 0, regions: [] }, surface: "web" };
+const snapshot = { snapshotId: "s1", url: "http://x/", title: "T", heading: "", pageText: "", elements: [], omitted: { count: 0, regions: [] } };
 const res = await fetch(`${SITE}/plan`, {
   method: "POST",
   headers: { "content-type": "application/json" },

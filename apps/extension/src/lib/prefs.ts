@@ -43,24 +43,6 @@ export function friendlyError(e: unknown): string {
   return "Something went wrong. Please try again, or ask your helper.";
 }
 
-/** What a claimed handoff carries. Never page content. */
-export interface Handoff {
-  request: string;
-  taskId: string | null;
-  recipe: Recipe | null;
-}
-
-/** Validate a `handoffs:claim` reply. Returns null for a missing or malformed handoff. */
-export function parseHandoff(x: unknown): Handoff | null {
-  if (!isObj(x) || typeof x.request !== "string" || !x.request.trim()) return null;
-  const recipe = Recipe.safeParse(x.recipe);
-  return {
-    request: x.request.trim().slice(0, 500),
-    taskId: typeof x.taskId === "string" && x.taskId ? x.taskId : null,
-    recipe: recipe.success ? recipe.data : null,
-  };
-}
-
 /** One row of the devices list, normalised from whatever `devices:list` returns. */
 export interface DeviceRow {
   id: string;
@@ -78,7 +60,7 @@ export function parseDevices(x: unknown): DeviceRow[] {
     const id = typeof r._id === "string" ? r._id : typeof r.id === "string" ? r.id : typeof r.deviceId === "string" ? r.deviceId : null;
     if (!id) return [];
     const kind = typeof r.kind === "string" ? r.kind : "extension";
-    const label = typeof r.label === "string" && r.label.trim() ? r.label : kind === "desktop" ? "JustAsk app" : "A browser";
+    const label = typeof r.label === "string" && r.label.trim() ? r.label : "A browser";
     const seen = typeof r.lastSeenAt === "number" ? r.lastSeenAt : null;
     const current = r.current === true || r.isCurrent === true || r.thisDevice === true || r.isThisDevice === true;
     return [{ id, label, kind, lastSeenAt: seen, current }];

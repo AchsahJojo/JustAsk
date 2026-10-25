@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { api } from "../convex/_generated/api";
-import { desk, newAccount, setup } from "./helpers";
+import { newAccount, setup } from "./helpers";
 
 const KEY = "sk_car_test_secret";
 let saved: string | undefined;
@@ -19,7 +19,7 @@ afterEach(() => {
 
 test("mints a short-lived token and never returns the key", async () => {
   const t = setup();
-  const token = await newAccount(t, "Margaret", desk("pc-1"));
+  const token = await newAccount(t, "Margaret");
   const fetchMock = vi.fn(async () => new Response(JSON.stringify({ token: "ctok_123" }), { status: 200 }));
   vi.stubGlobal("fetch", fetchMock);
 

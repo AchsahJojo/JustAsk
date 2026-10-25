@@ -2,7 +2,7 @@ import { ConvexHttpClient } from "convex/browser";
 import type { EventType, Recipe } from "@justask/shared";
 import { getSettings } from "./config";
 import type { DeviceInfo } from "../platform/device";
-import { parseCode, parseDevices, parseHandoff, type DeviceRow, type Handoff, type SyncedPrefs } from "./prefs";
+import { parseCode, parseDevices, type DeviceRow, type SyncedPrefs } from "./prefs";
 
 export interface PendingTask {
   id: string;
@@ -87,17 +87,6 @@ export class Backend {
     }
     if (!r || typeof r.token !== "string") return null;
     return { token: r.token, displayName: typeof r.displayName === "string" ? r.displayName : "" };
-  }
-
-  /** Whose account a code links to, without using it up. Null if unknown or not supported yet. */
-  async peekCode(convexUrl: string, code: string): Promise<string | null> {
-    try {
-      const client = new ConvexHttpClient(convexUrl, { skipConvexDeploymentUrlCheck: true });
-      const r = await this.mutation<{ displayName?: unknown } | null>(client, "devices:peekCode", { code });
-      return r && typeof r.displayName === "string" && r.displayName.trim() ? r.displayName.trim() : null;
-    } catch {
-      return null;
-    }
   }
 
   /**
@@ -185,17 +174,6 @@ export class Backend {
       return true;
     } catch {
       return false;
-    }
-  }
-
-  /** Claim a handoff from the desktop app. Null when it isn't ours, was already claimed, or failed. */
-  async claimHandoff(handoffId: string): Promise<Handoff | null> {
-    const c = await this.c();
-    if (!c) return null;
-    try {
-      return parseHandoff(await this.mutation<unknown>(c.client, "handoffs:claim", { token: c.token, handoffId }));
-    } catch {
-      return null;
     }
   }
 

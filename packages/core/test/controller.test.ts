@@ -16,7 +16,6 @@ function frame(frameId: number, texts: string[], isTop = frameId === 0): FrameSc
       heading: "H",
       pageText: `text of frame ${frameId}`,
       omitted: { count: 0, regions: [] },
-      surface: "web",
       elements: texts.map((t, i) => ({ n: i + 1, role: "button", text: t, label: null, nearby: null, color: null, big: false, disabled: false, inModal: false, inViewport: true, region: "main" as const })),
     },
   };
@@ -240,23 +239,20 @@ describe("SessionController", () => {
 });
 
 describe("guide only (no drive mode)", () => {
-  it("the bridge has no act or openBrowser method", () => {
+  it("the bridge has no act method", () => {
     const h = harness([guide(1)]);
     expect("act" in h.bridge).toBe(false);
-    expect("openBrowser" in h.bridge).toBe(false);
   });
 
   it("a guide step only highlights and speaks; it never changes the page", async () => {
     const h = harness([guide(1, "Type water bottle in the search box.", { expect: "type" })]);
     const act = vi.fn();
-    const openBrowser = vi.fn();
-    Object.assign(h.bridge, { act, openBrowser });
+    Object.assign(h.bridge, { act });
     await h.c.start("find a water bottle");
     expect(h.c.state.phase).toBe("guiding");
     expect(h.c.state.line).toBe("Type water bottle in the search box.");
     expect(h.ops).toEqual(["say:Let me look at the page.", "highlight:Type here", "say:Type water bottle in the search box."]);
     expect(act).not.toHaveBeenCalled();
-    expect(openBrowser).not.toHaveBeenCalled();
     expect(h.bridge.waitForChange).not.toHaveBeenCalled();
   });
 
@@ -318,7 +314,7 @@ describe("prompt", () => {
     expect(turn).toContain("Caregiver's recipe");
     expect(turn).toContain('[1] button: "Go"');
   });
-  it("is guide only: guide by default, she does it herself, search first, no menu bias, native paragraph", () => {
+  it("is guide only: guide by default, she does it herself, search first, no menu bias", () => {
     expect(SYSTEM_PROMPT).toContain('"guide" is the usual choice');
     expect(SYSTEM_PROMPT).toContain("she does it herself");
     expect(SYSTEM_PROMPT).not.toContain('"act"');
@@ -327,8 +323,6 @@ describe("prompt", () => {
     expect(SYSTEM_PROMPT).toContain('role "search box"');
     expect(SYSTEM_PROMPT).toContain("don't open category menus to find a specific item");
     expect(SYSTEM_PROMPT).not.toContain("prefer guiding her to scroll or open a menu");
-    expect(SYSTEM_PROMPT).toContain("Desktop apps:");
-    expect(SYSTEM_PROMPT).toContain("Click Display in the Settings window.");
     expect(SYSTEM_PROMPT).toContain('"kind":"guide","say":"Type your password here. I can\'t see it."');
     expect(SYSTEM_PROMPT).toContain('{"kind":"guide","say":"Type water bottle in the search box.","target":2,"expect":"type","option":null,"risk":"none"}');
     expect(SYSTEM_PROMPT).toContain('"say":"Press Enter to search.","target":2,"expect":"submit"');
@@ -340,16 +334,7 @@ describe("prompt", () => {
     const { snapshot } = mergeScans([f], "s");
     expect(buildTurn("x", [], null, snapshot)).toContain("{password, empty, sensitive}");
   });
-  it("names the app and window on native surfaces, and mergeScans keeps them", () => {
-    const f = frame(0, ["Display"]);
-    f.snapshot.surface = "native";
-    f.snapshot.url = "";
-    f.snapshot.app = { name: "Settings", window: "System > Display" };
-    const { snapshot } = mergeScans([f], "s");
-    expect(snapshot.surface).toBe("native");
-    const turn = buildTurn("bigger text", [], null, snapshot);
-    expect(turn).toContain("App: Settings, window: System > Display");
-    expect(turn).not.toContain("Page address");
+  it("shows the page address", () => {
     expect(buildTurn("x", [], null, mergeScans([frame(0, ["A"])], "t").snapshot)).toContain("Page address: https://x.test/");
   });
 });
@@ -413,59 +398,6 @@ describe("waiting (P1)", () => {
     await tick(40);
     expect(h.plans.length).toBe(1);
     expect(h.bridge.watch).toHaveBeenLastCalledWith(false);
-  });
-});
-
-describe("open_browser (desktop)", () => {
-  const GUIDE = "Please open your web browser, like Chrome or Edge. I'll wait.";
-  const open = step("open_browser", "Opening Chrome for you now.");
-  function nativeFrame(app: string, texts: string[]): FrameScan {
-    const f = frame(0, texts);
-    f.snapshot.surface = "native";
-    f.snapshot.url = "";
-    f.snapshot.title = app;
-    f.snapshot.app = { name: app, window: app };
-    return f;
-  }
-  const notepad = [nativeFrame("Notepad", ["File", "Edit"])];
-  const browser = [nativeFrame("Edge", ["Search box"])];
-
-  it("asks her to open it and waits with the fixed line; never opens anything", async () => {
-    const h = harness([open], [notepad]);
-    const openBrowser = vi.fn(async () => true);
-    Object.assign(h.bridge, { openBrowser });
-    await h.c.start("find a recipe for banana bread");
-    expect(h.c.state.phase).toBe("waiting");
-    expect(h.c.state.line).toBe(GUIDE);
-    expect(h.spoken.at(-1)).toBe(GUIDE);
-    expect(h.spoken).not.toContain(open.say);
-    expect(h.bridge.watch).toHaveBeenCalledWith(true);
-    expect(h.events).toEqual(["step_shown"]);
-    expect(openBrowser).not.toHaveBeenCalled();
-    expect(h.highlights).toHaveLength(0);
-  });
-
-  it("re-plans when the browser window appears", async () => {
-    const h = harness([open, guide(1, "Click the search box.")], [notepad, browser]);
-    await h.c.start("find a recipe for banana bread");
-    await h.c.onContent({ type: "ja:page-changed", reason: "mutation" }, 0);
-    expect(h.plans).toHaveLength(2);
-    expect(h.c.state.phase).toBe("guiding");
-  });
-
-  it("a second open_browser in the same session waits the same way", async () => {
-    const h = harness([open, open], [notepad, notepad]);
-    await h.c.start("find a recipe");
-    expect(h.c.state.line).toBe(GUIDE);
-    await h.c.stop();
-    await h.c.start("find a recipe");
-    expect(h.c.state.phase).toBe("waiting");
-    expect(h.c.state.line).toBe(GUIDE);
-  });
-
-  it("the prompt teaches open_browser as asking her, with no web address", () => {
-    expect(SYSTEM_PROMPT).toContain('"open_browser": only when the turn shows "App" and "window"');
-    expect(SYSTEM_PROMPT).toContain('{"kind":"open_browser","say":"Please open your web browser, like Chrome or Edge.","target":null,"expect":null,"option":null,"risk":"none"}');
   });
 });
 

@@ -22,7 +22,7 @@ describe("eval cases are guide-only", () => {
 
   it("scoreStep checks the target of a guide step", () => {
     const snapshot: PageSnapshot = {
-      snapshotId: "s", url: "http://x/", title: "t", heading: "", pageText: "", omitted: { count: 0, regions: [] }, surface: "web",
+      snapshotId: "s", url: "http://x/", title: "t", heading: "", pageText: "", omitted: { count: 0, regions: [] },
       elements: [1, 2].map((n) => ({ n, role: "button", text: n === 1 ? "Refill" : "Cancel", label: null, nearby: null, color: null, big: false, disabled: false, inModal: false, inViewport: true, region: "main" })),
     };
     const c: EvalCase = { id: "x", url: "", request: "refill", expected: { kind: "guide", targetText: "Refill" } };

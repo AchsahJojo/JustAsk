@@ -46,10 +46,7 @@ export function Panel({ pinnedTabId }: { pinnedTabId: number | null }) {
   useEffect(() => {
     host.speech.onSpeaking = setSpeaking;
     const off = host.controller.subscribe(setView);
-    void host.init().then(async () => {
-      // A handoff claimed by the background (desktop app -> browser) starts right away.
-      if (await browser.permissions.contains(ALL_SITES)) await host.startFromHandoff();
-    });
+    void host.init();
     void getSettings().then((s) => setName(s.displayName));
     void backend.heartbeat();
     void pullPrefs();

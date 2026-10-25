@@ -42,8 +42,6 @@ export function mergeScans(scans: FrameScan[], snapshotId: string, cap = 150): {
       pageText,
       elements,
       omitted: { count: omitted, regions: [...regions] },
-      surface: top?.snapshot.surface ?? "web",
-      ...(top?.snapshot.app ? { app: top.snapshot.app } : {}),
     },
     map,
   };

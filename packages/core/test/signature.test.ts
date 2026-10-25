@@ -7,7 +7,7 @@ const box = (field: SnapshotElement["field"] = { kind: "search", hasValue: false
 });
 
 describe("snapshotSignature", () => {
-  const snap = (els: SnapshotElement[]): PageSnapshot => ({ snapshotId: "x", url: "", title: "", heading: "", pageText: "", elements: els, omitted: { count: 0, regions: [] }, surface: "web" });
+  const snap = (els: SnapshotElement[]): PageSnapshot => ({ snapshotId: "x", url: "", title: "", heading: "", pageText: "", elements: els, omitted: { count: 0, regions: [] } });
   it("changes with the elements, not the snapshot id", () => {
     const a = snapshotSignature(snap([box()]));
     expect(snapshotSignature({ ...snap([box()]), snapshotId: "y", pageText: "other" })).toBe(a);

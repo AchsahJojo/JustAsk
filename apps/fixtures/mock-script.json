@@ -32,8 +32,5 @@
   { "title": "Composer", "afterHistory": "post box", "step": { "kind": "done", "say": "The post box is open. You can start writing.", "expect": null, "option": null, "risk": "none" } },
   { "title": "Composer", "step": { "kind": "guide", "say": "Click the post box that says What's on your mind?", "targetText": "What's on your mind?", "expect": "click", "option": null, "risk": "none" } },
   { "title": "Composer", "step": { "kind": "guide", "say": "Click the button that says Start a post.", "targetText": "Start a post", "expect": "click", "option": null, "risk": "none" } },
-  { "title": "Composer", "step": { "kind": "wait", "say": "The post box is opening.", "expect": null, "option": null, "risk": "none" } },
-
-  { "title": "", "app": ["msedge", "chrome", "firefox", "brave", "opera"], "request": "recipe", "step": { "kind": "done", "say": "Your web browser is open. Ask me again there.", "expect": null, "option": null, "risk": "none" } },
-  { "title": "Notepad", "request": "recipe", "step": { "kind": "open_browser", "say": "Please open your web browser, like Chrome or Edge.", "expect": null, "option": null, "risk": "none" } }
+  { "title": "Composer", "step": { "kind": "wait", "say": "The post box is opening.", "expect": null, "option": null, "risk": "none" } }
 ]

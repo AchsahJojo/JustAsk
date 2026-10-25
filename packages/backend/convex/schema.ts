@@ -44,7 +44,6 @@ export default defineSchema({
     expiresAt: v.number(),
     purpose: v.optional(v.union(v.literal("device"), v.literal("caregiver"))),
     createdByDeviceId: v.optional(v.id("devices")),
-    machineId: v.optional(v.string()),
   })
     .index("by_code", ["code"])
     .index("by_senior", ["seniorId"])
@@ -57,7 +56,6 @@ export default defineSchema({
     kind: v.optional(deviceKind),
     platform: v.optional(v.string()),
     label: v.optional(v.string()),
-    machineId: v.optional(v.string()),
     lastSeenAt: v.optional(v.number()),
     revokedAt: v.optional(v.number()),
   })
@@ -98,22 +96,4 @@ export default defineSchema({
     "by_caregiver",
     ["toCaregiverId"],
   ),
-  // Moves one session between the extension and the desktop app on the same machine (§9).
-  // Carries only request, taskId, recipe and a fixed note. Never page content.
-  handoffs: defineTable({
-    seniorId: v.id("seniors"),
-    fromDeviceId: v.id("devices"),
-    toKind: deviceKind,
-    toMachineId: v.optional(v.string()),
-    request: v.string(),
-    taskId: v.optional(v.id("tasks")),
-    recipe: v.optional(recipeValidator),
-    note: v.string(),
-    createdAt: v.number(),
-    expiresAt: v.number(),
-    claimedByDeviceId: v.optional(v.id("devices")),
-    claimedAt: v.optional(v.number()),
-  })
-    .index("by_senior_and_toKind_and_expiresAt", ["seniorId", "toKind", "expiresAt"])
-    .index("by_expiresAt", ["expiresAt"]),
 });
