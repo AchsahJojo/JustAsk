@@ -56,15 +56,15 @@ button { font: inherit; color: inherit; }
 .brand-dot { width: 14px; height: 14px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 22%, transparent); }
 .link { background: none; border: 0; color: var(--ink-3); font-size: 15px; cursor: pointer; padding: 6px 4px; text-decoration: underline; text-underline-offset: 3px; }
 
-.body { flex: 1; padding: 22px 20px; display: flex; flex-direction: column; gap: 18px; }
-.hello { font-size: 30px; line-height: 1.15; margin: 4px 0 0; font-weight: 750; letter-spacing: -0.02em; }
+.body { flex: 1; min-width: 0; padding: 22px 20px; display: flex; flex-direction: column; gap: 18px; }
+.hello { overflow-wrap: anywhere; font-size: 30px; line-height: 1.15; margin: 4px 0 0; font-weight: 750; letter-spacing: -0.02em; }
 .soft { color: var(--ink-3); margin: 0; font-size: 17px; }
-.eyebrow { font-size: 14px; font-weight: 750; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-3); margin: 0; }
+.eyebrow { overflow-wrap: anywhere; font-size: 14px; font-weight: 750; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-3); margin: 0; }
 .eyebrow.accent { color: var(--accent-ink); }
 
 .card { background: var(--paper); border: 1.5px solid var(--line); border-radius: var(--radius); padding: 16px 18px; display: grid; gap: 10px; }
 .card.task { border-color: var(--accent); box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 14%, transparent); }
-.task-title { font-size: 22px; font-weight: 700; margin: 0; line-height: 1.25; }
+.task-title { font-size: 22px; font-weight: 700; margin: 0; line-height: 1.25; overflow-wrap: anywhere; }
 
 .ask { display: flex; flex-direction: column; align-items: center; gap: 10px; background: none; border: 0; padding: 8px 0 0; cursor: pointer; border-radius: 28px; }
 .ask:active .orb { transform: scale(0.97); }
@@ -78,7 +78,7 @@ button { font: inherit; color: inherit; }
 .typed { display: grid; gap: 8px; }
 .row { display: flex; gap: 10px; align-items: stretch; }
 .grow { flex: 1; }
-input { flex: 1; min-width: 0; font: inherit; font-size: 19px; color: var(--ink); background: var(--paper); border: 2px solid var(--line); border-radius: 14px; padding: 13px 14px; }
+input { flex: 1; min-width: 0; width: 100%; font: inherit; font-size: 19px; color: var(--ink); background: var(--paper); border: 2px solid var(--line); border-radius: 14px; padding: 13px 14px; }
 input::placeholder { color: var(--ink-3); }
 input:focus { border-color: var(--ink); outline: none; }
 
@@ -86,7 +86,7 @@ input:focus { border-color: var(--ink); outline: none; }
 .asked strong { color: var(--ink); font-weight: 650; }
 .stage { display: flex; gap: 14px; align-items: flex-start; }
 .stage-text { display: grid; gap: 6px; min-width: 0; padding-top: 6px; }
-.caption { font-size: 27px; line-height: 1.25; font-weight: 700; margin: 0; letter-spacing: -0.01em; transition: opacity 0.2s; outline: none; }
+.caption { overflow-wrap: anywhere; font-size: 27px; line-height: 1.25; font-weight: 700; margin: 0; letter-spacing: -0.01em; transition: opacity 0.2s; outline: none; }
 .caption.dim { opacity: 0.6; }
 .panel[data-phase="done"] .stage { flex-direction: column; align-items: center; text-align: center; }
 .hint { margin: 0; font-size: 18px; color: var(--ink-2); }
@@ -116,7 +116,7 @@ input:focus { border-color: var(--ink); outline: none; }
 .tasklist ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
 .tasklist li { display: flex; align-items: center; gap: 12px; background: var(--paper); border: 1.5px solid var(--line); border-radius: 14px; padding: 12px 14px; }
 .tl-main { flex: 1; min-width: 0; display: grid; gap: 2px; }
-.tl-title { font-weight: 700; font-size: 18px; }
+.tl-title { font-weight: 700; font-size: 18px; overflow-wrap: anywhere; }
 .tl-check { flex: none; width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; background: color-mix(in srgb, var(--sage) 16%, transparent); color: var(--sage); font-weight: 800; }
 .done-list summary { cursor: pointer; color: var(--ink-3); font-size: 16px; font-weight: 650; padding: 4px 0; }
 .done-list[open] summary { margin-bottom: 8px; }
