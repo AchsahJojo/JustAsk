@@ -185,6 +185,17 @@ describe("SessionController", () => {
     expect(h.c.state.phase).toBe("guiding");
   });
 
+  it("free text while guiding replans with the user's words instead of repeating", async () => {
+    const h = harness([guide(1), guide(2)]);
+    await h.c.start("refill");
+    expect(h.c.state.phase).toBe("guiding");
+    await h.c.input("I can't find it, it's on the left");
+    expect(h.plans.length).toBe(2);
+    expect(h.plans[1].history.at(-1)).toContain("it's on the left");
+    expect(h.bridge.clear).toHaveBeenCalled();
+    expect(h.c.state.phase).toBe("guiding");
+  });
+
   it("highlights in the right frame", async () => {
     const h = harness([guide(3)], [[frame(0, ["A", "B"]), frame(7, ["Pay"], false)]]);
     await h.c.start("x");

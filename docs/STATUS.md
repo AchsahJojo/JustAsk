@@ -203,6 +203,7 @@ Fixed in this pass (2026-10-24):
 - **Iframes:** over the 150 cap, elements from every frame are ranked together (`crossFrameScore`), so a payment or sign-in iframe's button isn't crowded out. Child frames under 50×50 skip themselves.
 - **Shadow DOM:** dialog detection, page text and the main heading look inside web components (`queryAllComposed`), and a component's button gets the heading around it. The main heading now prefers the h1 over an earlier h2.
 - **Dropdowns:** long lists (over 30 options) send the first 10 plus every option matching the user's words or answers, so "Texas" can be chosen. Placeholder options with no `value` were already handled.
+- **Talking mid-step:** words that aren't a command while a step is showing ("I can't find it, it's on the left") now go to Claude for a fresh step instead of only repeating the line.
 - **Empty New Tab:** JustAsk searches the user's words instead of a dead end (see "Starting from nothing" above).
 
 Still open:

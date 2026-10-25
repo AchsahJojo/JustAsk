@@ -382,6 +382,11 @@ export class SessionController {
     }
     if (this.view.phase === "asking" || this.view.phase === "waiting") return this.answer(raw);
     if (this.view.phase === "idle" || this.view.phase === "done" || this.view.phase === "blocked") return this.start(raw);
+    // Mid-step words ("I can't find it", "it's on the left") go to Claude for a fresh step, not a repeat.
+    if ((this.view.phase === "guiding" || this.view.phase === "verifying") && raw.trim()) {
+      await this.deps.bridge.clear();
+      return this.answer(raw.trim());
+    }
     this.repeat();
   }
 
