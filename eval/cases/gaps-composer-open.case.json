@@ -4,7 +4,7 @@
   "request": "write a post",
   "pendingFixture": true,
   "history": [
-    "She did: \"Click the button that says Start a post.\" (click)"
+    "The user did: \"Click the button that says Start a post.\" (click)"
   ],
   "prepare": {
     "clickText": "Start a post"

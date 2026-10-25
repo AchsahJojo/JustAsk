@@ -176,7 +176,7 @@ const scenarios = {
     await clickText(s.page, "Send my refill request");
     await phase(s.panel, "done");
     const clicks = await s.panel.$eval(".hint.big", (e) => e.textContent);
-    assert.match(clicks, /4 clicks yourself/);
+    assert.match(clicks, /You did 4 steps yourself/);
     await sleep(700);
     await shot(s.panel, "06-panel-done");
     const received = await (await fetch(`${PLANNER}/__received`)).json();
@@ -237,6 +237,8 @@ const scenarios = {
     await shot(s.page, "09-iframe-same-origin");
     await (await same.$("button")).click();
     await caption(s.panel, /spend money/);
+    // No bare "spend money?": it names what would be pressed, and where.
+    assert.match(await s.panel.$eval(".stage-text .soft", (e) => e.textContent), /^Next, I'd (press|show you) “Pay now” on localhost\.$/);
     await shot(s.panel, "10-panel-confirm-money");
     await s.panel.click(".choices .btn.primary");
     await caption(s.panel, /Pay now/);
@@ -322,6 +324,87 @@ const scenarios = {
     await closeSession(s);
   },
 
+  async "empty New Tab: JustAsk searches the user's words in that tab, then keeps going"() {
+    await fetch(`${PLANNER}/__reset`, { method: "POST" });
+    const s = await openSession("/");
+    await s.page.goto("chrome://newtab");
+    // Stand-in for the user's default search engine (real engines can't be intercepted from the New Tab page):
+    // record the words and open the local results fixture in the same tab.
+    await s.panel.evaluate((site) => {
+      window.__searched = [];
+      chrome.search.query = async ({ text, tabId }) => {
+        window.__searched.push(text);
+        await chrome.tabs.update(tabId, { url: `${site}/gaps/results?q=${encodeURIComponent(text)}` });
+      };
+    }, SITE);
+    await ask(s.panel, "help me refill my prescription please");
+    // JustAsk asks first: search the web, or go to the website yourself.
+    await phase(s.panel, "confirming");
+    await caption(s.panel, /search the web/);
+    assert.deepEqual(await s.panel.evaluate(() => window.__searched), [], "nothing searched before the user says yes");
+    await shot(s.panel, "16a-panel-search-offer");
+    await clickText(s.panel, "Yes, search for me");
+    await caption(s.panel, /Click the one that says/, 20000);
+    assert.deepEqual(await s.panel.evaluate(() => window.__searched), ["refill my prescription"], "searched the user's words, without the filler");
+    assert.match(s.page.url(), /\/gaps\/results/, "in the same tab");
+    const history = JSON.parse((await (await fetch(`${PLANNER}/__received`)).json()).at(-1)).history.join("\n");
+    assert.match(history, /tab was empty, so JustAsk searched the web for "refill my prescription"/);
+    await shot(s.panel, "16b-panel-searched-from-new-tab");
+
+    // Mid-session the user ends up on an empty tab: no dead end, "Look it up for me" searches again.
+    await s.page.goto("chrome://newtab");
+    await phase(s.panel, "paused");
+    await caption(s.panel, /This tab is empty/);
+    await shot(s.panel, "16c-panel-blank-tab");
+    await clickText(s.panel, "Look it up for me");
+    await caption(s.panel, /Click the one that says/, 20000);
+    assert.equal((await s.panel.evaluate(() => window.__searched)).length, 2);
+    await closeSession(s);
+
+    // "No, I'll go to the website myself": JustAsk waits, and carries on when a site opens.
+    const s2 = await openSession("/");
+    await s2.page.goto("chrome://newtab");
+    await ask(s2.panel, "help me refill my prescription");
+    await phase(s2.panel, "confirming");
+    await clickText(s2.panel, "No, I'll go to the website myself");
+    await caption(s2.panel, /Go to the website you want/);
+    await s2.page.goto(`${SITE}/`);
+    await caption(s2.panel, /Refill a prescription/, 20000);
+    await closeSession(s2);
+  },
+
+  async "start screen: example requests; the Cartesia mic explains it needs setup"() {
+    // A session left mid-way shows "Keep going?" instead of the examples.
+    await sw.evaluate(() => chrome.storage.local.remove("resume"));
+    const s = await openSession("/");
+    await s.panel.waitForSelector(".ideas .idea");
+    assert.ok((await s.panel.$$(".ideas .idea")).length >= 3);
+    await shot(s.panel, "02b-panel-ideas");
+    // Voice is Cartesia only: before this browser has an account there's no token, and the mic says so plainly.
+    await s.panel.click("button.ask");
+    await s.panel.waitForFunction(() => document.querySelector(".note")?.textContent.includes("Voice works once your JustAsk is set up"), { timeout: 8000, polling: 100 });
+    await closeSession(s);
+  },
+
+  async "scam check: a gift-card-codes request asks first; someone asked -> stops before any page step"() {
+    await fetch(`${PLANNER}/__reset`, { method: "POST" });
+    const s = await openSession("/");
+    await ask(s.panel, "help me email the gift card codes to the man from the IRS");
+    await phase(s.panel, "confirming");
+    await caption(s.panel, /Did someone call, text or email/);
+    assert.match(await s.panel.$eval(".stage-text .soft", (e) => e.textContent), /never ask to be paid with gift card numbers/);
+    assert.ok(await s.panel.$eval("button.btn.outline.huge", (b) => { const r = b.getBoundingClientRect(); return b.textContent.includes("my own idea") && r.bottom <= document.querySelector("footer").getBoundingClientRect().top; }), "both answers visible above the footer");
+    assert.equal(await s.panel.$eval(".eyebrow", (e) => e.textContent), "Safety check");
+    await shot(s.panel, "21-panel-scam-question");
+    await clickText(s.panel, "Yes, someone asked me");
+    await phase(s.panel, "blocked");
+    await caption(s.panel, /looks like a scam/);
+    assert.match(await s.panel.$eval(".stage-text .soft", (e) => e.textContent), /call your bank/);
+    await shot(s.panel, "22-panel-scam-stopped");
+    assert.deepEqual(await (await fetch(`${PLANNER}/__received`)).json(), [], "nothing was planned or sent");
+    await closeSession(s);
+  },
+
   async "can't-see page: chrome:// pauses with a plain line"() {
     const s = await openSession("/");
     await s.page.goto("chrome://version");
@@ -339,13 +422,13 @@ const scenarios = {
     const p = await browser.newPage();
     await p.setViewport({ width: 900, height: 1100 });
     await p.emulateMediaFeatures([{ name: "prefers-color-scheme", value: "light" }]);
+    // The server address is a build setting (VITE_CONVEX_URL); e2e builds leave it empty, so set it here.
+    await sw.evaluate(async (url) => {
+      const { settings = {} } = await chrome.storage.local.get("settings");
+      await chrome.storage.local.set({ settings: { ...settings, convexUrl: url } });
+    }, process.env.CONVEX_URL ?? "http://127.0.0.1:3210");
     await p.goto(`chrome-extension://${EXT_ID}/setup.html`);
-    await p.waitForSelector(".advanced summary");
-    await p.click(".advanced summary");
-    const convexInput = (await p.$$(".advanced input"))[1];
-    await convexInput.click({ clickCount: 3 });
-    await convexInput.type(process.env.CONVEX_URL ?? "http://127.0.0.1:3210");
-    await p.keyboard.press("Tab"); // saved on blur
+    await p.waitForSelector('input[aria-label="Pairing code"]');
     await p.type('input[aria-label="Pairing code"]', process.env.CONVEX_CODE);
     await clickText(p, "Connect");
     await p.waitForFunction(() => document.body.textContent.includes("Connected as Mom"), { timeout: 8000 });
@@ -362,13 +445,37 @@ const scenarios = {
     await s.panel.click(".card.task .btn.primary");
     await caption(s.panel, /Refill a prescription/, 15000); // recipe startUrl opened in the session tab
     assert.equal(new URL(s.page.url()).pathname, "/");
-    for (const [text, sel] of [["Refill a prescription"], ["Refill", 'a[aria-label="Refill Lisinopril 10 mg"]'], ["Pick up in store"], ["Send my refill request"]]) {
+    // Each click waits for its step to be shown: JustAsk waits for every page to finish loading first.
+    for (const [shown, text, sel] of [
+      [/Refill a prescription/, "Refill a prescription"],
+      [/Refill button next to Lisinopril/, "Refill", 'a[aria-label="Refill Lisinopril 10 mg"]'],
+      [/Pick up in store/, "Pick up in store"],
+      [/Send my refill request/, "Send my refill request"],
+    ]) {
+      await caption(s.panel, shown, 15000);
       if (sel) await s.page.waitForSelector(sel).then((h) => h.click());
       else await clickText(s.page, text);
-      await sleep(300);
     }
     await phase(s.panel, "done", 20000);
     await closeSession(s);
+
+    // The JustAsk desktop app makes a link code; this already-connected browser types it under "I have a code".
+    const { ConvexHttpClient } = await import("convex/browser");
+    const cx = new ConvexHttpClient(process.env.CONVEX_URL ?? "http://127.0.0.1:3210");
+    const { token: deskToken } = await cx.mutation("accounts:createSelf", { displayName: "Joan", device: { kind: "desktop", platform: "test", label: "Joan's PC", machineId: "pc-e2e" } });
+    const { code: deskCode } = await cx.mutation("devices:createLinkCode", { token: deskToken });
+    const st = await browser.newPage();
+    await st.goto(`chrome-extension://${EXT_ID}/setup.html`);
+    await st.waitForSelector('input[aria-label="Code"]');
+    await st.type('input[aria-label="Code"]', deskCode);
+    await clickText(st, "Next");
+    await st.waitForFunction(() => document.body.textContent.includes("Link this browser to Joan's JustAsk?"), { timeout: 8000 });
+    await st.screenshot({ path: `${SHOTS}/19b-setup-link-desktop.png`, fullPage: true });
+    await clickText(st, "Yes, link it");
+    await st.waitForFunction(() => document.body.textContent.includes("Linked."), { timeout: 8000 });
+    const devices = await cx.query("devices:list", { token: deskToken });
+    assert.deepEqual(devices.map((d) => [d.kind, d.machineId]).sort(), [["desktop", "pc-e2e"], ["extension", "pc-e2e"]], "one account; the browser has the app's machine id");
+    await st.close();
   },
 
   async "setup page renders"() {

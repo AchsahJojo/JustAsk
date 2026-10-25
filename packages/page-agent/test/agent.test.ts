@@ -184,3 +184,35 @@ describe("lost target", () => {
     agent.destroy();
   });
 });
+
+describe("the ring never jumps to the corner when a site swaps the element", () => {
+  const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+  const ringOf = () => document.querySelector("justask-overlay")?.getAttribute("data-ring") ?? null;
+
+  it("hides while the target is collapsed, then follows its replacement", async () => {
+    const { agent, n } = setup(`<main><div id="slot"><div role="textbox" contenteditable="true" aria-label="Message Body" data-rect="40,300,600,200"></div></div></main>`);
+    expect(agent.highlight({ localId: n("Message Body"), expect: "type", option: null, label: "Type here" })).toBe(true);
+    await sleep(60);
+    expect(ringOf()).toBe("40,300,600,200");
+    // The site hides the old editor (still in the page) and adds a new one, like a compose box on focus.
+    const slot = document.getElementById("slot")!;
+    (slot.firstElementChild as HTMLElement).style.display = "none";
+    slot.insertAdjacentHTML("beforeend", `<div role="textbox" contenteditable="true" aria-label="Message Body" data-rect="40,320,600,200"></div>`);
+    await sleep(80);
+    expect(ringOf()).toBeNull(); // hidden, never drawn at 0,0
+    await sleep(500);
+    expect(ringOf()).toBe("40,320,600,200");
+    agent.destroy();
+  });
+
+  it("when nothing replaces it, says lost so JustAsk looks again", async () => {
+    const { agent, n, sent } = setup(`<main><div role="textbox" contenteditable="true" aria-label="Message Body" data-rect="40,300,600,200"></div></main>`);
+    agent.highlight({ localId: n("Message Body"), expect: "type", option: null, label: "Type here" });
+    await sleep(60);
+    (document.querySelector("[role=textbox]") as HTMLElement).style.display = "none";
+    await sleep(600);
+    expect(sent.some((m) => m.type === "ja:lost")).toBe(true);
+    expect(ringOf()).toBeNull();
+    agent.destroy();
+  });
+});

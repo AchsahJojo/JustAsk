@@ -11,11 +11,7 @@ const prefsShape = v.object({
   consent: consentValidator,
 });
 
-/**
- * Her synced preferences (voice, speech rate, Show me instead, consent), with defaults.
- * `showMeInstead` is kept for compatibility (the caregiver app reads and sets it); it no longer
- * changes behavior, because JustAsk always shows her each step and she does it herself.
- */
+/** The user's synced preferences (voice, speech rate, Show me instead, consent), with defaults. */
 export const get = query({
   args: { token: v.string() },
   returns: prefsShape,
@@ -27,7 +23,7 @@ export const get = query({
   },
 });
 
-/** Update any subset of her preferences. `rate` must be 0.5–1.5. Returns the new preferences. */
+/** Update any subset of the user's preferences. `rate` must be 0.5–1.5. Returns the new preferences. */
 export const set = mutation({
   args: {
     token: v.string(),

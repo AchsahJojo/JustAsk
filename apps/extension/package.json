@@ -18,6 +18,7 @@
     "@justask/core": "*",
     "@justask/page-agent": "*",
     "@justask/shared": "*",
+    "@justask/voice": "*",
     "convex": "^1.48.0",
     "react": "^19.3.1",
     "react-dom": "^19.3.1"

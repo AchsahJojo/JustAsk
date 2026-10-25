@@ -3,7 +3,7 @@
   "url": "{FIXTURES}/pharmacy/prescriptions",
   "request": "help me refill my prescription",
   "history": [
-    "She did: \"Click the big blue button that says Refill a prescription.\" (click)"
+    "The user did: \"Click the big blue button that says Refill a prescription.\" (click)"
   ],
   "expected": {
     "kind": "guide",

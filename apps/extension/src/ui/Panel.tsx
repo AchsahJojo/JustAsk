@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { browser } from "wxt/browser";
 import type { SessionView } from "@justask/core";
 import { SessionHost } from "../lib/session";
-import { BrowserListener } from "../lib/speech";
+import { newListener, voiceTokens } from "../lib/speech";
 import { backend, type PendingTask, type Task, type TaskList } from "../lib/backend";
 import { getSettings } from "../lib/config";
 import { pullPrefs } from "../lib/prefsSync";
@@ -13,14 +13,21 @@ import { focusCaptionUnlessAsking } from "./focusCaption";
 import { doneLine } from "./doneLine";
 
 const ALL_SITES = { origins: ["<all_urls>"] };
+/** Example requests for when the user opens JustAsk and isn't sure what to ask. Plain words, no sites. */
+const IDEAS = ["What's the weather today?", "Find a recipe for chicken soup", "Read today's news"];
 const DEV = import.meta.env.MODE === "development";
+
+/** Steps JustAsk did for the user. `actions` is added to SessionView by the core drive-mode work. */
+const actionsOf = (v: SessionView) => (v as SessionView & { actions?: number }).actions ?? 0;
 
 export function Panel({ pinnedTabId }: { pinnedTabId: number | null }) {
   const host = useMemo(() => new SessionHost({ pinnedTabId }), [pinnedTabId]);
-  const listener = useMemo(() => new BrowserListener(), []);
+  const listener = useMemo(() => newListener(), []);
   const [view, setView] = useState<SessionView>(host.controller.state);
   const [speaking, setSpeaking] = useState(false);
   const [listening, setListening] = useState(false);
+  /** The mic is recording (a moment after the press). Only then does the button say "I'm listening". */
+  const [micReady, setMicReady] = useState(false);
   const [heard, setHeard] = useState("");
   const [note, setNote] = useState("");
   const [typed, setTyped] = useState("");
@@ -49,6 +56,8 @@ export function Panel({ pinnedTabId }: { pinnedTabId: number | null }) {
     void host.init();
     void getSettings().then((s) => setName(s.displayName));
     void backend.heartbeat();
+    // Get the voice token now, so pressing the mic starts listening without a network wait.
+    void voiceTokens.get().catch(() => {});
     void pullPrefs();
     void browser.storage.local.get("resume").then((r) => {
       const res = (r as { resume?: { request: string; taskId: string | null } }).resume;
@@ -71,15 +80,28 @@ export function Panel({ pinnedTabId }: { pinnedTabId: number | null }) {
     host.speech.stop();
     setNote("");
     setHeard("");
-    listener.listen({
-      onInterim: setHeard,
+    // The mic never hears JustAsk: lines wait until the user stops talking.
+    host.speech.hold(true);
+    let said = false;
+    setMicReady(false);
+    void listener.listen({
+      onReady: () => setMicReady(true),
+      onInterim: (t) => {
+        if (t.trim()) said = true;
+        setHeard(t);
+      },
       onFinal: (t) => {
         setHeard("");
         onText(t);
       },
       onError: setNote,
-      onEnd: () => setListening(false),
+      onEnd: () => {
+        host.speech.hold(false, said);
+        setListening(false);
+        setMicReady(false);
+      },
     });
+    if (!listener.listening) host.speech.hold(false);
     setListening(listener.listening);
   };
 
@@ -178,9 +200,22 @@ export function Panel({ pinnedTabId }: { pinnedTabId: number | null }) {
 
             <button className={`ask ${listening ? "is-listening" : ""}`} onClick={() => talk((t) => start(t))} aria-label={listening ? "Listening. Press to stop." : "Press and tell me what you want to do"}>
               <Orb mode={orbMode} size={200} />
-              <span className="ask-label">{listening ? "I'm listening…" : "Press and tell me what you want to do"}</span>
+              <span className="ask-label">{listening ? (micReady ? "I'm listening…" : "One moment…") : "Press and tell me what you want to do"}</span>
             </button>
             {heard && <p className="heard">“{heard}”</p>}
+
+            {tasks.open.length === 0 && !resume && (
+              <section className="ideas" aria-label="Things you can ask">
+                <p className="soft">Not sure what to ask? Try one of these. Any page is fine, even an empty one.</p>
+                <div className="idea-chips">
+                  {IDEAS.map((idea) => (
+                    <button key={idea} className="btn soft-btn idea" onClick={() => start(idea)}>
+                      {idea}
+                    </button>
+                  ))}
+                </div>
+              </section>
+            )}
 
             <form className="typed" onSubmit={onTyped}>
               <label htmlFor="typed" className="soft">
@@ -204,8 +239,8 @@ export function Panel({ pinnedTabId }: { pinnedTabId: number | null }) {
             <div className="stage">
               <Orb mode={orbMode} size={phase === "done" ? 132 : 96} />
               <div className="stage-text">
-                {phase === "guiding" && <p className="eyebrow accent">Step {view.stepNo}</p>}
-                {phase === "confirming" && <p className="eyebrow accent">Check first</p>}
+                {(phase === "guiding" || phase === "acting") && <p className="eyebrow accent">Step {view.stepNo}</p>}
+                {phase === "confirming" && <p className="eyebrow accent">{view.scam ? "Safety check" : view.offer ? "One question" : "Check first"}</p>}
                 <p ref={captionRef} tabIndex={-1} className={`caption ${phase === "planning" || phase === "verifying" ? "dim" : ""}`} aria-live="assertive">
                   {view.line}
                 </p>
@@ -214,9 +249,32 @@ export function Panel({ pinnedTabId }: { pinnedTabId: number | null }) {
             </div>
 
             {phase === "guiding" && <p className="hint">{view.expect === "type" ? "Type in the box with the glowing outline. I can't see what you type." : "Look for the glowing box. Take your time."}</p>}
-            {phase === "done" && <p className="hint big">{doneLine(view.clicks)}</p>}
+            {phase === "acting" && <p className="hint">I'm doing this step for you. Watch the glowing box. Press Stop at any time.</p>}
+            {phase === "done" && doneSummary(actions, view.guidedSteps ?? view.clicks) && <p className="hint big">{doneSummary(actions, view.guidedSteps ?? view.clicks)}</p>}
 
-            {phase === "confirming" && (
+            {phase === "confirming" && view.scam && (
+              <div className="choices">
+                <button className="btn primary huge" onClick={() => void host.controller.scamAnswer(true)}>
+                  Yes, someone asked me
+                </button>
+                <button className="btn outline huge" onClick={() => void host.controller.scamAnswer(false)}>
+                  No, it's my own idea
+                </button>
+              </div>
+            )}
+
+            {phase === "confirming" && view.offer === "search" && (
+              <div className="choices">
+                <button className="btn primary huge" onClick={() => void host.controller.searchAnswer(true)}>
+                  Yes, search for me
+                </button>
+                <button className="btn outline huge" onClick={() => void host.controller.searchAnswer(false)}>
+                  No, I'll go to the website myself
+                </button>
+              </div>
+            )}
+
+            {phase === "confirming" && !view.scam && !view.offer && (
               <div className="choices">
                 <button className="btn primary huge" onClick={() => host.controller.confirm(true)}>
                   Yes, go ahead
@@ -246,7 +304,7 @@ export function Panel({ pinnedTabId }: { pinnedTabId: number | null }) {
             )}
 
             {phase === "waiting" && (
-              <button className="btn primary huge" onClick={() => host.controller.resume("She said she is ready")}>
+              <button className="btn primary huge" onClick={() => host.controller.resume("The user said they are ready")}>
                 I'm ready
               </button>
             )}
@@ -261,7 +319,12 @@ export function Panel({ pinnedTabId }: { pinnedTabId: number | null }) {
                 </button>
               </div>
             )}
-            {phase === "paused" && view.pauseReason !== "other-tab" && (
+            {phase === "paused" && view.pauseReason === "blank-tab" && (
+              <button className="btn primary huge" onClick={() => void host.lookItUp()}>
+                Look it up for me
+              </button>
+            )}
+            {phase === "paused" && view.pauseReason !== "other-tab" && view.pauseReason !== "blank-tab" && (
               <button className="btn primary huge" onClick={() => host.retry()}>
                 Try again
               </button>
@@ -277,7 +340,7 @@ export function Panel({ pinnedTabId }: { pinnedTabId: number | null }) {
         <footer className="actions">
           {phase === "done" || phase === "blocked" ? (
             <button className="btn dark huge" onClick={() => host.controller.stop()}>
-              Start again
+              Ask for something else
             </button>
           ) : (
             <>
@@ -291,7 +354,7 @@ export function Panel({ pinnedTabId }: { pinnedTabId: number | null }) {
               </button>
               <div className="row">
                 <button className={`btn soft-btn grow ${listening ? "is-listening" : ""}`} onClick={() => talk((t) => void host.controller.input(t))}>
-                  {listening ? "Listening…" : phase === "asking" ? "Answer out loud" : "Talk to me"}
+                  {listening ? (micReady ? "Listening…" : "One moment…") : phase === "asking" ? "Answer out loud" : "Say something"}
                 </button>
                 <button className="btn soft-btn" onClick={() => host.controller.stuck()}>
                   I'm stuck
@@ -386,6 +449,23 @@ function Tasks({ list, onStart, onFinish }: { list: TaskList; onStart: (t: Task)
         </details>
       )}
     </>
+  );
+}
+
+/** "I did 3 steps for you, and you did 2." Nothing when no step happened (so never "0 clicks"). */
+function doneSummary(byMe: number, byHer: number): string {
+  const steps = (n: number) => `${n} ${n === 1 ? "step" : "steps"}`;
+  if (byMe && byHer) return `I did ${steps(byMe)} for you, and you did ${byHer}.`;
+  if (byMe) return `I did ${steps(byMe)} for you.`;
+  if (byHer) return `You did ${steps(byHer)} yourself.`;
+  return "";
+}
+
+function StopIcon() {
+  return (
+    <svg width="26" height="26" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+      <rect x="5" y="5" width="14" height="14" rx="2" />
+    </svg>
   );
 }
 

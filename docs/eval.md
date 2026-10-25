@@ -85,7 +85,7 @@ Create `eval/cases/<id>.case.json`:
   "id": "gaps-store",
   "url": "{FIXTURES}/gaps/store",
   "request": "help me buy a water bottle",
-  "history": ["She did: \"Click ...\" (click)"],
+  "history": ["The user did: \"Click ...\" (click)"],
   "pendingFixture": true,
   "settleMs": 400,
   "prepare": { "clickText": "Start a post" },
@@ -98,7 +98,7 @@ Fields:
 
 - Only `id`, `url`, `request` and `expected.kind` are required.
 - `{FIXTURES}` becomes `http://localhost:6174`.
-- History lines use the controller's format: `She did: "<say>" (<how>)`.
+- History lines use the controller's format: `The user did: "<say>" (<how>)`.
 - `prepare.clickText` clicks a button or link whose text starts with that string, before the scan.
 - `settleMs` is the wait before the scan. The default is 400 ms. Use 1500 ms or more for late-loading editors.
 - Live cases set `"live": true`, and their id must start with `live-`. Their snapshots are gitignored.

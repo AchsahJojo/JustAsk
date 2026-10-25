@@ -9,7 +9,7 @@ export interface LiveAccountUpdates {
 }
 
 /**
- * Subscribe to her task list (open and recently done) and preferences over one ConvexClient socket. Calls `onFail`
+ * Subscribe to the user's task list (open and recently done) and preferences over one ConvexClient socket. Calls `onFail`
  * once if the client can't be created or either subscription errors (for example, the function
  * doesn't exist yet), so the caller can fall back to polling. Both queries must deliver an initial
  * result before `firstResultMs`; otherwise a blocked network or wrong URL also counts as failure.

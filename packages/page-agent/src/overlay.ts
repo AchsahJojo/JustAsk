@@ -30,7 +30,7 @@ const CSS_TEXT = `
   box-shadow: 0 2px 8px rgba(0,0,0,.25);
 }
 .ring.below .tag { bottom: auto; top: 100%; margin-bottom: 0; margin-top: 6px; }
-/* Beside the target when there's room, so the tag never covers the label she needs to read. */
+/* Beside the target when there's room, so the tag never covers the label the user needs to read. */
 .ring.side .tag { left: 100%; bottom: auto; top: 50%; transform: translateY(-50%); margin: 0 0 0 10px; }
 .ring.side .tag::before { content: ""; position: absolute; left: -6px; top: 50%; margin-top: -6px; border: 6px solid transparent; border-left: 0; border-right-color: ${ACCENT}; }
 .banner {
@@ -84,6 +84,12 @@ export class Overlay {
     if (!(e.target instanceof Element) || !e.target.hasAttribute("popover")) return;
     this.promote();
   };
+
+  /** Called (once per disappearance) when the target is gone or has no size: the page swapped it. */
+  onTargetLost: (() => void) | null = null;
+  private lostReported = false;
+  /** When the target first looked gone; brief blips (an animation frame) aren't reported. */
+  private lostSince = 0;
 
   constructor(private doc: Document = document) {}
 
@@ -146,6 +152,8 @@ export class Overlay {
   show(target: Element, label: string) {
     this.ensureHost();
     this.target = target;
+    this.lostReported = false;
+    this.lostSince = 0;
     if (!this.ring) {
       this.ring = this.doc.createElement("div");
       this.ring.className = "ring";
@@ -163,6 +171,8 @@ export class Overlay {
 
   retarget(target: Element) {
     this.target = target;
+    this.lostReported = false;
+    this.lostSince = 0;
     this.place();
   }
 
@@ -223,6 +233,22 @@ export class Overlay {
     const r = this.target.getBoundingClientRect();
     const pad = 8;
     const s = this.ring.style;
+    // A target that left the page or collapsed to nothing (a site swapping one editor for another)
+    // would put the ring at the top-left corner. Hide it and let the agent find the new element.
+    if (!this.target.isConnected || (r.width < 1 && r.height < 1)) {
+      s.display = "none";
+      this.host?.removeAttribute("data-ring");
+      const now = Date.now();
+      if (!this.lostSince) this.lostSince = now;
+      if (!this.lostReported && now - this.lostSince >= 300) {
+        this.lostReported = true;
+        this.onTargetLost?.();
+      }
+      return;
+    }
+    this.lostSince = 0;
+    this.lostReported = false;
+    s.display = "block";
     s.left = `${Math.round(r.left - pad)}px`;
     s.top = `${Math.round(r.top - pad)}px`;
     s.width = `${Math.round(r.width + pad * 2)}px`;
@@ -242,7 +268,7 @@ export class Overlay {
       this.raf = requestAnimationFrame(loop);
     };
     this.raf = requestAnimationFrame(loop);
-    // rAF pauses in background tabs; the timer keeps position right when she comes back.
+    // rAF pauses in background tabs; the timer keeps position right when the user comes back.
     this.timer = setInterval(() => this.place(), 250);
   }
 

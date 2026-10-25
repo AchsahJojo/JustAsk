@@ -97,11 +97,9 @@ describe("checkStep: guide on boxes", () => {
     expect(checkStep({ ...base, expect: "hover" }, s2).ok).toBe(true);
     expect(checkStep({ ...base, expect: "file" }, s2).ok).toBe(true);
   });
-  it("guides her to type into a sensitive field herself", () => {
-    expect(checkStep({ ...base, target: 4, expect: "type", say: "Type your password here. I can't see it." }, s2).ok).toBe(true);
-  });
-  it("only guide and clarify may have a target", () => {
-    expect(checkStep({ ...base, kind: "clarify", expect: null }, s2).ok).toBe(true);
-    for (const kind of ["wait", "done", "blocked"] as const) expect(checkStep({ ...base, kind, expect: null }, s2).ok).toBe(false);
+  it("type needs text", () => expect(checkStep({ ...act, target: 3, expect: "type", text: null }, s2).ok).toBe(false));
+  it("never types into a sensitive field", () => {
+    expect(checkStep({ ...act, target: 4, expect: "type", text: "hunter2" }, s2).ok).toBe(false);
+    expect(checkStep({ ...base, target: 4, expect: "type" }, s2).ok).toBe(true); // guiding the user is fine
   });
 });

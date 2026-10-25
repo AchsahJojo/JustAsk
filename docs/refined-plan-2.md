@@ -16,15 +16,17 @@ The product also needs accounts synced across installs.
 This plan fixes those problems and splits the work across parallel Claude agents, with each agent owning its own paths.
 
 **Decisions (2026-10-24)**
-- **Drive by default.** JustAsk clicks, types, picks and submits for her as much as is reasonable. It never types, stores or reads sensitive data: passwords, one-time codes, card numbers, SSNs and bank details. Those steps fall back to guiding her. Normal app-safety gates apply.
-- **Accounts.** The account is her profile. Each install joins it with a 6-digit code from any linked install or a caregiver. No passwords.
+- **Drive by default.** JustAsk clicks, types, picks and submits for the user as much as is reasonable. It never types, stores or reads sensitive data: passwords, one-time codes, card numbers, SSNs and bank details. Those steps fall back to guiding the user. Normal app-safety gates apply.
+- **Desktop app.** A companion app plus native guidance for a few high-value apps, chosen from senior-usage data (`ARCHITECTURE.md` §9). It is not a helper for every app.
+- **Accounts.** The account is the user's profile. Each install joins it with a 6-digit code from any linked install or a caregiver. No passwords.
 - **Teammates own `apps/caregiver`.** Agents never edit it.
 
 ## Changes to refined plan 1
 
 1. **Guide mode becomes drive mode** (`ARCHITECTURE.md` §11). This reverses "No 'do it for me' this weekend". Guiding stays in three places: as the fallback for sensitive fields, as the fallback for failed actions, and as the **Show me instead** setting.
-2. **Accounts become "her account, add installs by code"** (§8).
-3. **The prompt changes:**
+2. **The desktop app moves into the hackathon:** the companion app plus Windows native guidance for 3 target apps (Settings, Zoom, the print dialog). macOS only if a teammate has a Mac.
+3. **Accounts become "the user's account, add installs by code"**, plus handoffs between the extension and the desktop app (§8, §9).
+4. **The prompt changes:**
    - act by default, and guide for sensitive fields
    - use the search box first for specific things
    - no bias toward opening menus
@@ -73,7 +75,10 @@ The extension agent codes against these function names as strings, the same way 
 | `devices:redeemCode({code, device?})` | a new install | `{token, displayName}` |
 | `devices:list({token})`, `devices:revoke({token, deviceId})`, `devices:heartbeat({token})` | any install | — |
 | `prefs:get({token})`, `prefs:set({token, voice?, rate?, consent?, showMeInstead?})` | any install | — |
-| `careLinks:createHelperCode({token})` | her install | `{code}` |
+| `handoffs:create({token, toKind, request, taskId?, recipe?})` | extension or desktop | `{handoffId}` |
+| `handoffs:claim({token, handoffId})` | the receiving install | `{request, taskId, recipe}` or `null` |
+| `handoffs:pendingForDevice({token})` | desktop app (live query) | — |
+| `careLinks:createHelperCode({token})` | the user's install | `{code}` |
 | `careLinks:redeemHelperCode({code})` | caregiver web app (auth) | — |
 | `voice:cartesiaToken({token})` | any install | a short-lived token |
 

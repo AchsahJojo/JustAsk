@@ -55,7 +55,7 @@ const BROWSER_NAMES: Record<BrowserPlatform, string> = {
   other: "Browser",
 };
 
-/** A label she can recognise in the devices list, e.g. "Chrome on Windows". */
+/** A label the user can recognise in the devices list, e.g. "Chrome on Windows". */
 export function deviceLabel(browser: BrowserPlatform, os: OsName): string {
   return os === "computer" ? `${BROWSER_NAMES[browser]} on this computer` : `${BROWSER_NAMES[browser]} on ${os}`;
 }

@@ -34,6 +34,8 @@ export class PageAgent {
   private added = new WeakSet<Node>();
   private mo: MutationObserver;
   private lastMutation = 0;
+  /** When this agent started watching the page (a fresh page counts as still changing until then). */
+  private readonly startedAt = Date.now();
   private resolveTimer: ReturnType<typeof setInterval> | null = null;
   private hoverTimer: ReturnType<typeof setTimeout> | null = null;
   private done = false;
@@ -44,6 +46,7 @@ export class PageAgent {
   constructor(private opts: AgentOptions) {
     this.doc = opts.doc ?? document;
     this.overlay = new Overlay(this.doc);
+    this.overlay.onTargetLost = () => this.onTargetGone();
     this.mo = new MutationObserver((muts) => {
       let real = false;
       for (const m of muts) {
@@ -62,6 +65,16 @@ export class PageAgent {
   // ───────────── scan ─────────────
 
   scan(context: string[]): FrameScan {
+    // A child frame smaller than 50×50 (tracking pixels, hidden widgets) has nothing the user can use.
+    const win = this.doc.defaultView;
+    if (!this.opts.isTop && win && (win.innerWidth < 50 || win.innerHeight < 50)) {
+      return {
+        frameId: this.opts.frameId,
+        isTop: false,
+        visibleFrames: 0,
+        snapshot: { url: strippedUrl(this.doc.location), title: this.doc.title, heading: "", pageText: "", elements: [], omitted: { count: 0, regions: [] }, surface: "web" },
+      };
+    }
     const recently = this.added;
     const { elements, omitted } = scanDocument(this.doc, {
       getShadowRoot: this.opts.getShadowRoot,
@@ -84,8 +97,8 @@ export class PageAgent {
       snapshot: {
         url: strippedUrl(this.doc.location),
         title: this.doc.title,
-        heading: mainHeading(this.doc),
-        pageText: pageText(this.doc),
+        heading: mainHeading(this.doc, this.opts.getShadowRoot),
+        pageText: pageText(this.doc, undefined, this.opts.getShadowRoot),
         elements: elements.map((e) => e.data),
         omitted,
       },
@@ -98,7 +111,8 @@ export class PageAgent {
     const entry = this.registry.get(localId);
     if (!entry) return null;
     const live = entry.ref.deref();
-    if (live && live.isConnected) return live;
+    // Still in the page but hidden or collapsed counts as replaced: sites swap elements on focus.
+    if (live && live.isConnected && isVisible(live)) return live;
     // Rescan this frame's candidates and match by fingerprint, then by role+text.
     const candidates = collectComposed(this.doc, { getShadowRoot: this.opts.getShadowRoot }).filter(isVisible);
     const described = candidates.map((el) => ({ el, parts: elementParts(el) }));
@@ -149,6 +163,30 @@ export class PageAgent {
   }
 
   /** Resolves true once the DOM has changed and then stayed quiet for `quietMs`. */
+  /**
+   * Resolve once the page looks finished: loaded, no DOM changes for `quietMs`, and nothing marked
+   * `aria-busy`, or after `maxMs` at most. Results that stream in (search results, prices, a forecast)
+   * are then on the page before it is read. Immediate when the page is already quiet.
+   */
+  settle(quietMs = 700, maxMs = 4000): Promise<void> {
+    const t0 = Date.now();
+    const done = () => {
+      const now = Date.now();
+      const quiet = now - Math.max(this.lastMutation, this.startedAt) >= quietMs;
+      const loaded = this.doc.readyState === "complete";
+      const busy = Array.from(this.doc.querySelectorAll('[aria-busy="true"]')).some((el) => isVisible(el));
+      return (quiet && loaded && !busy) || now - t0 >= maxMs;
+    };
+    if (done()) return Promise.resolve();
+    return new Promise((resolve) => {
+      const iv = setInterval(() => {
+        if (!done()) return;
+        clearInterval(iv);
+        resolve();
+      }, 100);
+    });
+  }
+
   waitForChange(timeoutMs: number, quietMs = 600): Promise<boolean> {
     const startedAt = Date.now();
     const baseline = this.lastMutation;

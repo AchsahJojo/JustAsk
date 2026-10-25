@@ -9,7 +9,7 @@ async function deviceCount(ctx: QueryCtx | MutationCtx, seniorId: Id<"seniors">)
   return (await ctx.db.query("devices").withIndex("by_senior", (q) => q.eq("seniorId", seniorId)).collect()).filter((d) => d.revokedAt === undefined).length;
 }
 
-/** Without her consent to share results, a caregiver only sees that a task was sent. */
+/** Without the user's consent to share results, a caregiver only sees that a task was sent. */
 function statusFor(task: Doc<"tasks">, senior: Doc<"seniors">): CaregiverTaskStatus {
   if (!senior.consent.notifyOnComplete) return "sent";
   return task.status === "pending" ? "sent" : task.status === "active" ? "started" : task.status;
@@ -44,11 +44,11 @@ export const list = query({
   },
 });
 
-/** Caregiver: one person's page. Outcomes and counts only, never page content or what she asked for herself. */
+/** Caregiver: one person's page. Outcomes and counts only, never page content or what the user asked for themselves. */
 export const get = query({
   args: { seniorId: v.id("seniors") },
   handler: async (ctx, { seniorId }) => {
-    // Her own profile was kept when she connected: send the caregiver's page to it.
+    // The user's own profile was kept when the user connected: send the caregiver's page to it.
     const resolved = await resolveSenior(ctx, seniorId);
     if (resolved && resolved !== seniorId) {
       await requireLink(ctx, resolved);
@@ -66,7 +66,7 @@ export const get = query({
 
     let stats: { finished: number; stuck: number | null; medianStepMs: number | null } | null = null;
     if (s.consent.notifyOnComplete) {
-      // Sessions for tasks this caregiver sent. Sessions she started herself stay private.
+      // Sessions for tasks this caregiver sent. Sessions the user started themselves stay private.
       const myTaskIds = new Set(tasks.map((t) => t._id));
       const mineSessions = (await ctx.db.query("sessions").withIndex("by_senior", (q) => q.eq("seniorId", seniorId)).order("desc").take(200)).filter(
         (x) => x.taskId && myTaskIds.has(x.taskId),
@@ -105,7 +105,7 @@ export const get = query({
   },
 });
 
-/** Caregiver: fix a name typo or the relation. What JustAsk calls her can only change before she connects. */
+/** Caregiver: fix a name typo or the relation. What JustAsk calls the user can only change before the user connects. */
 export const update = mutation({
   args: { seniorId: v.id("seniors"), name: v.string(), displayName: v.string(), relation: v.string() },
   handler: async (ctx, args) => {
@@ -119,9 +119,8 @@ export const update = mutation({
 });
 
 /**
- * Caregiver: turn "Show me instead" on or off for someone they help. Kept for compatibility with the
- * caregiver app: the setting is still stored, but it no longer changes behavior. JustAsk always shows
- * her each step and she does it herself.
+ * Caregiver: turn "Show me instead" on or off for someone they help. On, JustAsk shows the user each click
+ * and the user does it themselves. Off (the default), JustAsk clicks and types for the user, except sensitive fields.
  */
 export const setShowMe = mutation({
   args: { seniorId: v.id("seniors"), on: v.boolean() },
@@ -135,13 +134,13 @@ export const setShowMe = mutation({
 });
 
 /**
- * Caregiver: stop helping someone. Her JustAsk keeps working on its own. A profile that was never
+ * Caregiver: stop helping someone. The user's JustAsk keeps working on its own. A profile that was never
  * connected to a computer and has no other helper is deleted outright.
  */
 export const remove = mutation({
   args: { seniorId: v.id("seniors") },
   handler: async (ctx, { seniorId }) => {
-    // Her own profile was kept when she connected: send the caregiver's page to it.
+    // The user's own profile was kept when the user connected: send the caregiver's page to it.
     const resolved = await resolveSenior(ctx, seniorId);
     if (resolved && resolved !== seniorId) {
       await requireLink(ctx, resolved);

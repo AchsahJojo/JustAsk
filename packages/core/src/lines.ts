@@ -10,11 +10,27 @@ export const WRONG_TYPING = "You're typing in a different box. The one we want h
 export const LOST_LINE = "The page changed. Let me look again.";
 export const SUSPICIOUS_LINE = "This page might be a trick. Let's stop and check with your helper.";
 export const CANT_SEE_PAGE = "I can't see this kind of page. Open a website, then press Try again.";
+export const SEARCH_OFFER = "This tab is empty. Do you want me to search the web for that?";
+export const SEARCH_LINE = "Okay, I'm searching the web for that.";
+export const GO_YOURSELF_LINE = "Okay. Go to the website you want, and I'll help you from there.";
+export const BLANK_TAB_LINE = "This tab is empty. Press Look it up, and I'll search for it.";
+export const searchedNote = (q: string) => `The tab was empty, so JustAsk searched the web for "${q}"`;
 export const NEW_TAB_LINE = "That opened a new tab. I'll keep helping you there.";
 export const STUCK_LINE = "That's okay. Let me look again.";
 export const TYPING_NOT_DETECTED = "I can't see anything in that box yet. Please type your answer, then tell me when you're done.";
 export const STOPPED_LINE = "Okay, I stopped. Press the big button any time.";
 export const NO_CHANGE_NOTE = "the page did not change after that";
+
+/** Before a risk question: exactly what JustAsk would press next, and where. */
+export const riskDetail = (what: string, place: string, guide: boolean) =>
+  `Next, ${guide ? "I'd show you" : "I'd press"} “${what.slice(0, 60)}”${place ? ` on ${place}` : ""}.`;
+
+// Scam check (scam.ts). Plain, warm, and specific about what to do next.
+export const SCAM_STOP_LINE = "This looks like a scam. Please don't send anything.";
+export const SCAM_STOP_TIP = "Hang up or stop replying, and talk to someone you trust. If you already sent money or codes, call your bank or card company right away. They may be able to stop it.";
+/** History note for Claude when the user says it's their own idea. */
+export const SCAM_OWN_IDEA_NOTE =
+  "JustAsk asked whether someone told the user to do this (it looked like a common scam) and the user said it is their own idea. Still never type gift card numbers, passwords or texted codes for the user, and mark any payment step risk money";
 
 export const RISK_QUESTION: Record<string, string> = {
   money: "This step will spend money. Do you want to go ahead?",
@@ -32,3 +48,40 @@ export function choiceMismatch(option: string) {
 
 export const LOOKING_NEXT = "Let me look at the next page…";
 export const SEE_IT_NOW = "Do you see it now?";
+/** History notes (for Claude, not spoken). */
+export const ACT_FAILED_NOTE = "JustAsk couldn't do that, so the user will";
+export const GUIDE_MODE_NOTE = "JustAsk's last 3 actions did not change the page, so from now on the user does the steps themselves (use guide steps)";
+export const SHOW_ME_NOTE = "The user chose Show me instead: the user does every step themselves (use guide steps)";
+export const TEXT_DECLINED_NOTE = "The user did not want JustAsk to type that, so the user will type it themselves";
+
+/** Asked before typing text that has words the user didn't say. */
+export function typeConfirm(text: string) {
+  return `I'll type: ${text}. Okay?`;
+}
+
+/** The completion line after JustAsk acted at least once. */
+export function doneActed(actions: number, guidedSteps = 0) {
+  const steps = `${actions} ${actions === 1 ? "step" : "steps"}`;
+  return guidedSteps > 0 ? `All done. I did ${steps} for you, and you did ${guidedSteps} ${guidedSteps === 1 ? "step" : "steps"}.` : `All done. I did ${steps} for you.`;
+}
+
+/**
+ * A guide line for an act step that the user does themselves instead (Show me instead, a sensitive
+ * field, a failed action). `text` is only passed when it is safe to say out loud.
+ */
+export function guideInstead(expect: string | null, name: string, opts: { text?: string | null; option?: string | null; sensitive?: boolean } = {}) {
+  const what = name ? `the one that says ${name.slice(0, 40)}` : "the one with the glowing box";
+  switch (expect) {
+    case "type":
+      if (opts.sensitive) return "Please type this one yourself, in the glowing box. I can't see it.";
+      return opts.text ? `Click the glowing box, then type ${opts.text}.` : "Click the glowing box, then type your answer.";
+    case "choose":
+      return opts.option ? `Click the glowing box, then pick ${opts.option}.` : "Click the glowing box, then pick one.";
+    case "submit":
+      return "Click the glowing box, then press Enter.";
+    case "scroll":
+      return "Scroll down a little until you see the glowing box.";
+    default:
+      return `Please click ${what}. It has the glowing box.`;
+  }
+}

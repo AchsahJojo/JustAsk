@@ -2,8 +2,8 @@ import { z } from "zod";
 import type { PageSnapshot } from "./snapshot";
 
 /**
- * JustAsk never acts for her: she does every step herself.
- * `guide`: JustAsk highlights one thing on the screen and says what to do; she does it.
+ * `act`: JustAsk performs the step itself (drive mode, docs/ARCHITECTURE.md §11).
+ * `guide`: the user performs it (sensitive fields, failed actions, "Show me instead").
  */
 export const StepKind = z.enum(["guide", "clarify", "wait", "done", "blocked"]);
 /** What she does to the target. `scroll`: she brings it into view; `submit`: she presses Enter in the target field. */
@@ -21,6 +21,8 @@ export const StepResponse = z
     target: z.number().int().nullable(),
     expect: Expect.nullable(),
     option: z.string().nullable(),
+    /** What JustAsk types for an `act` + `type` step. Built from the user's words; null otherwise. */
+    text: z.string().nullable(),
     risk: Risk,
   })
   .strict();
@@ -66,6 +68,10 @@ export function checkStep(step: StepResponse, snapshot: PageSnapshot): StepCheck
   if (step.target !== null) {
     const el = snapshot.elements.find((e) => e.n === step.target);
     if (!el) return { ok: false, reason: `target ${step.target} is not in the current list` };
+    // Sensitive fields (passwords, codes, card numbers) are never filled by JustAsk: the user types them.
+    if (step.kind === "act" && el.field?.sensitive && (step.expect === "type" || step.expect === "choose" || step.expect === "submit")) {
+      return { ok: false, reason: "that field is sensitive; use guide so the user types it themselves" };
+    }
     if (step.expect === "choose") {
       const options = el.field?.options;
       if (!options || options.length === 0) return { ok: false, reason: "choose needs a select target" };

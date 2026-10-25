@@ -50,6 +50,9 @@ export default defineContentScript({
           if (window === window.top) agent.banner(msg.text);
           sendResponse(true);
           return;
+        case "ja:settle":
+          agent.settle(msg.quietMs, msg.maxMs).then(() => sendResponse(true));
+          return true; // async response
         case "ja:wait-change":
           agent.waitForChange(msg.timeoutMs).then(sendResponse);
           return true; // async response

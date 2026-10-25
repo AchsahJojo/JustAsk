@@ -17,8 +17,34 @@ export function closestComposed(el: Element, selector: string): Element | null {
   return null;
 }
 
+export type ShadowGetter = (el: Element) => ShadowRoot | null;
+
+/**
+ * `querySelectorAll` that also looks inside open shadow roots, and closed ones when `getShadowRoot`
+ * can open them (chrome.dom). Document order, light DOM before each host's shadow content.
+ */
+export function queryAllComposed(root: Document | ShadowRoot | Element, selector: string, getShadowRoot?: ShadowGetter): Element[] {
+  const out: Element[] = [];
+  const visit = (r: Document | ShadowRoot | Element) => {
+    const doc = (r as Node).ownerDocument ?? (r as Document);
+    const walker = doc.createTreeWalker(r as Node, NodeFilter.SHOW_ELEMENT);
+    for (let n = walker.nextNode() as Element | null; n; n = walker.nextNode() as Element | null) {
+      if (n.matches(selector)) out.push(n);
+      const sr = n.shadowRoot ?? getShadowRoot?.(n) ?? null;
+      if (sr) visit(sr);
+    }
+  };
+  if (root instanceof Element && root.matches(selector)) out.push(root);
+  if (root instanceof Element) {
+    const sr = root.shadowRoot ?? getShadowRoot?.(root) ?? null;
+    if (sr) visit(sr);
+  }
+  visit(root);
+  return out;
+}
+
 /** Parent in the composed tree: the parent element, or the shadow host at a root boundary. */
-function composedParent(el: Element): Element | null {
+export function composedParent(el: Element): Element | null {
   if (el.parentElement) return el.parentElement;
   const root = el.getRootNode?.();
   return root instanceof ShadowRoot ? root.host : null;
@@ -56,7 +82,7 @@ const SCROLLS = new Set(["auto", "scroll", "overlay"]);
 
 /**
  * True when an overflow hidden/clip ancestor cuts the element away entirely (collapsed mega-menus).
- * Stops at <body>, at scroll containers (she can scroll to it) and at position:fixed boxes.
+ * Stops at <body>, at scroll containers (the user can scroll to it) and at position:fixed boxes.
  */
 export function isClipped(el: Element, r: DOMRect): boolean {
   const doc = el.ownerDocument;
@@ -78,7 +104,7 @@ export function isClipped(el: Element, r: DOMRect): boolean {
 
 const CHECK_VIS = { opacityProperty: true, visibilityProperty: true, checkOpacity: true, checkVisibilityCSS: true };
 
-/** Can she see it? Size, CSS (via checkVisibility when present), aria-hidden/inert, clipping and off-canvas. */
+/** Can the user see it? Size, CSS (via checkVisibility when present), aria-hidden/inert, clipping and off-canvas. */
 export function isVisible(el: Element): boolean {
   if (inHiddenSubtree(el)) return false;
   const r = el.getBoundingClientRect();
@@ -126,9 +152,10 @@ function isTopLayerModal(m: Element): boolean {
  * The open modal, or null. A dialog[open] / [aria-modal=true] counts only when visible,
  * in the viewport and on top at its center, so an off-screen drawer never hides the page.
  */
-export function pickModal(doc: Document): Element | null {
+export function pickModal(doc: Document, getShadowRoot?: ShadowGetter): Element | null {
   const win = doc.defaultView ?? window;
-  const ok = Array.from(doc.querySelectorAll(MODAL_SELECTOR)).filter((m) => {
+  // Dialogs inside web components count too (a <dialog> in a shadow root hides the page just the same).
+  const ok = queryAllComposed(doc, MODAL_SELECTOR, getShadowRoot).filter((m) => {
     if (!isVisible(m)) return false;
     const r = m.getBoundingClientRect();
     return inViewport(r, win) && winsHitTest(m, r);

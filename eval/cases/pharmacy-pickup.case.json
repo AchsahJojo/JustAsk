@@ -3,8 +3,8 @@
   "url": "{FIXTURES}/pharmacy/refill/pickup",
   "request": "help me refill my prescription and pick it up at the store",
   "history": [
-    "She did: \"Click the big blue button that says Refill a prescription.\" (click)",
-    "She did: \"Click the blue Refill button next to Lisinopril.\" (click)"
+    "The user did: \"Click the big blue button that says Refill a prescription.\" (click)",
+    "The user did: \"Click the blue Refill button next to Lisinopril.\" (click)"
   ],
   "expected": {
     "kind": "guide",

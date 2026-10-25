@@ -10,13 +10,13 @@ const ALL_SITES = { origins: ["<all_urls>"] };
 
 /**
  * Setup and settings tab: host access (the gesture lives here, never mid-session), the mic
- * prompt (side panels can't show it reliably), her account, and synced settings.
+ * prompt (side panels can't show it reliably), the user's account, and synced settings.
  */
 export function Setup() {
   const [s, setS] = useState<Settings | null>(null);
   const [access, setAccess] = useState(false);
   const [mic, setMic] = useState<"unknown" | "on" | "off">("unknown");
-  const [advanced, setAdvanced] = useState(false);
+  const [linkCode, setLinkCode] = useState<string | null>(linkCodeFromUrl);
 
   useEffect(() => {
     void getSettings().then((x) => {
@@ -99,29 +99,6 @@ export function Setup() {
         All set
       </button>
       <p className="soft center">Then click the JustAsk button at the top right of your browser.</p>
-
-      <details className="advanced" open={advanced} onToggle={(e) => setAdvanced((e.target as HTMLDetailsElement).open)}>
-        <summary>For helpers: server settings</summary>
-        <SavedField label="Planner address" value={s.plannerUrl} onSave={(v) => update({ plannerUrl: v.trim() })} />
-        <SavedField label="Convex address" value={s.convexUrl} onSave={(v) => update({ convexUrl: v.trim() })} placeholder="https://your-deployment.convex.cloud" />
-        {s.deviceToken && (
-          <button className="btn ghost" onClick={() => update({ deviceToken: null, displayName: "" })}>
-            Disconnect this browser
-          </button>
-        )}
-      </details>
     </div>
-  );
-}
-
-/** Local while typing, saved on blur, so async storage writes can't drop keystrokes. */
-function SavedField({ label, value, onSave, placeholder }: { label: string; value: string; onSave: (v: string) => void; placeholder?: string }) {
-  const [v, setV] = useState(value);
-  useEffect(() => setV(value), [value]);
-  return (
-    <label>
-      {label}
-      <input value={v} onChange={(e) => setV(e.target.value)} onBlur={() => v !== value && onSave(v)} placeholder={placeholder} />
-    </label>
   );
 }

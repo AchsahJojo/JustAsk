@@ -18,6 +18,19 @@ export interface HighlightSpec {
   label: string;
 }
 
+/** One action JustAsk performs itself (drive mode). The page agent re-checks `sensitive` before acting. */
+export interface ActSpec {
+  localId: number;
+  expect: Exclude<Expect, "hover" | "file">;
+  text: string | null;
+  option: string | null;
+}
+
+/** Reply to `ja:act`. `ok: false` means the step falls back to guiding the user. */
+export interface ActResult {
+  ok: boolean;
+}
+
 /** Panel/background -> content script. */
 export type ToContent =
   | { type: "ja:ping" }
@@ -28,7 +41,9 @@ export type ToContent =
   | { type: "ja:clear" }
   | { type: "ja:pulse" }
   | { type: "ja:banner"; text: string }
-  | { type: "ja:wait-change"; timeoutMs: number };
+  | { type: "ja:wait-change"; timeoutMs: number }
+  /** Before a scan: resolve once the page has stopped changing (or after `maxMs`). */
+  | { type: "ja:settle"; quietMs: number; maxMs: number };
 
 /** Content script -> panel/background. */
 export type FromContent =

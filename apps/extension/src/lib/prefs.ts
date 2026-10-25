@@ -3,8 +3,8 @@
 import { Recipe } from "@justask/shared";
 import type { Settings } from "./config";
 
-/** The preferences that live on her account and follow her to every install. */
-export type SyncedPrefs = Pick<Settings, "voice" | "rate" | "consent">;
+/** The preferences that live on the user's account and follow them to every install. */
+export type SyncedPrefs = Pick<Settings, "voice" | "rate" | "consent" | "showMeInstead">;
 
 export const RATE_MIN = 0.5;
 export const RATE_MAX = 1.5;
@@ -34,7 +34,7 @@ export function mergePrefs(local: SyncedPrefs, remote: unknown): Partial<SyncedP
   return out;
 }
 
-/** Turn a Convex error into a short, kind sentence for her. */
+/** Turn a Convex error into a short, kind sentence for the user. */
 export function friendlyError(e: unknown): string {
   const msg = e instanceof Error ? e.message : typeof e === "string" ? e : "";
   if (/too many tries/i.test(msg)) return "Too many tries. Please wait a few minutes, then try again.";

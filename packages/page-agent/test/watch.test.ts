@@ -66,3 +66,38 @@ describe("watch (P1)", () => {
     agent.destroy();
   });
 });
+
+describe("settle (wait for a page to finish before reading it)", () => {
+  it("waits while results are still streaming in, then resolves after the page is quiet", async () => {
+    const agent = new PageAgent({ frameId: 0, isTop: true, send: () => {} });
+    const slot = document.getElementById("slot")!;
+    let settledAt = 0;
+    const t0 = Date.now();
+    const p = agent.settle(300, 3000).then(() => (settledAt = Date.now() - t0));
+    for (let i = 0; i < 4; i++) {
+      await sleep(150);
+      slot.insertAdjacentHTML("beforeend", `<p>Result ${i}</p>`);
+    }
+    await p;
+    expect(settledAt).toBeGreaterThanOrEqual(600 + 300 - 50); // after the last result, plus the quiet time
+    agent.destroy();
+  });
+
+  it("keeps waiting while something is marked aria-busy, up to the maximum", async () => {
+    document.body.insertAdjacentHTML("beforeend", `<div aria-busy="true">Loading results…</div>`);
+    const agent = new PageAgent({ frameId: 0, isTop: true, send: () => {} });
+    const t0 = Date.now();
+    await agent.settle(100, 700);
+    expect(Date.now() - t0).toBeGreaterThanOrEqual(650);
+    agent.destroy();
+  });
+
+  it("is quick when the page has been quiet", async () => {
+    const agent = new PageAgent({ frameId: 0, isTop: true, send: () => {} });
+    await sleep(250);
+    const t0 = Date.now();
+    await agent.settle(200, 3000);
+    expect(Date.now() - t0).toBeLessThan(150);
+    agent.destroy();
+  });
+});

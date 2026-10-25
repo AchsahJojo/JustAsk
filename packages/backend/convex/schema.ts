@@ -15,7 +15,7 @@ export default defineSchema({
     // Legacy (pre-Convex Auth seed rows). Cleared by `npx convex run migrations:caregiversToAuth`; remove after.
     tokenIdentifier: v.optional(v.string()),
   }).index("by_user", ["userId"]),
-  // "Her account". A senior works on their own (`createdBy: "self"`, made by an install) or was set up by a
+  // "The user's account". A senior works on their own (`createdBy: "self"`, made by an install) or was set up by a
   // caregiver (`createdBy: "caregiver"`). Either way a caregiver is optional: careLinks may be empty.
   // Synced preferences live here (ARCHITECTURE.md §8).
   seniors: defineTable({
@@ -23,7 +23,7 @@ export default defineSchema({
     displayName: v.string(),
     consent: v.object({ notifyOnComplete: v.boolean(), notifyOnStuck: v.boolean() }),
     prefs: v.optional(v.object({ voice: voiceKind, rate: v.number(), showMeInstead: v.boolean() })),
-    // Who last chose Show me instead: she did, or a linked caregiver did.
+    // Who last chose Show me instead: the user did, or a linked caregiver did.
     showMeSetBy: v.optional(v.union(v.literal("self"), v.literal("caregiver"))),
     createdBy: v.optional(v.union(v.literal("self"), v.literal("caregiver"))),
     createdAt: v.optional(v.number()),
