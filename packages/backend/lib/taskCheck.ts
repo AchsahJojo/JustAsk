@@ -89,7 +89,8 @@ export async function checkTask(client: Anthropic, input: TaskCheckInput): Promi
       messages: [{ role: "user", content: taskCheckTurn(input) }],
     });
   } catch (err) {
-    if (err instanceof Anthropic.APIError) return { ok: false, error: `api ${err.status ?? "error"}` };
+    // Status and the API's error type only, never the caregiver's words.
+    if (err instanceof Anthropic.APIError) return { ok: false, error: `api ${err.status ?? "error"} ${(err.error as { error?: { message?: string } } | undefined)?.error?.message?.slice(0, 200) ?? ""}`.trim() };
     if (err instanceof Error) return { ok: false, error: err.name };
     throw err;
   }

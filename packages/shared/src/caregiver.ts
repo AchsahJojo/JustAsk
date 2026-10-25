@@ -46,7 +46,21 @@ export type TaskCheckReply = z.infer<typeof TaskCheckReply>;
 export function taskCheckJsonSchema(): Record<string, unknown> {
   const raw = z.toJSONSchema(TaskCheckReply, { target: "draft-2020-12" }) as Record<string, unknown>;
   delete raw.$schema;
-  return raw;
+  return nullableAsAnyOf(raw) as Record<string, unknown>;
+}
+
+/** Structured output wants nullable fields as anyOf, not `"type": ["string", "null"]`. */
+function nullableAsAnyOf(node: unknown): unknown {
+  if (Array.isArray(node)) return node.map(nullableAsAnyOf);
+  if (!node || typeof node !== "object") return node;
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(node)) out[k] = nullableAsAnyOf(v);
+  const t = out.type;
+  if (Array.isArray(t) && t.length === 2 && t.includes("null")) {
+    const { type: _drop, ...rest } = out;
+    return { anyOf: [{ ...rest, type: t.find((x) => x !== "null") }, { type: "null" }] };
+  }
+  return out;
 }
 
 /** One question JustAsk asked and the caregiver's answer. */

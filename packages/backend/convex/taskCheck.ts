@@ -79,9 +79,10 @@ export const review = action({
     else {
       const key = process.env.ANTHROPIC_API_KEY;
       if (!key) return { status: "error" as const, message: "JustAsk can't check tasks right now (the server isn't set up). Try again later." };
-      const out = await checkTask(makeClient(key), input);
+      // The caregiver is waiting on a form, not a live step: give Claude more time than /plan gets.
+      const out = await checkTask(makeClient(key, 45_000), input);
       // Numbers only in logs, never the caregiver's words.
-      console.log("taskCheck", JSON.stringify({ ok: out.ok, clear: out.ok ? out.reply.clear : null, answers: args.answers.length }));
+      console.log("taskCheck", JSON.stringify({ ok: out.ok, clear: out.ok ? out.reply.clear : null, error: out.ok ? null : out.error, answers: args.answers.length }));
       if (!out.ok) return { status: "error" as const, message: "JustAsk couldn't check this task just now. Try again in a moment." };
       reply = out.reply;
     }

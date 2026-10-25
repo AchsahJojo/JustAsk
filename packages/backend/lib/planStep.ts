@@ -6,9 +6,9 @@ export const MODEL = "claude-opus-5-5";
 export const EFFORT = "low";
 const STEP_JSON_SCHEMA = stepJsonSchema();
 
-export function makeClient(apiKey: string): Anthropic {
+export function makeClient(apiKey: string, timeoutMs = 10_000): Anthropic {
   // plan §4.2: timeout in milliseconds for TypeScript, one SDK retry.
-  return new Anthropic({ apiKey, timeout: 10_000, maxRetries: 1 });
+  return new Anthropic({ apiKey, timeout: timeoutMs, maxRetries: 1 });
 }
 
 export interface PlanLog {
