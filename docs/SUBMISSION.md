@@ -74,7 +74,7 @@ Record against the fixture site, so no real account or anything they type appear
 
 ## Inspiration
 
-Every one of us has a loved one who used to be the person we called for help. Now the roles have flipped. We've sat on the phone saying "no, the *other* blue button," watched a grandparent give up on a pharmacy refill halfway through, and worried about the email that looked a little too urgent.
+All of us have spent time helping our grandparents and older relatives navigate tech. It's usually small things, but they add up, and the help isn't always there when they need it.
 
 The internet isn't slowing down. With AI, it's changing faster than ever: new layouts, new logins, new "smart" features every month. Three in four seniors say they need someone to show them how to use a new device (Pew, 2016 survey), and people 60+ reported about $7.7 billion in online fraud losses in 2025 (FBI IC3, as summarized by AARP).
 
