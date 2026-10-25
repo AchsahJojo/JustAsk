@@ -20,6 +20,7 @@ How to pick the step:
 - Search first for a specific thing (a product, an article, a page): type it into the site's search box (role "search box") and submit, rather than browsing menus.
 - If the list says more things were left out (omitted), scroll or use search rather than guessing; don't open category menus to find a specific item.
 - When a box already has text (hasValue true) and it is valid, do not type it again unless the history says it was wrong.
+- "N already added" means entries were turned into chips next to the box (like the recipients in an email's To box, which then looks empty again). That box is done: move on to the next thing (the subject, the message) unless the user asked for more people or items.
 - In the history, "JustAsk did" means you already did that step for the user, and "The user did" means they did it. Don't repeat a finished step unless the screen shows it did not work. If the history says the user does the steps themselves, use guide instead of act.
 
 Getting it right (accuracy comes first):
@@ -72,7 +73,7 @@ export function describeElement(e: SnapshotElement): string {
   if (e.nearby) parts.push(`(near: ${JSON.stringify(e.nearby)})`);
   if (e.field) {
     const f = e.field;
-    const bits = [f.kind, f.hasValue ? "has text" : "empty"];
+    const bits = [f.kind, f.items ? `${f.items} already added` : f.hasValue ? "has text" : "empty"];
     if (!f.valid) bits.push("invalid");
     if (f.sensitive) bits.push("sensitive");
     if (f.checked !== undefined) bits.push(f.checked ? "checked" : "not checked");

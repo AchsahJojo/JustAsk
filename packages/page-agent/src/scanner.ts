@@ -203,11 +203,54 @@ export function fieldKind(el: Element): FieldKind | null {
 }
 
 /** `hasValue` is a local boolean only. The value never leaves this function. */
+/** Text-entry controls: two of these in one group means the group is a whole form, not one box. */
+const ENTRY_SELECTOR = "input:not([type=hidden]):not([type=checkbox]):not([type=radio]):not([type=button]):not([type=submit]), textarea, [contenteditable=true], [contenteditable=''], [role=textbox], [role=combobox], [role=searchbox]";
+/** A chip's remove button: "Remove a.n…", "Delete", "×". */
+const REMOVE_WORDS = /\b(remove|delete|clear|unselect|deselect)\b/i;
+const REMOVE_GLYPH = /^[×✕✖⨯xX]$/;
+
+/**
+ * How many entries were already added to this box as chips (an email's To box turns each typed address
+ * into a pill with ×; tag pickers do the same, and the box itself goes back to empty). Looks in the
+ * box's own group (the nearest ancestors holding no other text box) for visible remove buttons that
+ * sit next to some text. Only the count is used; the chips' text never leaves the page.
+ */
+export function addedItems(el: Element): number {
+  return chipsOf(el).length;
+}
+
+/** The chip elements of `addedItems` (for keeping their text out of page text). */
+export function chipsOf(el: Element): Element[] {
+  let group: Element | null = null;
+  for (let cur = el.parentElement, depth = 0; cur && depth < 5; cur = cur.parentElement, depth++) {
+    if (cur === el.ownerDocument.body) break;
+    const others = Array.from(cur.querySelectorAll(ENTRY_SELECTOR)).filter((x) => x !== el && !el.contains(x) && !x.contains(el));
+    if (others.length) break;
+    group = cur;
+  }
+  if (!group) return [];
+  const chips: Element[] = [];
+  for (const r of Array.from(group.querySelectorAll("button, [role=button], [aria-label], [title], [data-tooltip], span, div"))) {
+    if (r === el || r.contains(el) || el.contains(r)) continue;
+    const name = `${r.getAttribute("aria-label") ?? ""} ${r.getAttribute("title") ?? ""} ${r.getAttribute("data-tooltip") ?? ""}`;
+    const own = normalize(r.textContent ?? "");
+    const isRemove = REMOVE_WORDS.test(name) || (REMOVE_GLYPH.test(own) && r.children.length === 0);
+    if (!isRemove || !isVisible(r)) continue;
+    // The chip: the remove button's nearest ancestor (inside the group) with some label text of its own.
+    let chip: Element | null = r.parentElement;
+    while (chip && chip !== group && normalize(chip.textContent ?? "").replace(own, "").trim().length < 2) chip = chip.parentElement;
+    if (!chip || chip === group || chip.contains(el) || chips.includes(chip)) continue;
+    chips.push(chip);
+  }
+  return chips;
+}
+
 export function hasValue(el: Element): boolean {
   if (el instanceof HTMLInputElement) {
     if (el.type === "checkbox" || el.type === "radio") return el.checked;
     if (el.type === "file") return (el.files?.length ?? 0) > 0;
-    return el.value !== "";
+    // A box whose entries became chips is filled, even though the box itself is empty again.
+    return el.value !== "" || addedItems(el) > 0;
   }
   if (el instanceof HTMLTextAreaElement) return el.value !== "";
   if (el instanceof HTMLSelectElement) {
@@ -216,7 +259,7 @@ export function hasValue(el: Element): boolean {
     if (selected && isPlaceholderOption(el, selected)) return false;
     return true;
   }
-  if (isEditableHost(el)) return (el.textContent ?? "").trim() !== "";
+  if (isEditableHost(el)) return (el.textContent ?? "").trim() !== "" || addedItems(el) > 0;
   return false;
 }
 
@@ -272,6 +315,10 @@ export function fieldInfo(el: Element, ctxWords?: Set<string>): FieldInfo | unde
   const hint = dateHint(kind);
   if (hint) info.formatHint = hint;
   if (isSensitive(el)) info.sensitive = true;
+  if (kind !== "select" && kind !== "checkbox" && kind !== "radio" && kind !== "file") {
+    const items = addedItems(el);
+    if (items) info.items = items;
+  }
   return info;
 }
 
@@ -287,27 +334,27 @@ function regionOf(el: Element, modal: Element | null): SnapshotElement["region"]
 }
 
 /** Nearest heading or row text, for context ("Refill" next to "Lisinopril"). */
-export function nearbyText(el: Element, ownText: string): string | null {
+export function nearbyText(el: Element, ownText: string, skip?: ReadonlySet<Element>): string | null {
   // Composed parents: a button inside a web component still gets the heading around the component.
   let cur: Element | null = composedParent(el);
   for (let depth = 0; cur && depth < 4; depth++, cur = composedParent(cur)) {
     const h = cur.querySelector("h1,h2,h3,h4,h5,h6,legend,strong,[role=heading]");
-    if (h && !h.contains(el)) {
+    if (h && !h.contains(el) && !skip?.has(h)) {
       const t = clip(safeText(h));
       if (t && t !== ownText) return t;
     }
     // Generic row/list context preserves identical controls in distinct rows even when the
     // site has no heading element (for example two unlabelled "Edit" buttons).
     const row = cur.matches("li, tr, [role=row], [role=listitem], article, fieldset");
-    const t = clip(safeContextText(cur, el));
+    const t = clip(safeContextText(cur, el, skip));
     if (t && t !== ownText && (row || depth === 0)) return t;
   }
   return null;
 }
 
-function safeContextText(root: Element, target: Element): string {
+function safeContextText(root: Element, target: Element, skip?: ReadonlySet<Element>): string {
   const walk = (node: Node): string => {
-    if (node === target || (node instanceof Element && isInteractiveContext(node))) return "";
+    if (node === target || (node instanceof Element && (isInteractiveContext(node) || skip?.has(node)))) return "";
     if (node.nodeType === Node.TEXT_NODE) return node.textContent ?? "";
     if (node instanceof Element && node.matches("[contenteditable=true], [contenteditable=''], [contenteditable=plaintext-only], [role=textbox], [role=searchbox], [role=alert], [role=status]")) return "";
     return Array.from(node.childNodes).map(walk).join(" ");
@@ -355,6 +402,12 @@ export function scanDocument(doc: Document, opts: ScanOptions = {}): { elements:
 
   const ctxWords = words((opts.context ?? []).join(" "));
   const focusForm = (doc.activeElement as HTMLElement | null)?.closest?.("form") ?? null;
+  // Chips hold what the user typed (an email's recipients): controls inside one get a neutral name.
+  const chips = new Set(queryAllComposed(doc, ENTRY_SELECTOR, opts.getShadowRoot).flatMap((box) => chipsOf(box)));
+  const inChip = (el: Element) => {
+    for (let p: Element | null = el; p; p = composedParent(p)) if (chips.has(p)) return true;
+    return false;
+  };
 
   const scored: ScannedElement[] = [];
   const dupKeys = new Set<string>();
@@ -363,8 +416,9 @@ export function scanDocument(doc: Document, opts: ScanOptions = {}): { elements:
     if (modal && !inModal) continue; // plan §3.3: if a modal is open, elements outside it are dropped
     const r = el.getBoundingClientRect();
     const role = roleOf(el);
-    const text = visibleText(el);
-    let name = accessibleName(el);
+    const chipped = inChip(el);
+    const text = chipped ? "" : visibleText(el);
+    let name = chipped ? (/\b(remove|delete|clear)\b/i.test(`${el.getAttribute("aria-label") ?? ""} ${el.getAttribute("title") ?? ""}`) || REMOVE_GLYPH.test(normalize(el.textContent ?? "")) ? "Remove an added entry" : "an added entry") : accessibleName(el);
     if (name === text) name = "";
     const field = fieldInfo(el, ctxWords);
     if (!text && !name && !field) continue;
@@ -374,7 +428,7 @@ export function scanDocument(doc: Document, opts: ScanOptions = {}): { elements:
     const cs = getComputedStyle(el);
     const color = colorName(cs.backgroundColor);
     const big = r.width * r.height > 9000;
-    const nearby = nearbyText(el, text);
+    const nearby = nearbyText(el, text, chips);
 
     // Same control in different rows ("Add to cart" under each product) stays distinct via `nearby`.
     const dupKey = `${role}|${text}|${name}|${(el as HTMLAnchorElement).href ?? ""}|${nearby ?? ""}`;
@@ -458,6 +512,8 @@ export function pageText(doc: Document, max = 2000, getShadowRoot?: ShadowGetter
   const inView: string[] = [];
   const below: string[] = [];
   const seen = new Set<string>();
+  // Chips are entries the user typed (an email's recipients): their text stays on the page.
+  const chips = new Set(queryAllComposed(root, ENTRY_SELECTOR, getShadowRoot).flatMap((box) => chipsOf(box)));
   // Composed: words inside web components (shadow roots) are part of the page the user sees.
   for (const e of queryAllComposed(root, "*", getShadowRoot)) {
     const block = e.matches(TEXT_BLOCKS);
@@ -466,9 +522,9 @@ export function pageText(doc: Document, max = 2000, getShadowRoot?: ShadowGetter
     if (e.matches(NOT_TEXT) || closestComposed(e, NOT_TEXT)) continue;
     if (insideEditable(e) || isEditableHost(e)) continue; // typed text in editors must never be read
     if (!block && closestComposed(e, CHROME)) continue;
-    // Inside a block already taken: its words are in that block's text.
-    let covered = false;
-    for (let p = composedParent(e); p && !covered; p = composedParent(p)) covered = taken.has(p);
+    // Inside a block already taken (its words are in that block's text), or inside a chip.
+    let covered = chips.has(e);
+    for (let p = composedParent(e); p && !covered; p = composedParent(p)) covered = taken.has(p) || chips.has(p);
     if (covered) continue;
     if (!isVisible(e)) continue;
     const t = (block ? normalize(safeText(e)) : own).slice(0, 200);

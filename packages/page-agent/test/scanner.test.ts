@@ -296,3 +296,37 @@ describe("page text (what Claude reads)", () => {
     expect(text).not.toContain(SENTINEL);
   });
 });
+
+describe("entries added as chips (an email's To box)", () => {
+  const compose = `<main><form>
+    <div class="row"><span>To</span><div class="box">
+      <div class="chip"><span>${SENTINEL}@example.org</span><div role="button" aria-label="Remove ${SENTINEL}@example.org">×</div></div>
+      <input aria-label="To recipients" role="combobox">
+    </div></div>
+    <div class="row"><input aria-label="Subject" name="subjectbox"></div>
+  </form></main>`;
+
+  it("counts the chips, so the empty-looking box counts as filled; the next box doesn't", () => {
+    document.body.innerHTML = compose;
+    const { scan } = scanJson();
+    const to = scan.snapshot.elements.find((e) => e.label === "To recipients")!;
+    const subject = scan.snapshot.elements.find((e) => e.label === "Subject")!;
+    expect(to.field).toMatchObject({ hasValue: true, items: 1 });
+    expect(subject.field?.hasValue).toBe(false);
+    expect(subject.field?.items).toBeUndefined();
+  });
+
+  it("never sends what the chips say: not in page text, not in the remove button's name", () => {
+    document.body.innerHTML = compose;
+    const { scan, json } = scanJson();
+    expect(json).not.toContain(SENTINEL);
+    expect(scan.snapshot.elements.some((e) => e.label === "Remove an added entry")).toBe(true);
+  });
+
+  it("a search box's own clear button is not a chip", () => {
+    document.body.innerHTML = `<main><div><input type="search" aria-label="Search"><button aria-label="Clear search">×</button></div></main>`;
+    const f = scanJson().scan.snapshot.elements.find((e) => e.label === "Search")!.field!;
+    expect(f.items).toBeUndefined();
+    expect(f.hasValue).toBe(false);
+  });
+});
