@@ -26,6 +26,7 @@ import type * as plan from "../plan.js";
 import type * as prefs from "../prefs.js";
 import type * as rateLimits from "../rateLimits.js";
 import type * as sessions from "../sessions.js";
+import type * as taskCheck from "../taskCheck.js";
 import type * as tasks from "../tasks.js";
 import type * as validators from "../validators.js";
 import type * as voice from "../voice.js";
@@ -55,6 +56,7 @@ declare const fullApi: ApiFromModules<{
   prefs: typeof prefs;
   rateLimits: typeof rateLimits;
   sessions: typeof sessions;
+  taskCheck: typeof taskCheck;
   tasks: typeof tasks;
   validators: typeof validators;
   voice: typeof voice;

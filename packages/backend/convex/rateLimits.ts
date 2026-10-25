@@ -20,6 +20,9 @@ export const rateLimiter = new RateLimiter(components.rateLimiter, {
   helperFailCaregiver: { kind: "token bucket", rate: 5, period: MINUTE, capacity: 10 },
   createSelf: { kind: "token bucket", rate: 30, period: MINUTE, capacity: 60 },
   cartesiaToken: { kind: "token bucket", rate: 30, period: HOUR, capacity: 10 },
+  // Caregiver: one Claude call per question in the task check, and voice tokens for speaking a task.
+  taskCheck: { kind: "token bucket", rate: 60, period: HOUR, capacity: 20 },
+  caregiverVoice: { kind: "token bucket", rate: 20, period: HOUR, capacity: 5 },
 });
 
 export const TOO_MANY_TRIES = "Too many tries. Please wait a minute and try again.";

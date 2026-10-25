@@ -1,5 +1,5 @@
 // Caregiver web app end to end, against local Convex and the Vite dev server.
-// Needs: `npx convex dev` in packages/backend (with JWT_PRIVATE_KEY, JWKS, SITE_URL set) and
+// Needs: `npx convex dev` in packages/backend (with JWT_PRIVATE_KEY, JWKS, SITE_URL and JUSTASK_TASKCHECK_MOCK=1 set) and
 // `npm run dev -w @justask/caregiver` (port 5176). Run: node e2e/caregiver.mjs
 // The senior's extension is played by a Convex client using the same device-token functions.
 import puppeteer from "puppeteer";
@@ -49,7 +49,7 @@ const clickText = async (t, sel = "button, a", p = page) => {
 };
 const typeIn = async (label, value, p = page) => {
   const h = await p.evaluateHandle((label) => {
-    for (const l of document.querySelectorAll("label")) if (l.querySelector("span")?.textContent.trim().startsWith(label)) return l.querySelector("input");
+    for (const l of document.querySelectorAll("label")) if (l.querySelector("span")?.textContent.trim().startsWith(label)) return l.querySelector("input, textarea");
     return null;
   }, label);
   const el = h.asElement();
@@ -123,28 +123,36 @@ try {
   assert.match(await text(), /Send Joanie a task/);
   step("standalone senior redeems code; caregiver page goes live to connected, the user's display name kept");
 
-  // --- Send a task: validation, recipe, delivery ---
-  await clickText("Send task", "button");
-  await waitText("Give the task a short name");
-  await clickText("Refill a prescription", "button.chip");
-  await page.click(".check input");
+  // --- Send a task: held until it's clear (JUSTASK_TASKCHECK_MOCK=1 stands in for Claude) ---
+  await clickText("Next", "button");
+  await waitText("Tell JustAsk what Joanie should do");
+  await typeIn("What should Joanie do?", "refill prescription");
+  await clickText("Next", "button");
+  await waitText("JustAsk asks", 10000);
+  assert.equal(await page.evaluate(() => [...document.querySelectorAll("button")].some((b) => b.textContent === "Send task")), false, "a vague task can't be sent");
+  await shot("07a-compose-question");
+  await typeIn("Your answer", "Lisinopril, pick up in store");
+  await clickText("Answer", "button");
+  await waitText("This task is clear", 10000);
+  // Hand edits are checked again before sending; a bad start page is caught on the spot.
   await typeIn("Start page", "javascript:alert(1)");
   await waitText("Use a full web address");
-  await clickText("Send task", "button");
-  await waitText("Use a full web address");
   await typeIn("Start page", "https://pharmacy.example/");
-  const stepInputs = async () => page.$$(".steps-edit input");
-  await (await stepInputs())[0].type("Click Refill a prescription");
   await clickText("+ Add a step", "button");
-  await (await stepInputs())[1].type("Pick up in store");
+  await (await page.$$(".steps-edit input"))[0].type("Click Refill a prescription");
   await clickText("+ Add a step", "button");
+  await (await page.$$(".steps-edit input"))[1].type("Pick up in store");
+  await clickText("+ Add a step", "button");
+  await waitText("checks it again");
   await shot("07-compose-recipe");
+  await clickText("Check again", "button");
+  await waitText("This task is clear", 10000);
   await clickText("Send task", "button");
   await waitText("Tasks you sent", 10000);
   const pending = await senior.query("tasks:pendingForDevice", { token });
   assert.equal(pending.length, 1);
   assert.equal(pending[0].from, "Sam Rivera");
-  assert.equal(pending[0].spokenPrompt, "help me refill my prescription");
+  assert.match(pending[0].spokenPrompt, /refill prescription/);
   assert.deepEqual(pending[0].recipe, { startUrl: "https://pharmacy.example/", steps: ["Click Refill a prescription", "Pick up in store"] }, "empty third step dropped");
   assert.match(await text(), /hasn't chosen to share results/);
   await shot("08-person-task-sent");
@@ -171,7 +179,9 @@ try {
 
   // Take back a second task.
   await clickText("New task", "button");
-  await typeIn("Task", "Join the Zoom call");
+  await typeIn("What should Joanie do?", "Join the Zoom call");
+  await clickText("Next", "button");
+  await waitText("This task is clear", 10000);
   await clickText("Send task", "button");
   await waitText("Sent “Join the Zoom call”");
   await page.waitForFunction(() => [...document.querySelectorAll(".tasks button")].some((b) => b.textContent === "Take back"), { timeout: 8000, polling: 100 });

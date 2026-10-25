@@ -17,7 +17,8 @@
     "@justask/shared": "*",
     "convex": "^1.48.0",
     "react": "^19.3.1",
-    "react-dom": "^19.3.1"
+    "react-dom": "^19.3.1",
+    "@justask/voice": "*"
   },
   "devDependencies": {
     "@clayzo/animation": "0.3.18",

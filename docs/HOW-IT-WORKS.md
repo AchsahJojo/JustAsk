@@ -77,9 +77,10 @@ This repeats until Claude says the task is done: "All done, you did it!"
 
 1. Sign up with email and password.
 2. Add the person. The app shows a 6-digit code to type on her computer.
-3. Send a task: a title, what JustAsk should say, an optional recipe of steps and an `https://` start page.
-4. Watch the activity feed: "finished" or "got stuck", only if she agreed.
-5. The person page shows counts: finished, steps per task, "Say that again", "I'm stuck", typical step time.
+3. Describe a task by typing or speaking ("Get the new book"). If it's vague, JustAsk asks one question at a time ("Which book?", "Where: Amazon or the library?") until it knows what, which one and where.
+4. Review the finished task (title, what JustAsk will say, start page, steps), edit it if needed, and send. **A task can't be sent until the check says it's clear.** Edits get checked again.
+5. Watch the activity feed: "finished" or "got stuck", only if she agreed.
+6. The person page shows counts: finished, steps per task, "Say that again", "I'm stuck", typical step time.
 
 ---
 
@@ -98,6 +99,7 @@ This repeats until Claude says the task is done: "All done, you did it!"
 | Page text can't give orders | it goes inside `<page_content>`, marked untrusted | `packages/core/src/prompt.ts` |
 | Keys never reach the browser | Claude and Cartesia keys live in Convex env | `packages/backend/convex/plan.ts`, `voice.ts` |
 | Caregivers can't see her screen | only outcomes and counts, consent-gated | `packages/backend/convex/people.ts`, `sessions.ts` |
+| Vague tasks never reach her | `tasks:assign` only sends a draft that `taskCheck:review` called clear | `packages/backend/convex/taskCheck.ts`, `tasks.ts` |
 
 ---
 
@@ -116,6 +118,7 @@ This repeats until Claude says the task is done: "All done, you did it!"
 | **6-digit pairing codes**, no senior passwords | she never manages a password | anyone holding a fresh code can link (rate-limited, 15 minutes) |
 | **Cartesia** voice, with a caption and typing fallback | voice is the product, but it must never block her | no browser voice as a second engine |
 | **Scam check** before acting | fraud targets this group hardest | an occasional extra question on a normal errand |
+| **Tasks held until clear** | she can't answer "which book?"; a vague task leaves her stuck | a few extra seconds for the caregiver before sending |
 
 ---
 

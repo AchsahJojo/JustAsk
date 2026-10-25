@@ -19,7 +19,10 @@ function authError(e: unknown, flow: Flow): string {
   if (/Failed to fetch|NetworkError|network/i.test(msg)) return "Can't reach JustAsk. Check your connection.";
   const m = msg.match(/Uncaught (?:Convex)?Error: (.+?)(?:\n|$)/);
   if (m && !/^Server Error/.test(m[1])) return m[1];
-  return flow === "signUp" ? "We couldn't create your account. Try again." : "We couldn't sign you in. Try again.";
+  // Anything else is on our side (a server error), never something they typed. Say so plainly.
+  return flow === "signUp"
+    ? "JustAsk couldn't create your account because of a problem on our side, not anything you typed. Try again in a minute."
+    : "JustAsk couldn't sign you in because of a problem on our side. Try again in a minute.";
 }
 
 export function SignIn() {
@@ -125,6 +128,11 @@ export function SignIn() {
                 {show ? "Hide" : "Show"}
               </button>
             </span>
+            {flow === "signUp" && password.length > 0 && (
+              <small className={password.length >= 8 ? "ok-text" : ""} aria-live="polite">
+                {password.length >= 8 ? "Long enough." : `${password.length} of 8 characters. Add ${8 - password.length} more.`}
+              </small>
+            )}
           </label>
 
           {error && (

@@ -27,7 +27,10 @@ test("helper code links a signed-in caregiver once", async () => {
   expect(await t.run((ctx) => ctx.db.query("careLinks").collect())).toHaveLength(1);
 
   // The caregiver can now assign tasks (existing caregiver API).
-  const taskId = await as.mutation(api.tasks.assign, { seniorId: res!.seniorId, title: "Refill", spokenPrompt: "refill" });
+  process.env.JUSTASK_TASKCHECK_MOCK = "1";
+  const check = await as.action(api.taskCheck.review, { seniorId: res!.seniorId, request: "refill my lisinopril on CVS", answers: [] });
+  if (check.status !== "clear") throw new Error("expected clear");
+  const taskId = await as.mutation(api.tasks.assign, { seniorId: res!.seniorId, checkId: check.checkId });
   expect(taskId).toBeTruthy();
   expect(await t.query(api.tasks.pendingForDevice, { token: seniorToken })).toHaveLength(1);
 });

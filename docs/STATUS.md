@@ -73,7 +73,7 @@ A caregiver is optional. When there is one, the caregiver can set JustAsk up for
 - **Setup wizard:** About them → Connect their computer (6-digit code, countdown, "make a different code") → Send a task (optional). The page flips to "connected" live when the user types the code.
 - **"Do they already use JustAsk?":** type the helper code the user gets from their settings.
 - **Person page:**
-  - **Send a task:** title, spoken prompt, an optional recipe of steps and an `https://` start page
+  - **Send a task:** type or speak it (Cartesia, listening only). `taskCheck:review` (Claude) asks one question at a time until it's clear, then shows a draft to review and edit. `tasks:assign` only accepts a checked draft (`taskChecks` table, single use, 1 hour). Tests set `JUSTASK_TASKCHECK_MOCK=1` on local Convex instead of calling Claude.
   - **Tasks you sent:** take one back while it's still waiting
   - **What they share with you:** consent-gated status and stats
   - **How JustAsk helps:** a plain note that JustAsk only guides and they do the clicking

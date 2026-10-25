@@ -307,3 +307,17 @@ input::placeholder { color: color-mix(in srgb, var(--ink-3) 70%, transparent); }
 .helper-code h2 { margin: 0; font-size: 18px; }
 .code-row { display: flex; gap: 10px; flex-wrap: wrap; }
 .code-row input { flex: 1 1 160px; font-size: 22px; letter-spacing: 0.12em; font-variant-numeric: tabular-nums; }
+
+/* Task composer: speak or type, then answer JustAsk's questions (TaskComposer.tsx) */
+textarea { width: 100%; min-width: 0; resize: vertical; font: inherit; font-size: 16px; line-height: 1.45; background: var(--paper); color: var(--ink); border: 1.5px solid var(--line); border-radius: 11px; padding: 11px 13px; transition: border-color 0.15s, box-shadow 0.15s; }
+textarea:hover { border-color: color-mix(in srgb, var(--ink-3) 60%, var(--line)); }
+textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 18%, transparent); }
+textarea::placeholder { color: color-mix(in srgb, var(--ink-3) 70%, transparent); }
+.speakable { display: grid; gap: 8px; }
+.speakable .mic { justify-self: start; }
+.chat { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.chat .pair { display: grid; gap: 8px; }
+.chat .you, .chat .ja { max-width: 85%; padding: 10px 14px; border-radius: 16px; font-size: 15px; overflow-wrap: anywhere; }
+.chat .you { justify-self: end; background: var(--accent-soft); color: var(--ink); border-bottom-right-radius: 6px; }
+.chat .ja { justify-self: start; background: var(--sand); color: var(--ink-2); border-bottom-left-radius: 6px; }
+.chat .ja.now { color: var(--ink); border: 1.5px solid var(--accent); }

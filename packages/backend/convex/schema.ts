@@ -74,6 +74,16 @@ export default defineSchema({
   })
     .index("by_senior_status", ["seniorId", "status"])
     .index("by_assigner", ["assignedBy"]),
+  // A task the check said is clear (taskCheck:review). tasks:assign sends only from one of these,
+  // so a vague task can't reach the older adult. Deleted when sent, or after an hour.
+  taskChecks: defineTable({
+    caregiverId: v.id("caregivers"),
+    seniorId: v.id("seniors"),
+    title: v.string(),
+    spokenPrompt: v.string(),
+    recipe: v.optional(recipeValidator),
+    expiresAt: v.number(),
+  }).index("by_expiresAt", ["expiresAt"]),
   sessions: defineTable({
     seniorId: v.id("seniors"),
     taskId: v.optional(v.id("tasks")),

@@ -3,30 +3,34 @@ import { mutation, query } from "./_generated/server";
 import { TASK_LIMITS, isSafeStartUrl } from "@justask/shared";
 import { clean, requireCaregiver, requireDevice, requireLink } from "./lib";
 
-const recipe = v.optional(v.object({ startUrl: v.optional(v.string()), steps: v.array(v.string()) }));
-
-/** Caregiver: send a task, optionally with a recipe (plain steps and a start page). */
+/**
+ * Caregiver: send a task. Only a draft that taskCheck:review said is clear can be sent, so a vague
+ * task ("get the new book") never reaches the older adult. The draft is used as checked.
+ */
 export const assign = mutation({
-  args: { seniorId: v.id("seniors"), title: v.string(), spokenPrompt: v.optional(v.string()), recipe },
-  handler: async (ctx, args) => {
-    const { cg } = await requireLink(ctx, args.seniorId);
-    const title = clean(args.title, TASK_LIMITS.title);
-    if (!title) throw new Error("Give the task a short name.");
-    const spokenPrompt = clean(args.spokenPrompt ?? "", TASK_LIMITS.spokenPrompt) || title;
+  args: { seniorId: v.id("seniors"), checkId: v.id("taskChecks") },
+  handler: async (ctx, { seniorId, checkId }) => {
+    const { cg } = await requireLink(ctx, seniorId);
+    const check = await ctx.db.get(checkId);
+    if (!check || check.caregiverId !== cg._id || check.seniorId !== seniorId) throw new Error("Check the task again before sending it.");
+    if (check.expiresAt <= Date.now()) throw new Error("That check is out of date. Check the task again before sending it.");
+    const title = clean(check.title, TASK_LIMITS.title);
+    const spokenPrompt = clean(check.spokenPrompt, TASK_LIMITS.spokenPrompt) || title;
     let r: { startUrl?: string; steps: string[] } | undefined;
-    if (args.recipe) {
-      const steps = args.recipe.steps.map((s) => clean(s, TASK_LIMITS.step)).filter(Boolean);
-      if (steps.length > TASK_LIMITS.steps) throw new Error(`Use ${TASK_LIMITS.steps} steps or fewer.`);
-      const startUrl = args.recipe.startUrl?.trim();
+    if (check.recipe) {
+      const steps = check.recipe.steps.map((s) => clean(s, TASK_LIMITS.step)).filter(Boolean).slice(0, TASK_LIMITS.steps);
+      const startUrl = check.recipe.startUrl?.trim();
       if (startUrl && (startUrl.length > TASK_LIMITS.startUrl || !isSafeStartUrl(startUrl))) throw new Error("The start page must be a web address that begins with https://");
       if (steps.length || startUrl) r = { ...(startUrl ? { startUrl } : {}), steps };
     }
+    if (!title) throw new Error("Give the task a short name.");
     const pending = await ctx.db
       .query("tasks")
-      .withIndex("by_senior_status", (q) => q.eq("seniorId", args.seniorId).eq("status", "pending"))
+      .withIndex("by_senior_status", (q) => q.eq("seniorId", seniorId).eq("status", "pending"))
       .collect();
     if (pending.length >= 10) throw new Error("They already have 10 tasks waiting. Cancel one first.");
-    return ctx.db.insert("tasks", { seniorId: args.seniorId, title, spokenPrompt, ...(r ? { recipe: r } : {}), assignedBy: cg._id, status: "pending", createdAt: Date.now() });
+    await ctx.db.delete(checkId);
+    return ctx.db.insert("tasks", { seniorId, title, spokenPrompt, ...(r ? { recipe: r } : {}), assignedBy: cg._id, status: "pending", createdAt: Date.now() });
   },
 });
 

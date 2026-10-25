@@ -6,7 +6,7 @@ const BATCH = 200;
 
 /**
  * Hourly (crons.ts): delete step counters older than the current and previous hour, expired
- * pairing codes, and expired handoffs. Handoffs are also deleted by a scheduled function at
+ * pairing codes, expired handoffs and expired task checks. Handoffs are also deleted by a scheduled function at
  * expiry; this catches any that were missed. Reschedules itself while a batch is full.
  */
 export const run = internalMutation({
@@ -27,10 +27,15 @@ export const run = internalMutation({
       .query("handoffs")
       .withIndex("by_expiresAt", (q) => q.lte("expiresAt", now))
       .take(BATCH);
+    const checks = await ctx.db
+      .query("taskChecks")
+      .withIndex("by_expiresAt", (q) => q.lte("expiresAt", now))
+      .take(BATCH);
+    for (const r of checks) await ctx.db.delete(r._id);
     for (const r of steps) await ctx.db.delete(r._id);
     for (const r of codes) await ctx.db.delete(r._id);
     for (const r of handoffs) await ctx.db.delete(r._id);
-    if (steps.length === BATCH || codes.length === BATCH || handoffs.length === BATCH) {
+    if (steps.length === BATCH || codes.length === BATCH || handoffs.length === BATCH || checks.length === BATCH) {
       await ctx.scheduler.runAfter(0, internal.cleanup.run, {});
     }
     return null;

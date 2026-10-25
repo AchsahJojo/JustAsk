@@ -1,9 +1,10 @@
 import { Component, useEffect, useRef, useState, type ReactNode } from "react";
 import { useMutation, useQuery } from "convex/react";
-import { isSafeStartUrl, TASK_LIMITS, type CaregiverTaskStatus } from "@justask/shared";
+import type { CaregiverTaskStatus } from "@justask/shared";
 import { api, errorText, type Id } from "../api";
 import { go, href } from "../router";
 import { ConnectPanel } from "./Connect";
+import { TaskComposer } from "./TaskComposer";
 import { Stepper } from "./SetupWizard";
 import { ago, initials, Spinner, useNow } from "./bits";
 
@@ -82,7 +83,7 @@ function PersonPage({ id }: { id: Id<"seniors"> }) {
       {connected && (
         <div className="person-grid">
           <div className="col">
-            <TaskComposer seniorId={p.id} displayName={p.displayName} open={firstRun} />
+            <TaskComposerCard seniorId={p.id} displayName={p.displayName} open={firstRun} />
             <TaskList tasks={p.tasks} consent={p.consent.notifyOnComplete} displayName={p.displayName} />
           </div>
           <div className="col side">
@@ -109,201 +110,39 @@ function PersonPage({ id }: { id: Id<"seniors"> }) {
   );
 }
 
-const TEMPLATES = [
-  { title: "Join a video call", spoken: "help me join the video call" },
-  { title: "Refill a prescription", spoken: "help me refill my prescription" },
-  { title: "Reply to an email", spoken: "help me reply to an email" },
-];
-
-function TaskComposer({ seniorId, displayName, open: startOpen }: { seniorId: Id<"seniors">; displayName: string; open: boolean }) {
-  const assign = useMutation(api.tasks.assign);
-  const me = useQuery(api.caregivers.me);
+/** "New task" card; opens the composer, which holds a task until it's clear (TaskComposer). */
+function TaskComposerCard({ seniorId, displayName, open: startOpen }: { seniorId: Id<"seniors">; displayName: string; open: boolean }) {
   const [open, setOpen] = useState(startOpen);
-  const [title, setTitle] = useState("");
-  const [spoken, setSpoken] = useState("");
-  const [withRecipe, setWithRecipe] = useState(false);
-  const [startUrl, setStartUrl] = useState("");
-  const [steps, setSteps] = useState<string[]>([""]);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
   const [sent, setSent] = useState("");
-
-  const reset = () => {
-    setTitle("");
-    setSpoken("");
-    setWithRecipe(false);
-    setStartUrl("");
-    setSteps([""]);
-  };
-
-  const urlError = withRecipe && startUrl.trim() && !isSafeStartUrl(startUrl.trim()) ? "Use a full web address, like https://www.example.com" : "";
-
-  const submit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError("");
-    if (!title.trim()) return setError("Give the task a short name.");
-    if (urlError) return setError(urlError);
-    setBusy(true);
-    try {
-      const cleanSteps = steps.map((s) => s.trim()).filter(Boolean);
-      const url = startUrl.trim();
-      await assign({
-        seniorId,
-        title: title.trim(),
-        ...(spoken.trim() ? { spokenPrompt: spoken.trim() } : {}),
-        ...(withRecipe && (cleanSteps.length || url) ? { recipe: { steps: cleanSteps, ...(url ? { startUrl: url } : {}) } } : {}),
-      });
-      setSent(title.trim());
-      reset();
-      setOpen(false);
-    } catch (err) {
-      setError(errorText(err));
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  if (!open)
+  if (open)
     return (
-      <section className="card composer-closed">
-        <div>
-          <h2>Send a task</h2>
-          <p className="muted small">{sent ? `Sent “${sent}”. ${displayName} will see it next time they open JustAsk.` : `It shows up on ${displayName}'s computer with a Start button.`}</p>
-        </div>
-        <button
-          className="btn primary"
-          onClick={() => {
-            setSent("");
-            setOpen(true);
-          }}
-        >
-          New task
-        </button>
-      </section>
+      <TaskComposer
+        seniorId={seniorId}
+        displayName={displayName}
+        onSent={(title) => {
+          setSent(title);
+          setOpen(false);
+        }}
+        onCancel={() => setOpen(false)}
+      />
     );
-
   return (
-    <form className="card form composer" onSubmit={submit} onInput={() => setError("")} noValidate>
-      <h2>Send {displayName} a task</h2>
-      <div className="chips" aria-label="Ideas">
-        {TEMPLATES.map((t) => (
-          <button
-            type="button"
-            className="chip"
-            key={t.title}
-            onClick={() => {
-              setTitle(t.title);
-              setSpoken(t.spoken);
-            }}
-          >
-            {t.title}
-          </button>
-        ))}
+    <section className="card composer-closed">
+      <div>
+        <h2>Send a task</h2>
+        <p className="muted small">{sent ? `Sent “${sent}”. ${displayName} will see it next time they open JustAsk.` : `It shows up on ${displayName}'s computer with a Start button.`}</p>
       </div>
-      <label className="field">
-        <span>Task</span>
-        <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Refill your prescription" maxLength={TASK_LIMITS.title} />
-        <small>
-          They'll see “{me?.name ?? "You"} asked you to: {title.trim() || "…"}” with a Start button.
-        </small>
-      </label>
-      <label className="field">
-        <span>
-          What JustAsk should help with <em className="opt">optional</em>
-        </span>
-        <input value={spoken} onChange={(e) => setSpoken(e.target.value)} placeholder="help me refill my prescription" maxLength={TASK_LIMITS.spokenPrompt} />
-        <small>Written as if they asked JustAsk themselves. Leave empty to use the task name.</small>
-      </label>
-
-      <label className="check">
-        <input type="checkbox" checked={withRecipe} onChange={(e) => setWithRecipe(e.target.checked)} />
-        <span>
-          <strong>Add steps</strong>
-          <span className="muted small"> A plain-language recipe makes JustAsk more reliable on tricky sites.</span>
-        </span>
-      </label>
-
-      {withRecipe && (
-        <div className="recipe">
-          <label className="field">
-            <span>
-              Start page <em className="opt">optional</em>
-            </span>
-            <input
-              type="url"
-              value={startUrl}
-              onChange={(e) => setStartUrl(e.target.value)}
-              placeholder="https://www.mypharmacy.com"
-              maxLength={TASK_LIMITS.startUrl}
-              aria-invalid={!!urlError}
-            />
-            {urlError ? <small className="error-text">{urlError}</small> : <small>JustAsk offers to open this page for them. It only ever opens pages you set here.</small>}
-          </label>
-          <div className="field">
-            <span>Steps</span>
-            <ol className="steps-edit">
-              {steps.map((s, i) => (
-                <li key={i}>
-                  <span className="n" aria-hidden="true">
-                    {i + 1}
-                  </span>
-                  <input
-                    value={s}
-                    onChange={(e) => setSteps(steps.map((x, j) => (j === i ? e.target.value : x)))}
-                    placeholder={i === 0 ? "Click Refill a prescription" : "Next step"}
-                    maxLength={TASK_LIMITS.step}
-                    aria-label={`Step ${i + 1}`}
-                  />
-                  <button type="button" className="icon-btn" aria-label={`Move step ${i + 1} up`} disabled={i === 0} onClick={() => setSteps(move(steps, i, i - 1))}>
-                    ↑
-                  </button>
-                  <button type="button" className="icon-btn" aria-label={`Remove step ${i + 1}`} disabled={steps.length === 1} onClick={() => setSteps(steps.filter((_, j) => j !== i))}>
-                    ×
-                  </button>
-                </li>
-              ))}
-            </ol>
-            {steps.length < TASK_LIMITS.steps ? (
-              <button type="button" className="linkbtn small" onClick={() => setSteps([...steps, ""])}>
-                + Add a step
-              </button>
-            ) : (
-              <small>That's the most steps a task can have.</small>
-            )}
-          </div>
-        </div>
-      )}
-
-      {error && (
-        <p className="error" role="alert">
-          {error}
-        </p>
-      )}
-      <div className="actions">
-        <button className="btn primary" disabled={busy}>
-          {busy ? "Sending…" : "Send task"}
-        </button>
-        <button
-          type="button"
-          className="btn ghost"
-          onClick={() => {
-            reset();
-            setError("");
-            setOpen(false);
-          }}
-        >
-          Cancel
-        </button>
-      </div>
-    </form>
+      <button
+        className="btn primary"
+        onClick={() => {
+          setSent("");
+          setOpen(true);
+        }}
+      >
+        New task
+      </button>
+    </section>
   );
-}
-
-function move<T>(arr: T[], from: number, to: number): T[] {
-  const a = [...arr];
-  const [x] = a.splice(from, 1);
-  a.splice(to, 0, x);
-  return a;
 }
 
 const STATUS: Record<CaregiverTaskStatus, { label: string; cls: string }> = {
