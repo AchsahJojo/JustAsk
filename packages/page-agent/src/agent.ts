@@ -47,6 +47,7 @@ export class PageAgent {
   constructor(private opts: AgentOptions) {
     this.doc = opts.doc ?? document;
     this.overlay = new Overlay(this.doc);
+    this.overlay.onTargetLost = () => this.onTargetGone();
     this.mo = new MutationObserver((muts) => {
       let real = false;
       for (const m of muts) {
@@ -112,7 +113,8 @@ export class PageAgent {
     const entry = this.registry.get(localId);
     if (!entry) return null;
     const live = entry.ref.deref();
-    if (live && live.isConnected) return live;
+    // Still in the page but hidden or collapsed counts as replaced: sites swap elements on focus.
+    if (live && live.isConnected && isVisible(live)) return live;
     // Rescan this frame's candidates and match by fingerprint, then by role+text.
     const candidates = collectComposed(this.doc, { getShadowRoot: this.opts.getShadowRoot }).filter(isVisible);
     const described = candidates.map((el) => ({ el, parts: elementParts(el) }));
