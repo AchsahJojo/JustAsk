@@ -19,6 +19,11 @@ function withTimeout<T>(p: Promise<T>, ms: number, fallback: T): Promise<T> {
  * PageBridge over chrome.scripting + tabs messaging. Every frame of the session tab runs
  * its own content script; the controller merges their reports (plan §3.3).
  */
+/** A page counts as finished after this long with no DOM changes… */
+const SETTLE_QUIET_MS = 700;
+/** …or after this long at most. */
+const SETTLE_MAX_MS = 4000;
+
 export class ExtensionBridge implements PageBridge {
   constructor(public tabId: () => number | null) {}
 
@@ -78,6 +83,9 @@ export class ExtensionBridge implements PageBridge {
 
   async scan(context: string[]): Promise<FrameScan[]> {
     if (!(await this.ensureInjected())) return [];
+    // Let a loading page finish (results, prices, a forecast) before reading it, so the step isn't
+    // picked from half a page. Instant when the page is already quiet.
+    await this.send({ type: "ja:settle", quietMs: SETTLE_QUIET_MS, maxMs: SETTLE_MAX_MS }, 0, SETTLE_MAX_MS + 500, null);
     const frames = await this.frames();
     const replies = await Promise.all(
       frames.map(async (f) => {

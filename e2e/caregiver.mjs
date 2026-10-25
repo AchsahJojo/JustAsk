@@ -116,12 +116,12 @@ try {
   // --- Senior already used JustAsk alone, types the code: page flips to connected live ---
   const res = await senior.mutation("devices:redeemCode", { code: code2, token });
   assert.ok(res);
-  assert.equal(res.displayName, "Joanie", "her own name is kept");
+  assert.equal(res.displayName, "Joanie", "the user's own name is kept");
   await waitText("You're connected to Joanie", 10000);
   await sleep(1500); // let the Clayzo "connected" state play
   await shot("06-connected");
   assert.match(await text(), /Send Joanie a task/);
-  step("standalone senior redeems code; caregiver page goes live to connected, her display name kept");
+  step("standalone senior redeems code; caregiver page goes live to connected, the user's display name kept");
 
   // --- Send a task: validation, recipe, delivery ---
   await clickText("Send task", "button");
@@ -150,9 +150,9 @@ try {
   await shot("08-person-task-sent");
   step("task: blank title and javascript: URL blocked; recipe delivered to the extension; consent note shown");
 
-  // --- She opts in, finishes the task: status, stats and the activity note update live ---
+  // --- The user opts in, finishes the task: status, stats and the activity note update live ---
   await senior.mutation("devices:setConsent", { token, notifyOnComplete: true, notifyOnStuck: true });
-  await senior.mutation("tasks:setStatus", { token, taskId: pending[0].id, status: "active" }); // she pressed Start
+  await senior.mutation("tasks:setStatus", { token, taskId: pending[0].id, status: "active" }); // the user pressed Start
   const sid = await senior.mutation("sessions:start", { token, request: "refill", taskId: pending[0].id });
   await senior.mutation("sessions:logEvent", { token, sessionId: sid, type: "step_shown", latencyMs: 1200 });
   await senior.mutation("sessions:logEvent", { token, sessionId: sid, type: "stuck" });
@@ -162,14 +162,15 @@ try {
   await shot("09-person-done");
   step("consent on: task shows Done, stats appear");
 
-  // How JustAsk helps: the caregiver turns on Show me instead; her synced prefs see it.
+  // How JustAsk helps: guiding by default; the caregiver lets JustAsk click; the user's synced prefs see it.
   assert.match(await text(), /can change this in Settings/);
+  assert.equal(await page.evaluate(() => [...document.querySelectorAll("label.check")].find((l) => l.textContent.includes("Click and type for"))?.querySelector("input")?.checked), false, "off by default");
   await page.evaluate(() => [...document.querySelectorAll("label.check")].find((l) => l.textContent.includes("Click and type for"))?.querySelector("input")?.click());
   await waitText("Set by a helper");
-  assert.equal((await senior.query("prefs:get", { token })).showMeInstead, true);
+  assert.equal((await senior.query("prefs:get", { token })).showMeInstead, false);
   assert.equal((await senior.query("devices:me", { token })).showMeSetBy, "caregiver");
   await shot("09b-how-it-helps");
-  step("caregiver turns on Show me instead; the senior's synced prefs reflect it");
+  step("JustAsk guides by default; the caregiver lets it click; the senior's synced prefs reflect it");
 
   // Take back a second task.
   await clickText("New task", "button");

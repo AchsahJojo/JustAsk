@@ -1,7 +1,7 @@
 import { mutation, query } from "./_generated/server";
 import { requireCaregiver } from "./lib";
 
-/** Caregiver: completion notes, stuck notes and disconnects, newest first. Written only with her consent. */
+/** Caregiver: completion notes, stuck notes and disconnects, newest first. Written only with the user's consent. */
 export const feed = query({
   args: {},
   handler: async (ctx) => {

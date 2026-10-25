@@ -3,7 +3,7 @@ import type { DesktopHost, HostState } from "../host";
 import { linkUrl } from "../links";
 import { openExternal } from "../os";
 
-/** Settings: add another device, link her browsers, sign out. */
+/** Settings: add another device, link the browser extension, sign out. */
 export function Settings({ host, hs }: { host: DesktopHost; hs: HostState }) {
   const [code, setCode] = useState<{ code: string; expiresAt: number; forBrowsers: boolean } | null>(null);
   const [error, setError] = useState("");
@@ -42,10 +42,10 @@ export function Settings({ host, hs }: { host: DesktopHost; hs: HostState }) {
         </section>
 
         <section className="card">
-          <p className="task-title">Link my browsers</p>
-          <p className="soft">So JustAsk can help you on websites too.</p>
+          <p className="task-title">Link JustAsk in my browser</p>
+          <p className="soft">So the JustAsk app and JustAsk in your web browser share one account, and can hand off to each other.</p>
           <button className="btn outline huge" onClick={() => void makeCode(true)} disabled={busy}>
-            Link my browsers
+            Link my browser
           </button>
         </section>
 
@@ -59,8 +59,8 @@ export function Settings({ host, hs }: { host: DesktopHost; hs: HostState }) {
               {code.forBrowsers && linkOrigin
                 ? "I opened your browser. If it asks, say yes to link JustAsk."
                 : code.forBrowsers
-                  ? "In your browser, open JustAsk (click the JustAsk button near the top right), choose “I have a code”, and type these numbers."
-                  : "On the other device, choose “I have a code” and type these numbers."}{" "}
+                  ? "In your browser, click the JustAsk button near the top right, then Settings. Under “I have a code”, type these numbers and press Next."
+                  : "In JustAsk on the other device, choose “I have a code” and type these numbers."}{" "}
               It works once, for about {minutes} {minutes === 1 ? "minute" : "minutes"}.
             </p>
           </section>

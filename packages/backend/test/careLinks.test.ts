@@ -7,8 +7,8 @@ afterEach(() => vi.useRealTimers());
 
 test("helper code links a signed-in caregiver once", async () => {
   const t = setup();
-  const her = await newAccount(t, "Margaret");
-  const { code, expiresAt } = await t.mutation(api.careLinks.createHelperCode, { token: her });
+  const seniorToken = await newAccount(t, "Margaret");
+  const { code, expiresAt } = await t.mutation(api.careLinks.createHelperCode, { token: seniorToken });
   expect(code).toMatch(/^\d{6}$/);
   expect(expiresAt - Date.now()).toBe(15 * 60 * 1000);
 
@@ -22,20 +22,20 @@ test("helper code links a signed-in caregiver once", async () => {
   expect(await as.mutation(api.careLinks.redeemHelperCode, { code })).toBeNull();
 
   // A second code for an already-linked caregiver doesn't duplicate the link.
-  const again = await t.mutation(api.careLinks.createHelperCode, { token: her });
+  const again = await t.mutation(api.careLinks.createHelperCode, { token: seniorToken });
   expect(await as.mutation(api.careLinks.redeemHelperCode, { code: again.code })).not.toBeNull();
   expect(await t.run((ctx) => ctx.db.query("careLinks").collect())).toHaveLength(1);
 
   // The caregiver can now assign tasks (existing caregiver API).
   const taskId = await as.mutation(api.tasks.assign, { seniorId: res!.seniorId, title: "Refill", spokenPrompt: "refill" });
   expect(taskId).toBeTruthy();
-  expect(await t.query(api.tasks.pendingForDevice, { token: her })).toHaveLength(1);
+  expect(await t.query(api.tasks.pendingForDevice, { token: seniorToken })).toHaveLength(1);
 });
 
 test("requires caregiver auth", async () => {
   const t = setup();
-  const her = await newAccount(t);
-  const { code } = await t.mutation(api.careLinks.createHelperCode, { token: her });
+  const seniorToken = await newAccount(t);
+  const { code } = await t.mutation(api.careLinks.createHelperCode, { token: seniorToken });
   await expect(t.mutation(api.careLinks.redeemHelperCode, { code })).rejects.toThrow(/not signed in/);
   // Signed in but no caregivers row.
   await expect((await authUser(t, "nobody")).as.mutation(api.careLinks.redeemHelperCode, { code })).rejects.toThrow(
@@ -46,11 +46,11 @@ test("requires caregiver auth", async () => {
 
 test("device codes can't be redeemed as helper codes; expired codes fail", async () => {
   const t = setup();
-  const her = await newAccount(t);
+  const seniorToken = await newAccount(t);
   const { as } = await caregiver(t);
-  const link = await t.mutation(api.devices.createLinkCode, { token: her });
+  const link = await t.mutation(api.devices.createLinkCode, { token: seniorToken });
   expect(await as.mutation(api.careLinks.redeemHelperCode, { code: link.code })).toBeNull();
-  const helper = await t.mutation(api.careLinks.createHelperCode, { token: her });
+  const helper = await t.mutation(api.careLinks.createHelperCode, { token: seniorToken });
   vi.advanceTimersByTime(15 * 60 * 1000 + 1);
   expect(await as.mutation(api.careLinks.redeemHelperCode, { code: helper.code })).toBeNull();
 });

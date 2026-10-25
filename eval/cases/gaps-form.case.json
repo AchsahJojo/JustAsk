@@ -2,7 +2,7 @@
   "id": "gaps-form",
   "url": "{FIXTURES}/gaps/form",
   "request": "help me make an account",
-  "note": "She has not said her name, so act+type would invent text: guide (or ask).",
+  "note": "The user has not said the user's name, so act+type would invent text: guide (or ask).",
   "expected": {
     "kind": "guide",
     "allowKinds": [

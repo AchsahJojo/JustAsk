@@ -20,7 +20,7 @@ export async function notify(title: string, body: string): Promise<void> {
   }
 }
 
-/** Open an http(s) URL in her default browser. */
+/** Open an http(s) URL in the user's default browser. */
 export async function openExternal(url: string): Promise<void> {
   try {
     if (inTauri()) await openUrl(url);

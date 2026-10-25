@@ -6,7 +6,7 @@ beforeEach(() => vi.useFakeTimers());
 afterEach(() => vi.useRealTimers());
 
 describe("accounts:createSelf", () => {
-  test("creates her account and this install", async () => {
+  test("creates the user's account and this install", async () => {
     const t = setup();
     const res = await t.mutation(api.accounts.createSelf, { displayName: "  Margaret ", device: ext() });
     expect(res.token).toMatch(/^[0-9a-f]{64}$/);
@@ -86,6 +86,20 @@ describe("link codes", () => {
     const e = await linkDevice(t, d, ext());
     const mine = (await t.query(api.devices.list, { token: e })).find((x) => x.isThisDevice)!;
     expect(mine.machineId).toBe("pc-1");
+  });
+
+  test("a browser that already has its own account links to the desktop app: one account, desktop's machineId", async () => {
+    const t = setup();
+    const d = await newAccount(t, "Margaret", desk("pc-1"));
+    const browser = await newAccount(t, "Maggie", ext());
+    const { code } = await t.mutation(api.devices.createLinkCode, { token: d });
+    const res = await t.mutation(api.devices.redeemCode, { code, token: browser });
+    expect(res).toEqual({ token: browser, displayName: "Margaret" }); // joins the app's account, keeps its token
+    const list = await t.query(api.devices.list, { token: browser });
+    expect(list.map((x) => [x.kind, x.machineId]).sort()).toEqual([["desktop", "pc-1"], ["extension", "pc-1"]]);
+    // Handoffs now match: the app can send a session to this browser.
+    const { handoffId } = await t.mutation(api.handoffs.create, { token: d, toKind: "extension", request: "pay my water bill" });
+    expect(await t.mutation(api.handoffs.claim, { token: browser, handoffId })).toMatchObject({ request: "pay my water bill" });
   });
 
   test("no machineId inheritance from an extension's code", async () => {

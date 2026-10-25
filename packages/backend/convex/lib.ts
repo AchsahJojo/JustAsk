@@ -6,7 +6,12 @@ import type { deviceInfo } from "./validators";
 
 export const STEPS_PER_HOUR = 60;
 export const CODE_TTL_MS = 15 * 60 * 1000;
-export const DEFAULT_PREFS = { voice: "browser" as const, rate: 1, showMeInstead: false };
+/**
+ * JustAsk speaks and listens through Cartesia only ("browser" is kept in the validator for old rows).
+ * JustAsk guides by default: it shows each step and the user clicks (`showMeInstead: true`). Letting
+ * JustAsk click and type is an opt-in, by the user or a linked caregiver.
+ */
+export const DEFAULT_PREFS = { voice: "cartesia" as const, rate: 1, showMeInstead: true };
 
 export async function sha256(s: string): Promise<string> {
   const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(s));
@@ -131,7 +136,7 @@ export async function findLiveCode(ctx: QueryCtx | MutationCtx, code: string, pu
   return rows.find((r) => r.expiresAt > now && (r.purpose ?? "device") === purpose) ?? null;
 }
 
-/** A device code a caregiver made from the web app (not "Add another device" on one of her installs). */
+/** A device code a caregiver made from the web app (not "Add another device" on one of the user's installs). */
 export const isCaregiverCode = (r: Doc<"pairingCodes">) => (r.purpose ?? "device") === "device" && r.createdByDeviceId === undefined;
 
 /** Replace any caregiver-made codes for this senior with one new, unused 6-digit code. */
@@ -151,7 +156,8 @@ export function prefsOf(senior: Doc<"seniors">) {
     displayName: senior.displayName,
     voice: senior.prefs?.voice ?? DEFAULT_PREFS.voice,
     rate: senior.prefs?.rate ?? DEFAULT_PREFS.rate,
-    showMeInstead: senior.prefs?.showMeInstead ?? DEFAULT_PREFS.showMeInstead,
+    // Only an explicit choice (showMeSetBy) turns guiding off; older accounts stored the old default.
+    showMeInstead: senior.showMeSetBy ? (senior.prefs?.showMeInstead ?? DEFAULT_PREFS.showMeInstead) : DEFAULT_PREFS.showMeInstead,
     consent: senior.consent,
   };
 }

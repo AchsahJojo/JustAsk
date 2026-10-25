@@ -5,12 +5,12 @@ import { assertCodeAttemptAllowed, normalizeCode, rateLimiter, recordCodeFailure
 
 /**
  * Caregiver linking (ARCHITECTURE.md §8).
- * 1. Her install calls `careLinks:createHelperCode({token})` and shows the code.
+ * 1. The user's install calls `careLinks:createHelperCode({token})` and shows the code.
  * 2. The caregiver, signed in to the web app (Convex Auth, with a `caregivers` row for their
  *    tokenIdentifier), calls `careLinks:redeemHelperCode({code, relation?})`.
  */
 
-/** Her install: a 6-digit helper code (single use, 15 minutes). */
+/** The user's install: a 6-digit helper code (single use, 15 minutes). */
 export const createHelperCode = mutation({
   args: { token: v.string() },
   returns: v.object({ code: v.string(), expiresAt: v.number() }),

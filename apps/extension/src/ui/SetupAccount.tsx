@@ -6,11 +6,11 @@ import { pullPrefs, pushPrefs } from "../lib/prefsSync";
 import { currentDevice } from "../platform/device";
 
 const WRONG_CODE = "That code didn't work. Ask for a new one.";
-const NO_SERVER = "Accounts aren't set up on this copy of JustAsk yet. Your helper can add the server address below.";
+const NO_SERVER = "Accounts aren't set up on this copy of JustAsk yet. JustAsk still works on this computer without one.";
 const digits = (v: string) => v.replace(/\D/g, "");
 
 /**
- * Setup step 3: join her account. "I'm new" creates it (accounts:createSelf); "I have a code"
+ * Setup step 3: join the user's account. "I'm new" creates it (accounts:createSelf); "I have a code"
  * redeems a 6-digit code (devices:redeemCode). A `?link=` code from the link page asks first.
  */
 export function AccountStep({ s, onChange, linkCode, onLinkDone }: { s: Settings; onChange: (s: Settings) => void; linkCode: string | null; onLinkDone: () => void }) {
@@ -45,8 +45,9 @@ export function AccountStep({ s, onChange, linkCode, onLinkDone }: { s: Settings
     try {
       const { token } = await backend.createSelf(s.convexUrl, name, currentDevice());
       await connected(token, name);
-      // Her account starts with what she already chose on this browser.
-      await pushPrefs({ voice: s.voice, rate: s.rate, consent: s.consent, showMeInstead: s.showMeInstead });
+      // The user's account starts with what they already chose on this browser.
+      // Show me instead isn't copied: it stays at the default (JustAsk guides) until someone chooses.
+      await pushPrefs({ voice: s.voice, rate: s.rate, consent: s.consent });
     } catch (e) {
       setMsg(friendlyError(e));
     } finally {
@@ -133,7 +134,7 @@ function HaveCode({ busy, onRedeem }: { busy: boolean; onRedeem: (code: string) 
       }}
     >
       <h3>I have a code</h3>
-      <label htmlFor="pair-code">The 6-digit code from your helper or your other computer</label>
+      <label htmlFor="pair-code">The 6-digit code from the JustAsk app on your computer, another browser, or your helper</label>
       <div className="row">
         <input id="pair-code" inputMode="numeric" maxLength={7} value={code} onChange={(e) => setCode(e.target.value)} placeholder="123456" aria-label="Pairing code" autoComplete="one-time-code" />
         <button className="btn dark" type="submit" disabled={!ok || busy}>

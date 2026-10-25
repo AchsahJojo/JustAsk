@@ -11,7 +11,7 @@ Status: the Chrome extension, the step loop, the page agent, the Convex backend,
 | **Anthropic API key** | Convex env: `npx convex env set ANTHROPIC_API_KEY sk-ant-…` (run in `packages/backend`) | One person | Never put it in the extension, `.env` files for the extension, or the caregiver app. For local dev only, you can `export ANTHROPIC_API_KEY=…` before `npm run planner:dev`. |
 | **Convex account + project** | `cd packages/backend && npx convex dev` (log in when asked) | One person | This creates the project and writes `packages/backend/.env.local`. The repo was tested against an anonymous *local* Convex deployment only. |
 | **Extension env** | `apps/extension/.env` (copy `.env.example`) | Everyone who builds | `VITE_PLANNER_URL` = the Convex **HTTP actions** URL (`https://<name>.convex.site`). `VITE_CONVEX_URL` = the Convex **client** URL (`https://<name>.convex.cloud`). Both are public, not secrets. |
-| **Cartesia API key** (later) | Convex env: `CARTESIA_API_KEY` | B | Not used yet. Voice is the browser's `speechSynthesis` and Web Speech. See §4. |
+| **Cartesia API key** | Convex env: `CARTESIA_API_KEY` | A | Required for any voice. JustAsk speaks (Sonic) and listens (`ink-whisper`) only through Cartesia, in the extension and the desktop app. Already set on Xander's dev deployment; a local Convex needs `npx convex env set CARTESIA_API_KEY …`. Optional: `VITE_CARTESIA_VOICE_ID` in `apps/extension/.env` / `apps/desktop/.env` to pick a voice. |
 | **Convex Auth keys** | Convex env: `JWT_PRIVATE_KEY`, `JWKS`, `SITE_URL` (run in `packages/backend`) | One person, once per deployment | Caregiver sign-in (email + password). Easiest: `npx @convex-dev/auth` and follow the prompts. `SITE_URL` is the caregiver app's URL (`http://localhost:5176` locally). Already set on the local anonymous deployment. |
 | **Caregiver app env** | `apps/caregiver/.env.local` (copy `.env.example`) | Everyone who runs it | `VITE_CONVEX_URL` = the Convex **client** URL. `VITE_EXTENSION_URL` = the Chrome Web Store link once published. Public, not secrets. |
 | Chrome Web Store developer account | — | Later | $5 one-time. Needed for Phase 1 publishing. |
@@ -30,7 +30,10 @@ The Convex local backend refuses `"use node"` actions on Node 25. `convex/plan.t
 6. JustAsk now works with no caregiver: with `VITE_CONVEX_URL` set, the extension signs itself up in the background (a device token, no password). To try the caregiver side, run `npm run caregiver` and open `http://localhost:5176`. Create an account, click **Set up JustAsk for someone**, and type the code into setup step 4 ("Connect to a helper"). For a quick seeded pair instead, run `npx convex run devSeed:seed` in `packages/backend` and type the printed `code`. The seed also makes a "Refill your prescription" task with a recipe that starts at `http://localhost:5174/`.
 7. `npm run fixtures`, open `http://localhost:5174/`, click the JustAsk toolbar icon, and press **Start** on the task card.
 
-For offline work without a key: `npm run planner:dev` (mock planner), and leave `VITE_PLANNER_URL=http://localhost:8787`.
+Planner choices for local work:
+- **Recommended:** Convex's own `/plan`, with `ANTHROPIC_API_KEY` set in Convex env. Build the extension with `VITE_PLANNER_URL=http://127.0.0.1:3211` (the local Convex HTTP actions URL). The browser needs a JustAsk account, because `/plan` checks the device token.
+- `npm run planner:dev` on :8787 uses Claude when `ANTHROPIC_API_KEY` is set in that terminal. Without it, every step fails with "planner has no ANTHROPIC_API_KEY". It never quietly guesses.
+- `JUSTASK_MOCK=1 npm run planner:dev` runs the scripted test planner (fixtures only; its fallback just matches words, so it is useless on real sites).
 
 ## 3. Day-one spikes that need a real key (plan §9)
 
@@ -54,15 +57,17 @@ Run these in a real, headed Chrome with the production build (`apps/extension/.o
 
 ### Voice
 - [ ] The microphone works in the side panel after it was allowed on the setup page. Say "help me refill my prescription".
-- [ ] While she speaks, the orb shows the listening ripples. "Say that again", "stop" and "I'm stuck" work by voice.
-- [ ] Text-to-speech uses a clear US English voice at a slow rate. Pick a voice on the senior's actual machine. The choice logic is in `apps/extension/src/lib/speech.ts`.
+- [ ] While the user speaks, the orb shows the listening ripples. "Say that again", "stop" and "I'm stuck" work by voice.
+- [ ] JustAsk's voice is Cartesia Sonic, clear and calm at the Normal speed, and Slower / Faster in settings change it. Pick the voice in Cartesia's voice library and set `VITE_CARTESIA_VOICE_ID`.
+- [ ] Press the mic while JustAsk is talking: it goes quiet, listens, and says the next line only after you stop.
+- [ ] Before the browser has an account, pressing the mic says voice works once JustAsk is set up (captions still show).
 - [ ] Recognition is not muted while JustAsk speaks yet (planned). Check whether JustAsk hears itself on laptop speakers.
 
 ### Tabs and pages (plan §3.5) — partly automated
 - [ ] In the real side panel (not the pinned test window): switch to another tab mid-session. The panel asks **Keep helping on this tab?** Check that **Yes, here** and **Go back** both work.
 - [ ] Close the session tab mid-session. The panel pauses.
 - [ ] A sign-in **popup window** (`/gaps/newtab` → "Sign in with popup"). Side panels don't show in popups, and dock mode isn't built, so expect this to be unsupported for now.
-- [ ] Open the built-in PDF viewer or a Chrome Web Store page mid-session. JustAsk says it can't see the page and resumes when she goes back.
+- [ ] Open the built-in PDF viewer or a Chrome Web Store page mid-session. JustAsk says it can't see the page and resumes when the user goes back.
 
 ### Real sites (CP3)
 - [ ] Two real tasks end to end with no code changes, for example Gmail settings and joining a Zoom meeting on the web. Log failures in the prompt or scanner, not as site-specific code.
@@ -76,7 +81,7 @@ Run these in a real, headed Chrome with the production build (`apps/extension/.o
 - [ ] Autofill — Chrome autofill on an address form advances typing steps.
 
 ### Edge (spike 6, feature freeze)
-- [ ] In `apps/extension`, run `npx wxt build -b edge`. Load `.output/edge-mv3` unpacked in Edge, and check that the side panel and Web Speech work.
+- [ ] In `apps/extension`, run `npx wxt build -b edge`. Load `.output/edge-mv3` unpacked in Edge, and check that the side panel and Cartesia voice (speaking and listening) work.
 
 ### Accessibility
 - [ ] Zoom the panel to 200%. Nothing is cut off.
@@ -92,7 +97,6 @@ Run these in a real, headed Chrome with the production build (`apps/extension/.o
 
 - **Caregiver password reset.** There is no email provider, so "forgot password" isn't offered. Add `reset` to the `Password` provider in `convex/auth.ts` with Resend (needs `AUTH_RESEND_KEY`).
 - **Caregiver app deploy** (Vercel). `npm run build -w @justask/caregiver` writes `apps/caregiver/dist`. Set `SITE_URL` in Convex to the deployed URL.
-- **Cartesia**: Sonic TTS (via a token minted by a Convex action) and STT for Brave, Firefox and Safari. They plug in behind `SpeechOut` / `BrowserListener`.
 - **Dock mode** (Phase 1): the in-page panel for Opera, Safari and popup windows. The panel already accepts `?tabId=` and `sidepanel.html` is web-accessible.
 - **Firefox and Safari** builds compile (`wxt build -b firefox`) but are not tested.
 - `matchOriginAsFallback` for `about:blank` / `srcdoc` frames: `executeScript` doesn't support it. A registered content script would.
@@ -101,18 +105,28 @@ Run these in a real, headed Chrome with the production build (`apps/extension/.o
 
 ## 5b. Accounts (how they work)
 
-- **Seniors never get a password.** In setup, "I'm new: create my JustAsk" makes her account (`accounts:createSelf`) and the install keeps a device token. Everything works with no caregiver. More installs join with "Add another device" codes (`devices:createLinkCode`).
+- **Seniors never get a password.** In setup, "I'm new: create my JustAsk" makes the user's account (`accounts:createSelf`) and the install keeps a device token. Everything works with no caregiver. More installs join with "Add another device" codes (`devices:createLinkCode`).
 - **Caregivers** sign in with email + password (Convex Auth). A `caregivers` row is made on first sign-in (`caregivers:ensureProfile`).
 - **Connecting** works two ways (6-digit codes, 15 minutes, one use):
-  - The caregiver makes her profile in the web app and she types their code in setup ("I have a code"). On an install that already has her own account she uses "I have a code from my helper" in settings: the two profiles merge and her own name, settings and history are kept (the caregiver's page follows via `seniorAliases`).
-  - She presses "Share with my helper" in settings and the caregiver types that code under "Do they already use JustAsk?" in the web app (`careLinks:redeemHelperCode`).
+  - The caregiver makes the user's profile in the web app, and the user types the caregiver's code in setup ("I have a code"). On an install that already has its own account, the user types it under "I have a code" in settings: the two profiles merge, and the user's own name, settings and history are kept (the caregiver's page follows via `seniorAliases`). The same box takes a code from the JustAsk desktop app or another browser.
+  - The user presses "Share with my helper" in settings and the caregiver types that code under "Do they already use JustAsk?" in the web app (`careLinks:redeemHelperCode`).
 - **Leaving.** The senior can stop working with any helper in setup (`devices:leaveHelpers`). A caregiver can **Stop helping** (`people:remove`). Either way the senior's JustAsk keeps working.
-- **Privacy.** Caregivers see task status and stats only if the senior turned on "Tell my helper when I finish". They never see sessions the senior started on her own.
+- **Privacy.** Caregivers see task status and stats only if the senior turned on "Tell my helper when I finish". They never see sessions the senior started on their own.
 - **Abuse caps.** `@convex-dev/rate-limiter` (`convex/rateLimits.ts`): account creation, and failed codes per code prefix, globally and per caregiver. Wrong codes return `null` so the failure count commits. Per-IP limits need an HTTP action in front; not done.
 - **Migration.** Old seed rows had `caregivers.tokenIdentifier`. Run `npx convex run migrations:caregiversToAuth` once per deployment, then the field can be removed from the schema.
 
-- **Drive mode or Show me instead.** JustAsk clicks and types for her by default (never sensitive fields; it asks first before money or account changes). "Show me instead" in her settings makes it guide her instead. A linked caregiver can change it under **How JustAsk helps** (`people:setShowMe`); her settings say when a helper set it.
-- **Task list.** Tasks stay in her panel until she finishes or removes them (`tasks:listForDevice`). Started tasks show **Keep going**; **I did it** marks one done and sends the consent-gated note.
+- **Drive mode or Show me instead.** JustAsk clicks and types for the user by default (never sensitive fields; it asks first before money or account changes). "Show me instead" in the user's settings makes it guide them instead. A linked caregiver can change it under **How JustAsk helps** (`people:setShowMe`); the user's settings say when a helper set it.
+- **Task list.** Tasks stay in the user's panel until they finish or remove them (`tasks:listForDevice`). Started tasks show **Keep going**; **I did it** marks one done and sends the consent-gated note.
+
+### Manual checks for the scam check
+- [ ] Say (out loud) "I need to send the gift card codes to the IRS". JustAsk asks "Did someone call, text or email asking you to do this?" Answer "yes" by voice, and check that it stops with the advice.
+- [ ] "Buy a gift card for my grandson's birthday" goes ahead with no question.
+- [ ] With a real key: open a fake "virus warning" page or a gift-card payment page. Claude should block it as a possible trick.
+
+### Manual checks for starting on an empty tab
+- [ ] Real Chrome, fresh window on the New Tab page: ask "what's the weather today". JustAsk should search with the default engine in that tab and keep going. (e2e stubs `chrome.search.query`, because real engines can't be intercepted from the New Tab page.)
+- [ ] Change Chrome's default search engine (for example to DuckDuckGo) and check that JustAsk uses it.
+- [ ] Quit Chrome while a task is waiting, then reopen it: the "You have 1 thing on your list" notification appears, and clicking it opens the panel.
 
 ### Manual checks for accounts
 - [ ] Real Chrome: install fresh, skip step 4, and use JustAsk with no caregiver against the Convex `/plan` (needs the API key).
@@ -123,9 +137,9 @@ Run these in a real, headed Chrome with the production build (`apps/extension/.o
 
 ## 6. What is already tested (and how to rerun)
 
-- `npm test` — 301 unit tests (including the `convex-test` backend suites): StepResponse schema + validator rules, scanner (numbering, hidden elements, `.value` never used as a label, the **sentinel leak test** across every field type, select options cap, open and closed shadow roots, the modal-only rule, ranking before the 150 cap, duplicate collapse), fingerprint rebinding, click/typing/select/lost observers, the controller loop (multi-step, re-plan then block, risk confirm, suspicious, clarify, frames, wrong click, stop with a late reply, password line), and the `planStep` request shape (beta header, `fallbacks`, effort, schema, caching, no sampling params or `thinking`, refusal and `max_tokens` handling).
-- `npm run test:e2e` — 12 Puppeteer scenarios (mock planner on :8788, so a dev planner on :8787 never answers them) in Chrome for Testing with the real extension: the full pharmacy refill (4 clicks, wrong click, done), 500 ms rerenders, open + closed shadow roots, same- and cross-origin iframes plus the money confirmation, typing + password + select with the **sentinel leak test against the planner's received requests**, the `<dialog>` modal-only rule, new-tab follow, 1,000 links, `chrome://` pages, the setup page, and the production build (no pre-granted host access). Screenshots land in `e2e/screenshots/`.
+- `npm test` — 428 unit tests (including the `convex-test` backend suites): StepResponse schema + validator rules, scanner (numbering, hidden elements, `.value` never used as a label, the **sentinel leak test** across every field type, select options cap, open and closed shadow roots, the modal-only rule, ranking before the 150 cap, duplicate collapse), fingerprint rebinding, click/typing/select/lost observers, the controller loop (multi-step, re-plan then block, risk confirm, suspicious, clarify, frames, wrong click, stop with a late reply, password line), and the `planStep` request shape (beta header, `fallbacks`, effort, schema, caching, no sampling params or `thinking`, refusal and `max_tokens` handling).
+- `npm run test:e2e` — 15 Puppeteer scenarios (mock planner on :8788, so a dev planner on :8787 never answers them) in Chrome for Testing with the real extension: the full pharmacy refill (4 clicks, wrong click, done), 500 ms rerenders, open + closed shadow roots, same- and cross-origin iframes plus the money confirmation, typing + password + select with the **sentinel leak test against the planner's received requests**, the `<dialog>` modal-only rule, new-tab follow, 1,000 links, `chrome://` pages, the setup page, and the production build (no pre-granted host access). Screenshots land in `e2e/screenshots/`.
 - `CONVEX_CODE=<code> node e2e/run.mjs accounts` — pairing through the setup page against local Convex, the task card, the recipe `startUrl`, a completed task, and the completion note in Convex.
 - `npm run test:convex` — pairing (one use only), device token checks, pending tasks, events closing a task, and the `/plan` HTTP route.
-- `npm run test:accounts` — against local Convex: caregiver sign-up/sign-in (wrong password, duplicate email, short password, bad email), standalone seniors (`accounts:createSelf`), helper codes from her settings, Show me instead set by a caregiver, pairing (spaces, one use, replaced codes, stale tokens), merging a standalone senior with a caregiver profile (and the page redirect), second computers, task validation (`javascript:` and credential URLs, step limits), consent-gated status and stats, isolation between caregivers, disconnect and remove.
+- `npm run test:accounts` — against local Convex: caregiver sign-up/sign-in (wrong password, duplicate email, short password, bad email), standalone seniors (`accounts:createSelf`), helper codes from the user's settings, Show me instead set by a caregiver, pairing (spaces, one use, replaced codes, stale tokens), merging a standalone senior with a caregiver profile (and the page redirect), second computers, task validation (`javascript:` and credential URLs, step limits), consent-gated status and stats, isolation between caregivers, disconnect and remove.
 - `npm run test:caregiver` — Puppeteer against the caregiver app (`npm run caregiver` running): sign-up validation, setup wizard, code countdown and replacement, live "connected" when the senior redeems, sending a task with a recipe, Done + stats after consent, take back, activity feed, not-found page, phone width (no horizontal scroll), dark mode, sign out/in, duplicate sign-up. Screenshots land in `e2e/screenshots/caregiver/`.

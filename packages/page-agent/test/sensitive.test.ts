@@ -16,6 +16,9 @@ function field(html: string): Element {
 
 const POSITIVE: Array<[string, string]> = [
   ["password type", `<input data-t type="password">`],
+  ["gift card number", `<label for="g">Gift card number</label><input data-t id="g">`],
+  ["claim code", `<input data-t name="claimCode" placeholder="Enter claim code">`],
+  ["redemption code", `<label for="r">Redemption code</label><input data-t id="r">`],
   ["one-time-code (otp kind)", `<input data-t autocomplete="one-time-code">`],
   ["current-password", `<input data-t autocomplete="current-password">`],
   ["new-password", `<input data-t autocomplete="new-password">`],
@@ -45,6 +48,8 @@ const NEGATIVE: Array<[string, string]> = [
   ["email", `<label for="e">Email</label><input data-t id="e" type="email" autocomplete="email">`],
   ["shipping address", `<label for="s">Shipping address</label><input data-t id="s" autocomplete="shipping street-address">`],
   ["spinach", `<label for="q">Spinach quantity</label><input data-t id="q" type="number">`],
+  ["gift message", `<label for="m">Message for the card</label><input data-t id="m">`],
+  ["promo search", `<input data-t name="q" placeholder="Search gifts">`],
   ["search q", `<input data-t name="q" placeholder="Search products">`],
   ["account email", `<input data-t aria-label="Account email">`],
   ["zip code", `<input data-t name="zipCode" placeholder="Zip code">`],

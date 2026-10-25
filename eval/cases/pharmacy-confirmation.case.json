@@ -3,10 +3,10 @@
   "url": "{FIXTURES}/pharmacy/refill/confirmation",
   "request": "help me refill my prescription",
   "history": [
-    "She did: \"Click the big blue button that says Refill a prescription.\" (click)",
-    "She did: \"Click the blue Refill button next to Lisinopril.\" (click)",
-    "She did: \"Click the box that says Pick up in store. It is free.\" (click)",
-    "She did: \"Last one. Click the big green button that says Send my refill request.\" (click)"
+    "The user did: \"Click the big blue button that says Refill a prescription.\" (click)",
+    "The user did: \"Click the blue Refill button next to Lisinopril.\" (click)",
+    "The user did: \"Click the box that says Pick up in store. It is free.\" (click)",
+    "The user did: \"Last one. Click the big green button that says Send my refill request.\" (click)"
   ],
   "expected": {
     "kind": "done"

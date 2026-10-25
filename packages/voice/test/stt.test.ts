@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { CARTESIA_VERSION, floatToPcm16, sttUrl, TranscriptBuffer } from "../src/stt";
+import { CARTESIA_VERSION, floatToPcm16, rms, sttUrl, TranscriptBuffer, TurnTimer } from "../src/stt";
 
 describe("sttUrl", () => {
   it("targets Cartesia's STT socket with a token, never a key", () => {
@@ -30,5 +30,39 @@ describe("TranscriptBuffer", () => {
     expect(b.push({ type: "transcript", is_final: false, text: " big" })).toBe("Make the text big");
     expect(b.push({ type: "transcript", is_final: true, text: " bigger." })).toBe("Make the text bigger.");
     expect(b.push({ type: "done" })).toBe("Make the text bigger.");
+  });
+});
+
+describe("TurnTimer (3 s to start, 2 s of quiet to finish)", () => {
+  const quiet = 0.001;
+  const loud = 0.05;
+  it("gives the user 3 seconds to start talking", () => {
+    const t = new TurnTimer(0);
+    expect(t.feed(quiet, 2_900)).toBeNull();
+    expect(t.feed(quiet, 3_000)).toBe("no-speech");
+  });
+  it("a pause shorter than 2 seconds never ends the turn; 2 seconds of quiet does", () => {
+    const t = new TurnTimer(0);
+    expect(t.feed(loud, 1_000)).toBeNull();
+    expect(t.feed(quiet, 2_900)).toBeNull(); // 1.9 s pause to think
+    expect(t.feed(loud, 3_000)).toBeNull();
+    expect(t.feed(quiet, 4_900)).toBeNull();
+    expect(t.feed(quiet, 5_000)).toBe("finished");
+  });
+  it("words from the speech service count as talking, even from a quiet voice", () => {
+    const t = new TurnTimer(0);
+    t.voice(2_500);
+    expect(t.feed(quiet, 3_100)).toBeNull();
+    expect(t.feed(quiet, 4_500)).toBe("finished");
+  });
+  it("stops a very long turn", () => {
+    const t = new TurnTimer(0);
+    expect(t.feed(loud, 29_900)).toBeNull();
+    expect(t.feed(loud, 30_000)).toBe("too-long");
+  });
+  it("rms measures loudness", () => {
+    expect(rms([0, 0, 0])).toBe(0);
+    expect(rms([0.5, -0.5])).toBeCloseTo(0.5);
+    expect(rms([])).toBe(0);
   });
 });

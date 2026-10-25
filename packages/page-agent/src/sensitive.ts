@@ -1,4 +1,4 @@
-// Deterministic `sensitive` classifier (ARCHITECTURE §11). JustAsk never types into these; she does.
+// Deterministic `sensitive` classifier (ARCHITECTURE §11). JustAsk never types into these; the user does.
 // Reads only attributes and label text, never the field's value.
 
 const AUTOCOMPLETE_SECRET = new Set(["current-password", "new-password", "one-time-code"]);
@@ -23,6 +23,9 @@ const SECRET_WORDS: RegExp[] = [
   /\botp\b/,
   /\bpasscode\b/,
   /\bone\s*time\s*(code|password|pass)\b/,
+  // Gift card numbers and claim codes: the thing gift card scams are after.
+  /\bgift\s*card\b/,
+  /\b(claim|redemption|redeem|voucher)\s*(code|number|no)\b/,
 ];
 
 /** camelCase and `_-.[]` become spaces, lowercase. "cardNumber" -> "card number". */
@@ -56,7 +59,7 @@ function namingText(el: Element): string {
 }
 
 /**
- * True for passwords, one-time codes, card/CVV, SSN and bank fields.
+ * True for passwords, one-time codes, card/CVV, gift card and claim codes, SSN and bank fields.
  * When the check itself fails, the field is treated as sensitive.
  */
 export function isSensitive(el: Element): boolean {

@@ -24,6 +24,23 @@ export default defineBackground(() => {
     browser.alarms.create("tasks", { periodInMinutes: 1 });
   });
 
+  // The user opened Chrome. If tasks are waiting, say so, because the user may not know what to do next.
+  // Clicking the note opens the panel (a click carries the gesture sidePanel.open needs).
+  browser.runtime.onStartup.addListener(async () => {
+    browser.alarms.create("tasks", { periodInMinutes: 1 });
+    const open = (await backend.taskList())?.open ?? [];
+    if (!open.length) return;
+    await browser.action.setBadgeText({ text: String(open.length) });
+    await browser.action.setBadgeBackgroundColor({ color: "#E8654A" });
+    browser.notifications.create("list:startup", {
+      type: "basic",
+      iconUrl: browser.runtime.getURL("/icon/128.png"),
+      title: open.length === 1 ? "You have 1 thing on your list" : `You have ${open.length} things on your list`,
+      message: `${open[0].from} asked you to: ${open[0].title}. Click here to start.`,
+      priority: 2,
+    });
+  });
+
   browser.alarms.onAlarm.addListener(async (a) => {
     if (a.name !== "tasks") return;
     const tasks = await backend.pendingTasks();
@@ -52,7 +69,7 @@ export default defineBackground(() => {
 
   // Ladder step 2: toast click. sidePanel.open may throw without a carried gesture; the badge stays on.
   browser.notifications.onClicked.addListener(async (id) => {
-    if (!id.startsWith("task:") && !id.startsWith("handoff:")) return;
+    if (!id.startsWith("task:") && !id.startsWith("handoff:") && !id.startsWith("list:")) return;
     const win = await browser.windows.getLastFocused();
     if (win.id !== undefined) {
       const opened = openPanel({ windowId: win.id }); // call first, while the gesture is fresh

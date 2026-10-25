@@ -21,7 +21,7 @@ function machineMatches(h: Doc<"handoffs">, device: Doc<"devices">) {
   return h.toMachineId !== undefined && device.machineId !== undefined && h.toMachineId === device.machineId;
 }
 
-/** Hand the current request to her other surface. Expires in 10 minutes. */
+/** Hand the current request to the user's other surface. Expires in 10 minutes. */
 export const create = mutation({
   args: { token: v.string(), toKind: deviceKind, request: v.string(), taskId: v.optional(v.id("tasks")), recipe: v.optional(recipeValidator) },
   returns: v.object({ handoffId: v.id("handoffs") }),

@@ -8,6 +8,8 @@ export function Ask({ host, hs }: { host: DesktopHost; hs: HostState }) {
   const [view, setView] = useState<SessionView>(host.controller.state);
   const [speaking, setSpeaking] = useState(false);
   const [listening, setListening] = useState(false);
+  /** The mic is recording (a moment after the press). Only then does the button say "I'm listening". */
+  const [micReady, setMicReady] = useState(false);
   const [heard, setHeard] = useState("");
   const [note, setNote] = useState("");
   const [typed, setTyped] = useState("");
@@ -17,6 +19,8 @@ export function Ask({ host, hs }: { host: DesktopHost; hs: HostState }) {
 
   useEffect(() => {
     host.speech.onSpeaking = setSpeaking;
+    // Get the voice token now, so pressing the mic starts listening without a network wait.
+    void host.voiceTokens.get().catch(() => {});
     return host.controller.subscribe(setView);
   }, [host]);
 
@@ -30,15 +34,23 @@ export function Ask({ host, hs }: { host: DesktopHost; hs: HostState }) {
   const busy = phase === "planning" || phase === "verifying";
   const orbMode: OrbMode = listening ? "listening" : phase === "done" ? "done" : busy || phase === "acting" ? "thinking" : speaking ? "speaking" : "idle";
 
-  /** Press-to-talk. Any voice failure leaves her at the typed box. */
+  /** Press-to-talk. Any voice failure leaves the user at the typed box. */
   const talk = (onText: (t: string) => void) => {
     if (host.listener.listening) return host.listener.stop();
     host.speech.stop();
     setNote("");
     setHeard("");
     setListening(true);
+    // The mic never hears JustAsk: lines wait until the user stops talking.
+    host.speech.hold(true);
+    let said = false;
+    setMicReady(false);
     void host.listener.listen({
-      onInterim: setHeard,
+      onReady: () => setMicReady(true),
+      onInterim: (t) => {
+        if (t.trim()) said = true;
+        setHeard(t);
+      },
       onFinal: (t) => {
         setHeard("");
         onText(t);
@@ -47,7 +59,11 @@ export function Ask({ host, hs }: { host: DesktopHost; hs: HostState }) {
         setNote(msg);
         typedRef.current?.focus();
       },
-      onEnd: () => setListening(false),
+      onEnd: () => {
+        host.speech.hold(false, said);
+        setListening(false);
+        setMicReady(false);
+      },
     });
   };
 
@@ -98,7 +114,7 @@ export function Ask({ host, hs }: { host: DesktopHost; hs: HostState }) {
               aria-label={listening ? "Listening. Press to stop." : "Press and tell me what you want to do"}
             >
               <Orb mode={orbMode} size={200} />
-              <span className="ask-label">{listening ? "I'm listening… Press when you're done." : "Press and tell me what you want to do"}</span>
+              <span className="ask-label">{listening ? (micReady ? "I'm listening… Press when you're done." : "One moment…") : "Press and tell me what you want to do"}</span>
             </button>
             {heard && <p className="heard">“{heard}”</p>}
           </>
@@ -113,7 +129,7 @@ export function Ask({ host, hs }: { host: DesktopHost; hs: HostState }) {
               <Orb mode={orbMode} size={phase === "done" ? 132 : 96} />
               <div className="stage-text">
                 {(phase === "guiding" || phase === "acting") && <p className="eyebrow accent">Step {view.stepNo}</p>}
-                {phase === "confirming" && <p className="eyebrow accent">Check first</p>}
+                {phase === "confirming" && <p className="eyebrow accent">{view.scam ? "Safety check" : "Check first"}</p>}
                 <p ref={captionRef} tabIndex={-1} className={`caption ${busy ? "dim" : ""}`} aria-live="assertive">
                   {view.line}
                 </p>
@@ -127,7 +143,18 @@ export function Ask({ host, hs }: { host: DesktopHost; hs: HostState }) {
             )}
             {phase === "done" && <p className="hint big">All done.</p>}
 
-            {phase === "confirming" && (
+            {phase === "confirming" && view.scam && (
+              <div className="choices">
+                <button className="btn primary huge" onClick={() => void host.controller.scamAnswer(true)}>
+                  Yes, someone asked me
+                </button>
+                <button className="btn outline huge" onClick={() => void host.controller.scamAnswer(false)}>
+                  No, it's my own idea
+                </button>
+              </div>
+            )}
+
+            {phase === "confirming" && !view.scam && (
               <div className="choices">
                 <button className="btn primary huge" onClick={() => void host.controller.confirm(true)}>
                   Yes, go ahead
@@ -157,13 +184,13 @@ export function Ask({ host, hs }: { host: DesktopHost; hs: HostState }) {
             )}
 
             {phase === "waiting" && (
-              <button className="btn primary huge" onClick={() => void host.controller.resume("She said she is ready")}>
+              <button className="btn primary huge" onClick={() => void host.controller.resume("The user said they are ready")}>
                 I'm ready
               </button>
             )}
 
             {phase === "paused" && (
-              <button className="btn primary huge" onClick={() => void host.controller.resume("She asked to try again")}>
+              <button className="btn primary huge" onClick={() => void host.controller.resume("The user asked to try again")}>
                 Try again
               </button>
             )}
@@ -211,7 +238,7 @@ export function Ask({ host, hs }: { host: DesktopHost; hs: HostState }) {
               </button>
               <div className="row">
                 <button className={`btn soft-btn grow ${listening ? "is-listening" : ""}`} onClick={() => talk((t) => void host.controller.input(t))}>
-                  {listening ? "Listening…" : phase === "asking" ? "Answer out loud" : "Talk to me"}
+                  {listening ? (micReady ? "Listening…" : "One moment…") : phase === "asking" ? "Answer out loud" : "Say something"}
                 </button>
                 <button className="btn soft-btn" onClick={() => void host.controller.stuck()}>
                   I'm stuck

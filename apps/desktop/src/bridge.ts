@@ -45,7 +45,7 @@ export class NativeBridge implements PageBridge {
     }
   }
 
-  /** Perform one action. Any failure is `{ok: false}`, so the step falls back to guiding her. */
+  /** Perform one action. Any failure is `{ok: false}`, so the step falls back to guiding the user. */
   async act(ref: TargetRef, spec: ActSpec): Promise<ActResult> {
     try {
       const res = await native.act({ ...spec, localId: ref.localId });

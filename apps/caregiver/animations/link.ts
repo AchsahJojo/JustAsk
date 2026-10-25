@@ -1,6 +1,6 @@
 // The caregiver app's pairing picture. Art direction — mode: one object, two ends.
-// Verb: connect. Left: her JustAsk (coral disc, mic). Right: you (sage disc, person).
-// Waiting: dots travel along a dashed line toward her. Connected: the line draws solid
+// Verb: connect. Left: the user's JustAsk (coral disc, mic). Right: you (sage disc, person).
+// Waiting: dots travel along a dashed line toward the user. Connected: the line draws solid
 // sage and a check pops in the middle. Palette: coral #E8654A, sage #3E8E63, cream #FFFBF4,
 // line #B9B0A0 (reads on both light and dark pages). No words.
 import {
@@ -87,7 +87,7 @@ const nodes: Record<string, SceneNode> = {
       }),
     },
   },
-  // Solid line drawn from you to her once connected.
+  // Solid line drawn from you to the user once connected.
   wire: {
     ...base("wire", { inTick: LINKED, outTick: END, x: 0, y: 0 }),
     type: "path",
@@ -95,9 +95,9 @@ const nodes: Record<string, SceneNode> = {
     style: { stroke: stroke(SAGE, 6) },
     operators: [trim("wire.trim", { end: keyed("wire.end", [[LINKED, 0, OUT], [LINKED + 96, 1, "hold"]]) })],
   },
-  her: disc("her", LX, CORAL, 96),
+  user: disc("user", LX, CORAL, 96),
   you: disc("you", RX, SAGE, 0),
-  // Her JustAsk: the mic from the orb.
+  // The user's JustAsk: the mic from the orb.
   micBody: {
     ...base("micBody", { outTick: END, x: LX, y: CY - 7 }),
     type: "rect",

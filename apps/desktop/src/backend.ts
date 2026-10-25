@@ -85,12 +85,12 @@ export class DesktopBackend {
 
   // ───── accounts ─────
 
-  /** First install: create her account. */
+  /** First install: create the user's account. */
   async createSelf(displayName: string, device: DeviceInfo): Promise<{ token: string }> {
     return this.need().mutation(m("accounts:createSelf"), { displayName, device });
   }
 
-  /** Join her account with a 6-digit code. Null means the code didn't work. Throws on lockout ("Too many tries"). */
+  /** Join the user's account with a 6-digit code. Null means the code didn't work. Throws on lockout ("Too many tries"). */
   async redeemCode(code: string, device: DeviceInfo): Promise<{ token: string; displayName: string } | null> {
     return this.need().mutation(m("devices:redeemCode"), { code: code.trim(), device });
   }

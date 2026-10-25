@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { saveSettings, type Settings } from "../lib/config";
+import { getSettings, saveSettings, type Settings } from "../lib/config";
 import { backend } from "../lib/backend";
 import { friendlyError, seenAgo, spacedCode, type DeviceRow } from "../lib/prefs";
 import { pullPrefs } from "../lib/prefsSync";
@@ -33,11 +33,11 @@ export function SettingsStep({ s, onChange }: { s: Settings; onChange: (s: Setti
 
       <div className="toggles">
         <label className="toggle">
-          <input type="checkbox" checked={s.showMeInstead} onChange={(e) => set({ showMeInstead: e.target.checked })} />
+          <input type="checkbox" checked={!s.showMeInstead} onChange={(e) => set({ showMeInstead: !e.target.checked })} />
           <span>
-            <strong>Show me instead</strong>
+            <strong>Let JustAsk click and type for me</strong>
             <br />
-            <span className="soft">JustAsk shows you where to click instead of doing it.</span>
+            <span className="soft">Off: JustAsk shows you each step and you do the clicking. It can always search the web for you when you say yes.</span>
             {showMeBy === "caregiver" && (
               <>
                 <br />
@@ -62,8 +62,16 @@ export function SettingsStep({ s, onChange }: { s: Settings; onChange: (s: Setti
       <CodeSection
         title="Add another device"
         button="Add another device"
-        explain="Type this code on your other computer or browser. It works for 15 minutes."
+        explain="In JustAsk on your other computer or browser, choose “I have a code” and type these numbers. They work for 15 minutes."
         make={async () => (await backend.createLinkCode()).code}
+      />
+
+      <HaveCode
+        onJoined={async () => {
+          onChange(await saveSettings({ displayName: (await backend.me())?.displayName ?? s.displayName }));
+          onChange(await pullPrefs());
+          await loadMe();
+        }}
       />
 
       <Devices onSelfRemoved={async () => onChange(await saveSettings({ deviceToken: null, displayName: "" }))} />
@@ -77,12 +85,6 @@ export function SettingsStep({ s, onChange }: { s: Settings; onChange: (s: Setti
         make={() => backend.createHelperCode()}
       />
 
-      <HelperCode
-        onJoined={async () => {
-          onChange(await pullPrefs());
-          await loadMe();
-        }}
-      />
     </li>
   );
 }
@@ -201,7 +203,7 @@ function Devices({ onSelfRemoved }: { onSelfRemoved: () => void }) {
   );
 }
 
-/** The helpers who can send her tasks. Stopping one keeps JustAsk working on its own. */
+/** The helpers who can send the user tasks. Stopping one keeps JustAsk working on its own. */
 function Helpers({ helpers, onChanged }: { helpers: Helper[] | null; onChanged: () => Promise<void> }) {
   const [confirming, setConfirming] = useState<string | null>(null);
   const [msg, setMsg] = useState("");
@@ -256,42 +258,82 @@ function Helpers({ helpers, onChanged }: { helpers: Helper[] | null; onChanged: 
 }
 
 /**
- * A code a helper made for her in the helper website. Typed here, on an install that already has her
- * account, the helper joins this account and nothing she set up is lost.
+ * A 6-digit code from the JustAsk desktop app, another computer, or a helper, typed on a browser that
+ * already has an account. It shows whose JustAsk the code belongs to first, then links them into one
+ * account (`devices:redeemCode` with this browser's token): nothing set up here is lost.
  */
-function HelperCode({ onJoined }: { onJoined: () => Promise<void> }) {
+function HaveCode({ onJoined }: { onJoined: () => Promise<void> }) {
   const [code, setCode] = useState("");
   const [msg, setMsg] = useState("");
   const [busy, setBusy] = useState(false);
+  const [owner, setOwner] = useState<string | null>(null);
   const digits = code.replace(/\D/g, "");
-  const submit = async (e: React.FormEvent) => {
+
+  const check = async (e: React.FormEvent) => {
     e.preventDefault();
     if (digits.length !== 6) return;
     setMsg("");
     setBusy(true);
     try {
+      const s = await getSettings();
+      const name = s.convexUrl ? await backend.peekCode(s.convexUrl, digits) : null;
+      if (name) setOwner(name);
+      else setMsg("That code didn't work. Make a new one and try again. Codes last 15 minutes.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const link = async () => {
+    setMsg("");
+    setBusy(true);
+    try {
       const r = await backend.joinWithCode(digits);
-      if (!r) setMsg("That code didn't work. Ask for a new one.");
+      if (!r) setMsg("That code didn't work. Make a new one and try again. Codes last 15 minutes.");
       else {
+        setMsg(`Linked. This browser and ${owner}'s JustAsk are now one.`);
         setCode("");
-        setMsg("Connected. Your helper can now send you tasks.");
         await onJoined();
       }
     } catch (e) {
       setMsg(friendlyError(e));
     } finally {
+      setOwner(null);
       setBusy(false);
     }
   };
+
   return (
-    <section className="sub" aria-label="I have a code from my helper">
-      <h3>I have a code from my helper</h3>
-      <form className="row" onSubmit={submit}>
-        <input inputMode="numeric" maxLength={7} value={code} onChange={(e) => setCode(e.target.value)} placeholder="123456" aria-label="Helper code" autoComplete="one-time-code" />
-        <button className="btn dark" type="submit" disabled={digits.length !== 6 || busy}>
-          Connect
-        </button>
-      </form>
+    <section className="sub" aria-label="I have a code">
+      <h3>I have a code</h3>
+      <p className="soft">From the JustAsk app on your computer, another browser, or your helper.</p>
+      {owner ? (
+        <div className="confirm" role="group" aria-label="Link this browser?">
+          <p>Link this browser to {owner}'s JustAsk? Only say yes if you just asked for this code.</p>
+          <div className="row">
+            <button className="btn primary" onClick={() => void link()} disabled={busy}>
+              Yes, link it
+            </button>
+            <button
+              className="btn outline"
+              onClick={() => {
+                setOwner(null);
+                setCode("");
+              }}
+              disabled={busy}
+            >
+              No
+            </button>
+          </div>
+        </div>
+      ) : (
+        <form className="row" onSubmit={check}>
+          <input inputMode="numeric" maxLength={7} value={code} onChange={(e) => setCode(e.target.value)} placeholder="123456" aria-label="Code" autoComplete="one-time-code" />
+          <button className="btn dark" type="submit" disabled={digits.length !== 6 || busy}>
+            Next
+          </button>
+        </form>
+      )}
       {msg && (
         <p className="soft" role="status">
           {msg}

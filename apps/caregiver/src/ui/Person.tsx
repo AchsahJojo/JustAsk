@@ -440,7 +440,7 @@ function HowItHelps({ seniorId, displayName, showMe, setBy }: { seniorId: Id<"se
         </span>
       </label>
       <p className="muted small">
-        {showMe ? `Off: JustAsk shows ${displayName} where to click, and they do it themselves. ` : ""}
+        {showMe ? `Off (the default): JustAsk shows ${displayName} each step, and they do the clicking. It still searches the web for them when they say yes. ` : ""}
         {setBy === "caregiver" ? `Set by a helper. ${displayName} can change it in Settings.` : setBy === "self" ? `${displayName} chose this. You can change it if it suits them better.` : `${displayName} can change this in Settings.`}
       </p>
       {error && (

@@ -2,7 +2,7 @@
   "id": "gaps-dialog",
   "url": "{FIXTURES}/gaps/dialog",
   "request": "read the news",
-  "note": "A cookie dialog is open; which choice depends on her.",
+  "note": "A cookie dialog is open; which choice depends on the user.",
   "expected": {
     "kind": "clarify",
     "forbidTargetText": [

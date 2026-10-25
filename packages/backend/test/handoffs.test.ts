@@ -5,7 +5,7 @@ import { caregiver, desk, ext, linkDevice, newAccount, setup, type T } from "./h
 beforeEach(() => vi.useFakeTimers());
 afterEach(() => vi.useRealTimers());
 
-/** Her desktop app on pc-1 plus the browser on the same machine (machineId inherited). */
+/** The user's desktop app on pc-1 plus the browser on the same machine (machineId inherited). */
 async function samePc(t: T) {
   const desktop = await newAccount(t, "Margaret", desk("pc-1"));
   const browser = await linkDevice(t, desktop, ext());
@@ -86,7 +86,7 @@ test("cross-senior isolation: another account can't see or claim", async () => {
   expect(await t.mutation(api.handoffs.claim, { token: ruthDesktop, handoffId })).toBeNull();
 });
 
-test("request is clipped, taskId must be hers, recipe is bounded", async () => {
+test("request is clipped, taskId must be theirs, recipe is bounded", async () => {
   const t = setup();
   const { desktop, browser } = await samePc(t);
   await t.mutation(api.handoffs.create, { token: browser, toKind: "desktop", request: "x".repeat(500) });

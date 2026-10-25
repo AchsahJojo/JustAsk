@@ -14,7 +14,7 @@ export function detectPlatform(userAgent: string): DesktopPlatform {
   return /Mac OS X|Macintosh/i.test(userAgent) ? "macos" : "windows";
 }
 
-/** Build the device description sent when this install joins her account. */
+/** Build the device description sent when this install joins the user's account. */
 export function deviceInfo(platform: DesktopPlatform, machineId: string): DeviceInfo {
   return {
     kind: "desktop",

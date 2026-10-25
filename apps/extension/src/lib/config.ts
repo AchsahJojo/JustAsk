@@ -9,7 +9,7 @@ export interface Settings {
   consent: { notifyOnComplete: boolean; notifyOnStuck: boolean };
   voice: "browser" | "cartesia";
   rate: number;
-  /** Synced. When on, JustAsk shows her where to click instead of doing it. */
+  /** Synced. When on, JustAsk shows the user where to click instead of doing it. */
   showMeInstead: boolean;
 }
 
@@ -20,15 +20,26 @@ export const DEFAULTS: Settings = {
   displayName: "",
   setupDone: false,
   consent: { notifyOnComplete: false, notifyOnStuck: false },
-  voice: "browser",
+  voice: "cartesia",
   rate: 0.9,
-  showMeInstead: false,
+  showMeInstead: true,
 };
 
-/** Read settings from storage.local, filled in with defaults. */
+/** Server addresses from the build. They win over saved ones, so a rebuild always takes effect. */
+const BUILT = {
+  plannerUrl: import.meta.env.VITE_PLANNER_URL || "",
+  convexUrl: import.meta.env.VITE_CONVEX_URL || "",
+};
+
+/** Read settings from storage.local, filled in with defaults. A saved address counts only when the build has none. */
 export async function getSettings(): Promise<Settings> {
   const got = (await browser.storage.local.get("settings")) as { settings?: Partial<Settings> };
-  return { ...DEFAULTS, ...(got.settings ?? {}) };
+  const s = { ...DEFAULTS, ...(got.settings ?? {}) };
+  if (BUILT.plannerUrl) s.plannerUrl = BUILT.plannerUrl;
+  if (BUILT.convexUrl) s.convexUrl = BUILT.convexUrl;
+  // Without an account there's no way to opt in to JustAsk clicking: always guide.
+  if (!s.deviceToken) s.showMeInstead = true;
+  return s;
 }
 
 /** Merge a patch into the stored settings and return the result. */

@@ -92,7 +92,7 @@ describe("checkStep: act (drive mode)", () => {
   it("type needs text", () => expect(checkStep({ ...act, target: 3, expect: "type", text: null }, s2).ok).toBe(false));
   it("never types into a sensitive field", () => {
     expect(checkStep({ ...act, target: 4, expect: "type", text: "hunter2" }, s2).ok).toBe(false);
-    expect(checkStep({ ...base, target: 4, expect: "type" }, s2).ok).toBe(true); // guiding her is fine
+    expect(checkStep({ ...base, target: 4, expect: "type" }, s2).ok).toBe(true); // guiding the user is fine
   });
   it("can't hover or pick files", () => expect(checkStep({ ...act, expect: "file" }, s2).ok).toBe(false));
 });
