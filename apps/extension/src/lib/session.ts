@@ -46,6 +46,8 @@ export class SessionHost {
       // Synced "Show me instead": guide every step rather than acting for the user.
       prefs: () => ({ showMeInstead: this.settings?.showMeInstead ?? false }),
       blankTab: () => this.onBlankTab(),
+      // On an empty tab JustAsk asks first; after a yes, the user's words are searched with their default engine.
+      searchWeb: async (request, announce) => (this.sessionTabId === null ? null : this.searchHere(this.sessionTabId, request, announce)),
       store: {
         save: (view, extra) => {
           void browser.storage.session.set({ session: { view, ...extra, tabId: this.sessionTabId } }).catch(() => {});
@@ -103,30 +105,21 @@ export class SessionHost {
       recipe,
       taskId: opts.taskId ?? null,
       sessionId: this.sessionId,
-      prepare: (announce) => this.prepareTab(request, recipe, announce),
+      prepare: () => this.prepareTab(recipe),
     });
   }
 
-  /**
-   * Get the session tab ready before the first scan.
-   * - A caregiver recipe's startUrl opens in the session tab (never a new one).
-   * - On an empty tab (New Tab page, about:blank), the user's words are searched with their default search
-   *   engine, so the user never has to find the right website first.
-   */
-  private async prepareTab(request: string, recipe: Recipe | null, announce: (line: string) => void): Promise<string | null> {
+  /** A caregiver recipe's startUrl opens in the session tab (never a new one) before the first scan. */
+  private async prepareTab(recipe: Recipe | null): Promise<string | null> {
     const tabId = this.sessionTabId;
-    if (tabId === null) return null;
+    if (tabId === null || !recipe?.startUrl) return null;
     const tab = await browser.tabs.get(tabId);
-    if (recipe?.startUrl) {
-      if (!sameUrl(tab.url, recipe.startUrl)) {
-        const loaded = waitForLoad(tabId);
-        await browser.tabs.update(tabId, { url: recipe.startUrl });
-        await loaded;
-      }
-      return null;
+    if (!sameUrl(tab.url, recipe.startUrl)) {
+      const loaded = waitForLoad(tabId);
+      await browser.tabs.update(tabId, { url: recipe.startUrl });
+      await loaded;
     }
-    if (!isBlankTab(tab.url)) return null;
-    return this.searchHere(tabId, request, announce);
+    return null;
   }
 
   /** Search the user's words in this tab and wait for the results. Returns the history note, or null if it couldn't. */

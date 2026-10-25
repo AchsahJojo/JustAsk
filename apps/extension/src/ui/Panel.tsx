@@ -237,7 +237,7 @@ export function Panel({ pinnedTabId }: { pinnedTabId: number | null }) {
               <Orb mode={orbMode} size={phase === "done" ? 132 : 96} />
               <div className="stage-text">
                 {(phase === "guiding" || phase === "acting") && <p className="eyebrow accent">Step {view.stepNo}</p>}
-                {phase === "confirming" && <p className="eyebrow accent">{view.scam ? "Safety check" : "Check first"}</p>}
+                {phase === "confirming" && <p className="eyebrow accent">{view.scam ? "Safety check" : view.offer ? "One question" : "Check first"}</p>}
                 <p ref={captionRef} tabIndex={-1} className={`caption ${phase === "planning" || phase === "verifying" ? "dim" : ""}`} aria-live="assertive">
                   {view.line}
                 </p>
@@ -260,7 +260,18 @@ export function Panel({ pinnedTabId }: { pinnedTabId: number | null }) {
               </div>
             )}
 
-            {phase === "confirming" && !view.scam && (
+            {phase === "confirming" && view.offer === "search" && (
+              <div className="choices">
+                <button className="btn primary huge" onClick={() => void host.controller.searchAnswer(true)}>
+                  Yes, search for me
+                </button>
+                <button className="btn outline huge" onClick={() => void host.controller.searchAnswer(false)}>
+                  No, I'll go to the website myself
+                </button>
+              </div>
+            )}
+
+            {phase === "confirming" && !view.scam && !view.offer && (
               <div className="choices">
                 <button className="btn primary huge" onClick={() => host.controller.confirm(true)}>
                   Yes, go ahead

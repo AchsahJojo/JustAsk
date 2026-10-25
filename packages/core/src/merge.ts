@@ -59,7 +59,7 @@ export function mergeScans(scans: FrameScan[], snapshotId: string, cap = 150): {
     .map((s) => s.snapshot.pageText)
     .filter(Boolean)
     .join("\n");
-  const pageText = [top?.snapshot.pageText ?? "", frameText].filter(Boolean).join("\n").slice(0, 1800);
+  const pageText = [top?.snapshot.pageText ?? "", frameText].filter(Boolean).join("\n").slice(0, 2400);
   return {
     snapshot: {
       snapshotId,

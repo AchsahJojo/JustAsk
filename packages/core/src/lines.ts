@@ -10,7 +10,9 @@ export const WRONG_TYPING = "You're typing in a different box. The one we want h
 export const LOST_LINE = "The page changed. Let me look again.";
 export const SUSPICIOUS_LINE = "This page might be a trick. Let's stop and check with your helper.";
 export const CANT_SEE_PAGE = "I can't see this kind of page. Open a website, then press Try again.";
-export const SEARCH_LINE = "This tab is empty, so I'll look that up for you.";
+export const SEARCH_OFFER = "This tab is empty. Do you want me to search the web for that?";
+export const SEARCH_LINE = "Okay, I'm searching the web for that.";
+export const GO_YOURSELF_LINE = "Okay. Go to the website you want, and I'll help you from there.";
 export const BLANK_TAB_LINE = "This tab is empty. Press Look it up, and I'll search for it.";
 export const searchedNote = (q: string) => `The tab was empty, so JustAsk searched the web for "${q}"`;
 export const NEW_TAB_LINE = "That opened a new tab. I'll keep helping you there.";

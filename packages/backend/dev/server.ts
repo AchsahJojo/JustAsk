@@ -9,16 +9,23 @@ import { makeClient, planStep } from "../lib/planStep";
 import { mockPlan, type MockRule } from "../lib/mockPlanner";
 
 const PORT = Number(process.env.PLANNER_PORT ?? 8787);
-const useClaude = !!process.env.ANTHROPIC_API_KEY && process.env.JUSTASK_MOCK !== "1";
+/**
+ * The scripted mock runs only when asked for (JUSTASK_MOCK=1, as e2e does). Its fallback just picks
+ * the element sharing the most words with the request, which looks like real (bad) guidance on real
+ * sites, so without a key and without JUSTASK_MOCK the planner refuses instead of guessing.
+ */
+const mockMode = process.env.JUSTASK_MOCK === "1";
+const useClaude = !!process.env.ANTHROPIC_API_KEY && !mockMode;
+const mode = useClaude ? "claude" : mockMode ? "mock" : "no-key";
 const scriptPath = process.env.JUSTASK_MOCK_SCRIPT ?? fileURLToPath(new URL("../../../apps/fixtures/mock-script.json", import.meta.url));
-const rules: MockRule[] = useClaude ? [] : JSON.parse(readFileSync(scriptPath, "utf8"));
+const rules: MockRule[] = mockMode ? JSON.parse(readFileSync(scriptPath, "utf8")) : [];
 const client = useClaude ? makeClient(process.env.ANTHROPIC_API_KEY!) : null;
 
 /**
  * Requests received, for e2e assertions (leak test). Mock mode only (what e2e runs), in memory:
  * with Claude, the planner keeps nothing, so real pages never sit behind GET /__received.
  */
-const keepReceived = !useClaude;
+const keepReceived = mockMode;
 const received: string[] = [];
 
 const server = createServer(async (req, res) => {
@@ -26,7 +33,7 @@ const server = createServer(async (req, res) => {
   res.setHeader("Access-Control-Allow-Headers", "content-type, authorization");
   res.setHeader("Access-Control-Allow-Methods", "POST, GET, OPTIONS");
   if (req.method === "OPTIONS") return res.writeHead(204).end();
-  if (req.method === "GET" && req.url === "/health") return res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify({ ok: true, mode: useClaude ? "claude" : "mock" }));
+  if (req.method === "GET" && req.url === "/health") return res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify({ ok: true, mode }));
   if (req.method === "GET" && req.url === "/__received" && keepReceived) return res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify(received));
   if (req.method === "POST" && req.url === "/__reset") {
     received.length = 0;
@@ -45,6 +52,9 @@ const server = createServer(async (req, res) => {
   if (!parsed.success) {
     return res.writeHead(400, { "content-type": "application/json" }).end(JSON.stringify({ ok: false, error: "bad request", retryable: false }));
   }
+  if (mode === "no-key") {
+    return res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify({ ok: false, error: "planner has no ANTHROPIC_API_KEY", retryable: false }));
+  }
   const out = client
     ? await planStep(client, parsed.data, (l) => console.log("[plan]", JSON.stringify(l)))
     : mockPlan(parsed.data, rules);
@@ -52,4 +62,7 @@ const server = createServer(async (req, res) => {
   res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify(out));
 });
 
-server.listen(PORT, () => console.log(`JustAsk dev planner on http://localhost:${PORT} (${useClaude ? "Claude " : "mock"})`));
+server.listen(PORT, () => {
+  console.log(`JustAsk dev planner on http://localhost:${PORT} (${mode})`);
+  if (mode === "no-key") console.error("No ANTHROPIC_API_KEY: every /plan request fails. Set the key, or JUSTASK_MOCK=1 for the scripted test planner.");
+});

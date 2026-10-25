@@ -602,3 +602,45 @@ describe("scam check on the user's request", () => {
     expect(h.c.state.phase).toBe("guiding");
   });
 });
+
+describe("empty tab: ask before searching", () => {
+  function blankHarness() {
+    const h = harness([guide(1)]);
+    const searchWeb = vi.fn(async () => 'The tab was empty, so JustAsk searched the web for "weather"');
+    (h.c as any).deps.blankTab = async () => true;
+    (h.c as any).deps.searchWeb = searchWeb;
+    return { ...h, searchWeb };
+  }
+
+  it("asks first; yes searches the user's words, then guides from the results", async () => {
+    const h = blankHarness();
+    await h.c.start("what's the weather");
+    expect(h.c.state.phase).toBe("confirming");
+    expect(h.c.state.offer).toBe("search");
+    expect(h.spoken.at(-1)).toMatch(/search the web/);
+    expect(h.searchWeb).not.toHaveBeenCalled();
+    expect(h.plans).toHaveLength(0);
+    await h.c.confirm(true); // voice "yes"
+    expect(h.searchWeb).toHaveBeenCalledWith("what's the weather", expect.any(Function));
+    expect(h.plans[0].history).toContain('The tab was empty, so JustAsk searched the web for "weather"');
+    expect(h.c.state.phase).toBe("guiding");
+  });
+
+  it("no: waits for the user to open the website, without searching or planning", async () => {
+    const h = blankHarness();
+    await h.c.start("what's the weather");
+    await h.c.searchAnswer(false);
+    expect(h.searchWeb).not.toHaveBeenCalled();
+    expect(h.plans).toHaveLength(0);
+    expect(h.c.state.phase).toBe("paused");
+    expect(h.c.state.pauseReason).toBe("blank-tab");
+    expect(h.c.state.line).toMatch(/Go to the website you want/);
+  });
+
+  it("a caregiver's start page skips the question", async () => {
+    const h = blankHarness();
+    await h.c.start("refill", { recipe: { startUrl: "https://pharmacy.example/", steps: [] } });
+    expect(h.c.state.offer).toBeNull();
+    expect(h.c.state.phase).toBe("guiding");
+  });
+});

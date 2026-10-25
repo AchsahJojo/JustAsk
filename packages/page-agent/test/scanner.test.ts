@@ -272,3 +272,27 @@ describe("long dropdowns", () => {
     expect(scanJson().scan.snapshot.elements[0].field!.hasValue).toBe(false);
   });
 });
+
+describe("page text (what Claude reads)", () => {
+  it("reads cards built from divs and spans, and leaves link text to the numbered list", () => {
+    document.body.innerHTML = `<main>
+      <div class="card"><div>San Francisco Daily Forecast</div><div><span>Tonight</span><span>49°</span></div><div><span>Sun 25</span><span>69°</span><span>53°</span></div></div>
+      <a href="/x">Weather-inspired Halloween costume ideas</a>
+      <nav><div>Home</div><div>News</div></nav>
+    </main>`;
+    const text = pageText(document);
+    expect(text).toContain("San Francisco Daily Forecast");
+    expect(text).toContain("Tonight");
+    expect(text).toContain("49°");
+    expect(text).toContain("69°");
+    expect(text).not.toContain("Halloween");
+    expect(text).not.toMatch(/^Home$/m);
+  });
+
+  it("never reads typed text: editors, inputs and alerts stay out", () => {
+    document.body.innerHTML = `<main><div contenteditable="true"><span>${SENTINEL}</span></div><input value="${SENTINEL}"><div role="alert">You typed ${SENTINEL}</div><div>Plain words</div></main>`;
+    const text = pageText(document);
+    expect(text).toContain("Plain words");
+    expect(text).not.toContain(SENTINEL);
+  });
+});

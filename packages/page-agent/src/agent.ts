@@ -35,6 +35,8 @@ export class PageAgent {
   private added = new WeakSet<Node>();
   private mo: MutationObserver;
   private lastMutation = 0;
+  /** When this agent started watching the page (a fresh page counts as still changing until then). */
+  private readonly startedAt = Date.now();
   private resolveTimer: ReturnType<typeof setInterval> | null = null;
   private hoverTimer: ReturnType<typeof setTimeout> | null = null;
   private done = false;
@@ -161,6 +163,30 @@ export class PageAgent {
   }
 
   /** Resolves true once the DOM has changed and then stayed quiet for `quietMs`. */
+  /**
+   * Resolve once the page looks finished: loaded, no DOM changes for `quietMs`, and nothing marked
+   * `aria-busy`, or after `maxMs` at most. Results that stream in (search results, prices, a forecast)
+   * are then on the page before it is read. Immediate when the page is already quiet.
+   */
+  settle(quietMs = 700, maxMs = 4000): Promise<void> {
+    const t0 = Date.now();
+    const done = () => {
+      const now = Date.now();
+      const quiet = now - Math.max(this.lastMutation, this.startedAt) >= quietMs;
+      const loaded = this.doc.readyState === "complete";
+      const busy = Array.from(this.doc.querySelectorAll('[aria-busy="true"]')).some((el) => isVisible(el));
+      return (quiet && loaded && !busy) || now - t0 >= maxMs;
+    };
+    if (done()) return Promise.resolve();
+    return new Promise((resolve) => {
+      const iv = setInterval(() => {
+        if (!done()) return;
+        clearInterval(iv);
+        resolve();
+      }, 100);
+    });
+  }
+
   waitForChange(timeoutMs: number, quietMs = 600): Promise<boolean> {
     const startedAt = Date.now();
     const baseline = this.lastMutation;

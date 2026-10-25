@@ -30,7 +30,10 @@ The Convex local backend refuses `"use node"` actions on Node 25. `convex/plan.t
 6. JustAsk now works with no caregiver: with `VITE_CONVEX_URL` set, the extension signs itself up in the background (a device token, no password). To try the caregiver side, run `npm run caregiver` and open `http://localhost:5176`. Create an account, click **Set up JustAsk for someone**, and type the code into setup step 4 ("Connect to a helper"). For a quick seeded pair instead, run `npx convex run devSeed:seed` in `packages/backend` and type the printed `code`. The seed also makes a "Refill your prescription" task with a recipe that starts at `http://localhost:5174/`.
 7. `npm run fixtures`, open `http://localhost:5174/`, click the JustAsk toolbar icon, and press **Start** on the task card.
 
-For offline work without a key: `npm run planner:dev` (mock planner), and leave `VITE_PLANNER_URL=http://localhost:8787`.
+Planner choices for local work:
+- **Recommended:** Convex's own `/plan`, with `ANTHROPIC_API_KEY` set in Convex env. Build the extension with `VITE_PLANNER_URL=http://127.0.0.1:3211` (the local Convex HTTP actions URL). The browser needs a JustAsk account, because `/plan` checks the device token.
+- `npm run planner:dev` on :8787 uses Claude when `ANTHROPIC_API_KEY` is set in that terminal. Without it, every step fails with "planner has no ANTHROPIC_API_KEY". It never quietly guesses.
+- `JUSTASK_MOCK=1 npm run planner:dev` runs the scripted test planner (fixtures only; its fallback just matches words, so it is useless on real sites).
 
 ## 3. Day-one spikes that need a real key (plan §9)
 
@@ -134,7 +137,7 @@ Run these in a real, headed Chrome with the production build (`apps/extension/.o
 
 ## 6. What is already tested (and how to rerun)
 
-- `npm test` — 407 unit tests (including the `convex-test` backend suites): StepResponse schema + validator rules, scanner (numbering, hidden elements, `.value` never used as a label, the **sentinel leak test** across every field type, select options cap, open and closed shadow roots, the modal-only rule, ranking before the 150 cap, duplicate collapse), fingerprint rebinding, click/typing/select/lost observers, the controller loop (multi-step, re-plan then block, risk confirm, suspicious, clarify, frames, wrong click, stop with a late reply, password line), and the `planStep` request shape (beta header, `fallbacks`, effort, schema, caching, no sampling params or `thinking`, refusal and `max_tokens` handling).
+- `npm test` — 420 unit tests (including the `convex-test` backend suites): StepResponse schema + validator rules, scanner (numbering, hidden elements, `.value` never used as a label, the **sentinel leak test** across every field type, select options cap, open and closed shadow roots, the modal-only rule, ranking before the 150 cap, duplicate collapse), fingerprint rebinding, click/typing/select/lost observers, the controller loop (multi-step, re-plan then block, risk confirm, suspicious, clarify, frames, wrong click, stop with a late reply, password line), and the `planStep` request shape (beta header, `fallbacks`, effort, schema, caching, no sampling params or `thinking`, refusal and `max_tokens` handling).
 - `npm run test:e2e` — 15 Puppeteer scenarios (mock planner on :8788, so a dev planner on :8787 never answers them) in Chrome for Testing with the real extension: the full pharmacy refill (4 clicks, wrong click, done), 500 ms rerenders, open + closed shadow roots, same- and cross-origin iframes plus the money confirmation, typing + password + select with the **sentinel leak test against the planner's received requests**, the `<dialog>` modal-only rule, new-tab follow, 1,000 links, `chrome://` pages, the setup page, and the production build (no pre-granted host access). Screenshots land in `e2e/screenshots/`.
 - `CONVEX_CODE=<code> node e2e/run.mjs accounts` — pairing through the setup page against local Convex, the task card, the recipe `startUrl`, a completed task, and the completion note in Convex.
 - `npm run test:convex` — pairing (one use only), device token checks, pending tasks, events closing a task, and the `/plan` HTTP route.

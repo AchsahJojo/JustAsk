@@ -23,7 +23,7 @@ Start with `docs/ARCHITECTURE.md`. The current build plan is `docs/refined-plan-
 
 - `npm test` — unit tests (Vitest + happy-dom)
 - `npm run test:e2e` — builds the extension and runs Puppeteer e2e against the fixtures and the mock planner
-- `npm run planner:dev` — local planner on :8787 (Claude if `ANTHROPIC_API_KEY` is set, else the scripted mock)
+- `npm run planner:dev` — local planner on :8787 with Claude (needs `ANTHROPIC_API_KEY`; without it every step fails rather than guessing). `JUSTASK_MOCK=1` runs the scripted test planner. Simplest: point the extension at Convex's own `/plan` (`VITE_PLANNER_URL=http://127.0.0.1:3211` locally), which uses the key in Convex env.
 - `npm run fixtures` — fixture sites on :5174 and :5175
 - `npm run dev -w @justask/extension` — WXT dev mode
 - `cd packages/backend && npx convex dev` — Convex

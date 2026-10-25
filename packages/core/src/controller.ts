@@ -28,6 +28,8 @@ export interface SessionView {
   actions: number;
   /** Set while JustAsk asks "Did someone ask you to do this?" before a request that looks like a scam. */
   scam: ScamKind | null;
+  /** "search": on an empty tab, JustAsk asks whether to search the web or let the user go to the site. */
+  offer: "search" | null;
 }
 
 export interface PageBridge {
@@ -72,6 +74,11 @@ export interface ControllerDeps {
   prefs?: () => { showMeInstead: boolean };
   /** True when the session tab is empty (New Tab page, about:blank), so a failed scan can offer to look it up. */
   blankTab?: () => Promise<boolean>;
+  /**
+   * Search the user's request on the web in the session tab (their own search engine) and wait for
+   * the results. Returns a history note for Claude, or null if it couldn't. Only after they said yes.
+   */
+  searchWeb?: (request: string, announce: (line: string) => void) => Promise<string | null>;
   /** Ids for snapshots; injectable for tests. */
   newId?: () => string;
   timing?: Partial<typeof DEFAULT_TIMING>;
@@ -111,6 +118,7 @@ const INITIAL: SessionView = {
   guidedSteps: 0,
   actions: 0,
   scam: null,
+  offer: null,
 };
 
 /** What a "yes" in the confirming phase does next. */
@@ -222,7 +230,7 @@ export class SessionController {
 
   /** Restore after the panel or service worker restarts (state came from storage.session). */
   restore(view: SessionView, history: string[], recipe: Recipe | null) {
-    this.view = { ...INITIAL, ...view, guidedSteps: view.guidedSteps ?? view.clicks ?? 0, note: "", scam: view.scam ?? null };
+    this.view = { ...INITIAL, ...view, guidedSteps: view.guidedSteps ?? view.clicks ?? 0, note: "", scam: view.scam ?? null, offer: view.offer ?? null };
     this.history = history;
     this.recipe = recipe;
     for (const fn of this.listeners) fn(this.view);
@@ -289,6 +297,33 @@ export class SessionController {
     return this.begin(this.gen, prepare);
   }
 
+  /**
+   * The user's answer to "search the web for you?" on an empty tab. Yes: search their words, then
+   * guide from the results. No: wait for them to open the site (the tab watcher resumes then).
+   */
+  async searchAnswer(yes: boolean) {
+    if (this.view.phase !== "confirming" || this.view.offer !== "search") return;
+    if (!yes) {
+      this.history.push("The user chose to open the website themselves");
+      this.say(L.GO_YOURSELF_LINE);
+      this.set({ phase: "paused", pauseReason: "blank-tab", line: L.GO_YOURSELF_LINE, note: "", offer: null });
+      return;
+    }
+    const gen = this.bump();
+    this.set({ phase: "planning", line: L.SEARCH_LINE, note: "", offer: null });
+    this.say(L.SEARCH_LINE);
+    let note: string | null = null;
+    try {
+      note = (await this.deps.searchWeb?.(this.view.request, () => {})) ?? null;
+    } catch {
+      note = null;
+    }
+    if (gen !== this.gen) return;
+    if (note) this.history.push(note);
+    this.set({ line: L.FILLER_LINE });
+    await this.plan();
+  }
+
   /** The part of `start` after any scam question: prepare the tab, then plan. */
   private async begin(gen: number, prepare: ((announce: (line: string) => void) => Promise<string | null>) | null) {
     if (prepare) {
@@ -305,8 +340,18 @@ export class SessionController {
       if (gen !== this.gen) return;
       if (note) this.history.push(note);
       if (this.view.line !== L.FILLER_LINE) this.set({ line: L.FILLER_LINE });
-      else this.say(L.FILLER_LINE);
-    } else this.say(L.FILLER_LINE);
+    }
+    // An empty tab with no start page: ask, rather than searching on the user's behalf unasked.
+    if (this.deps.searchWeb && !this.recipe?.startUrl) {
+      const blank = await this.deps.blankTab?.().catch(() => false);
+      if (gen !== this.gen) return;
+      if (blank) {
+        this.say(L.SEARCH_OFFER);
+        this.set({ phase: "confirming", line: L.SEARCH_OFFER, note: "", risk: "none", offer: "search" });
+        return;
+      }
+    }
+    this.say(L.FILLER_LINE);
     await this.plan();
   }
 
@@ -372,6 +417,8 @@ export class SessionController {
   async confirm(yes: boolean) {
     // The scam question is "Did someone ask you to do this?": yes means someone asked.
     if (this.view.phase === "confirming" && this.view.scam) return this.scamAnswer(yes);
+    // "Search the web for you?": yes searches, no lets the user open the site.
+    if (this.view.phase === "confirming" && this.view.offer === "search") return this.searchAnswer(yes);
     if (this.view.phase !== "confirming" || !this.step) return;
     const step = this.step;
     const pending = this.pending ?? "guide";

@@ -42,7 +42,9 @@ export type ToContent =
   | { type: "ja:clear" }
   | { type: "ja:pulse" }
   | { type: "ja:banner"; text: string }
-  | { type: "ja:wait-change"; timeoutMs: number };
+  | { type: "ja:wait-change"; timeoutMs: number }
+  /** Before a scan: resolve once the page has stopped changing (or after `maxMs`). */
+  | { type: "ja:settle"; quietMs: number; maxMs: number };
 
 /** Content script -> panel/background. */
 export type FromContent =

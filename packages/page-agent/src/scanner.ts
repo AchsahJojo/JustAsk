@@ -431,23 +431,60 @@ export function scanDocument(doc: Document, opts: ScanOptions = {}): { elements:
 }
 
 /** Page text for context: headings, paragraphs, list items. Never form values. */
-export function pageText(doc: Document, max = 1400, getShadowRoot?: ShadowGetter): string {
-  const seen = new Set<string>();
-  const out: string[] = [];
+/** Tags whose whole text reads as one piece (a heading, a paragraph, a table cell). */
+const TEXT_BLOCKS = "h1,h2,h3,h4,h5,h6,p,li,label,legend,td,th,dt,dd,caption,figcaption,blockquote";
+/** Never page text: code, hidden templates, and controls (those are in the numbered list already). */
+const NOT_TEXT = "script,style,noscript,template,svg,select,option,textarea,input,button,a,[role=button],[role=link],[role=alert],[role=status]";
+/** Link lists repeat what the numbered list has; skip their loose text. */
+const CHROME = "nav,footer,[role=navigation],[role=contentinfo]";
+
+/** Text nodes directly inside `el` (not its children's), joined. */
+function ownText(el: Element): string {
+  let t = "";
+  for (const n of Array.from(el.childNodes)) if (n.nodeType === Node.TEXT_NODE) t += ` ${n.textContent ?? ""}`;
+  return normalize(t);
+}
+
+/**
+ * What the page says, for Claude to read (a forecast, a price, an answer at the top of search
+ * results), on-screen text first. Any visible text counts, not only headings and paragraphs, because
+ * many sites build cards from divs and spans. Never typed text: editable regions, form controls and
+ * live alert/status messages (which can echo what was typed) are skipped.
+ */
+export function pageText(doc: Document, max = 2000, getShadowRoot?: ShadowGetter): string {
   const root = pickModal(doc, getShadowRoot) ?? doc; // same modal choice as scanDocument
+  const win = doc.defaultView ?? window;
+  const taken = new Set<Element>();
+  const inView: string[] = [];
+  const below: string[] = [];
+  const seen = new Set<string>();
   // Composed: words inside web components (shadow roots) are part of the page the user sees.
-  for (const e of queryAllComposed(root, "h1,h2,h3,p,li,label,legend,[role=alert],[role=status]", getShadowRoot)) {
-    if (!isVisible(e)) continue;
-    if (e.closest("script,style,noscript")) continue;
+  for (const e of queryAllComposed(root, "*", getShadowRoot)) {
+    const block = e.matches(TEXT_BLOCKS);
+    const own = block ? "" : ownText(e);
+    if (!block && !own) continue;
+    if (e.matches(NOT_TEXT) || closestComposed(e, NOT_TEXT)) continue;
     if (insideEditable(e) || isEditableHost(e)) continue; // typed text in editors must never be read
-    if (e.matches("[role=alert], [role=status]") || closestComposed(e, "[role=alert], [role=status]")) continue;
-    const t = normalize(safeText(e));
+    if (!block && closestComposed(e, CHROME)) continue;
+    // Inside a block already taken: its words are in that block's text.
+    let covered = false;
+    for (let p = composedParent(e); p && !covered; p = composedParent(p)) covered = taken.has(p);
+    if (covered) continue;
+    if (!isVisible(e)) continue;
+    const t = (block ? normalize(safeText(e)) : own).slice(0, 200);
+    if (block) taken.add(e);
     if (!t || seen.has(t)) continue;
     seen.add(t);
-    out.push(t.slice(0, 200));
-    if (out.join("\n").length > max) break;
+    (inViewport(e.getBoundingClientRect(), win) ? inView : below).push(t);
   }
-  return out.join("\n").slice(0, max);
+  const out: string[] = [];
+  let len = 0;
+  for (const t of [...inView, ...below]) {
+    if (len + t.length + 1 > max) break;
+    out.push(t);
+    len += t.length + 1;
+  }
+  return out.join("\n");
 }
 
 export function mainHeading(doc: Document, getShadowRoot?: ShadowGetter): string {

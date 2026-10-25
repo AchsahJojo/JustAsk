@@ -58,10 +58,14 @@ A caregiver is optional. When there is one, the caregiver can set JustAsk up for
   - `#justask-link=<code>` asks "Link to Alex's JustAsk?" before linking
 - **Resilience:** survives rerenders (fingerprint rebinding), open and closed shadow roots, same- and cross-origin iframes, new tabs, `<dialog>` modals, late-loading editors (watches until the page settles), and resume after the panel reloads.
 - **Starting from nothing:**
-  - On an empty New Tab page, JustAsk searches the user's words (without "help me" or "please") with their default search engine in that tab, then carries on from the results.
+  - On an empty New Tab page, JustAsk asks "Do you want me to search the web for that?" Yes searches the user's words (without "help me" or "please") with their default search engine in that tab and carries on from the results. No waits until the user opens a site, then carries on.
   - If a session lands on an empty tab, the panel offers **Look it up for me** instead of a dead end.
   - When nothing is on the user's list, the start screen shows example requests.
   - When Chrome opens with tasks waiting, a notification says "You have N things on your list"; clicking it opens the panel.
+- **Accuracy:**
+  - JustAsk waits for a page to finish loading (quiet DOM, nothing `aria-busy`) before reading it.
+  - Page text includes any visible text, so answers shown in cards (a forecast, prices) can be read out directly.
+  - The prompt says: answer from the screen when the answer is there; never pick something just because it shares a word; prefer search or sort over category menus.
 - **Plain wording:** "Ask for something else" (not "Start again"), "Say something" (not "Talk to me"). The done screen says "I did 3 steps for you, and you did 2", and never "0 clicks".
 - **Voice:** JustAsk holds its own spoken lines while the mic is open, so recognition never hears it say "stop" or "again".
 - **Dev only:** "Save snapshot" exports a request for the eval harness.
@@ -121,7 +125,7 @@ A caregiver is optional. When there is one, the caregiver can set JustAsk up for
 ### Tests and tooling
 | Command | What | Status |
 |---|---|---|
-| `npm test` | 407 unit tests (Vitest), including the convex-test backend suites | passing |
+| `npm test` | 420 unit tests (Vitest), including the convex-test backend suites | passing |
 | `npm run test:e2e` | 15 Puppeteer scenarios with the real extension and the mock planner on :8788 | passing |
 | `CONVEX_CODE=… npm run test:e2e` | adds pairing, task card, recipe and completion against local Convex | passing |
 | `npm run test:accounts` | accounts against local Convex (auth, merge, helper codes, Show me instead, task list) | passing |
@@ -312,10 +316,10 @@ Still open:
 ```bash
 npm install
 cd packages/backend && npx convex dev     # local or your dev deployment
-npm run planner:dev                        # :8787 (export ANTHROPIC_API_KEY for Claude)
+cd packages/backend && npx convex env set ANTHROPIC_API_KEY …   # Claude for /plan, kept in Convex
 npm run fixtures                           # :5174 / :5175 test sites
 npm run caregiver                          # :5176 caregiver app
-VITE_PLANNER_URL=http://localhost:8787 VITE_CONVEX_URL=http://127.0.0.1:3210 npm run build -w @justask/extension
+VITE_PLANNER_URL=http://127.0.0.1:3211 VITE_CONVEX_URL=http://127.0.0.1:3210 npm run build -w @justask/extension
 # load apps/extension/.output/chrome-mv3 in chrome://extensions (Developer mode → Load unpacked)
 ```
 

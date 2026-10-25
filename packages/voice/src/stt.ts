@@ -73,6 +73,58 @@ export class TranscriptBuffer {
   }
 }
 
+/** How long the user gets: to start talking, to pause mid-sentence, and in total. */
+export interface TurnLimits {
+  /** Quiet from the moment the mic is live until listening gives up ("I didn't hear anything"). */
+  startMs: number;
+  /** Quiet after speech before the turn is over. Pauses shorter than this never cut the user off. */
+  silenceMs: number;
+  /** Longest single turn. */
+  maxMs: number;
+  /** Microphone level (RMS of float samples) that counts as speech. */
+  threshold: number;
+}
+
+export const DEFAULT_TURN: TurnLimits = { startMs: 3_000, silenceMs: 3_000, maxMs: 30_000, threshold: 0.01 };
+
+/** Root mean square of a block of float samples: its loudness. */
+export function rms(samples: ArrayLike<number>): number {
+  if (!samples.length) return 0;
+  let sum = 0;
+  for (let i = 0; i < samples.length; i++) sum += samples[i] * samples[i];
+  return Math.sqrt(sum / samples.length);
+}
+
+/**
+ * Decides when a press-to-talk turn is over, from what the microphone hears (not from the speech
+ * service, whose own end-of-sentence comes after a short pause). Feed it every audio block.
+ */
+export class TurnTimer {
+  private heardAt: number | null = null;
+
+  constructor(
+    private startedAt: number,
+    private limits: TurnLimits = DEFAULT_TURN,
+  ) {}
+
+  /** Something was heard at `t` (a loud enough block, or words from the speech service). */
+  voice(t: number) {
+    this.heardAt = t;
+  }
+
+  get heard(): boolean {
+    return this.heardAt !== null;
+  }
+
+  /** One audio block at time `t`. Returns why the turn should end now, or null to keep listening. */
+  feed(level: number, t: number): "no-speech" | "finished" | "too-long" | null {
+    if (level >= this.limits.threshold) this.heardAt = t;
+    if (t - this.startedAt >= this.limits.maxMs) return "too-long";
+    if (this.heardAt === null) return t - this.startedAt >= this.limits.startMs ? "no-speech" : null;
+    return t - this.heardAt >= this.limits.silenceMs ? "finished" : null;
+  }
+}
+
 export interface ListenHandlers {
   onInterim: (t: string) => void;
   onFinal: (t: string) => void;
@@ -92,19 +144,24 @@ export interface ListenerOptions {
    * content security policy blocks `blob:` scripts. Default: a blob URL (desktop WebView).
    */
   workletUrl?: string;
-  limits?: { maxMs: number; noSpeechMs: number; closeWaitMs: number };
+  /** Turn timing; defaults to `DEFAULT_TURN` (3 s to start, 3 s of quiet to finish). */
+  turn?: Partial<TurnLimits>;
+  /** How long to wait for the last words after the turn ends. */
+  closeWaitMs?: number;
 }
 
 /** Press-to-talk listener over Cartesia STT. One utterance per `listen`; pressing again finishes it. */
 export class CartesiaListener {
   private active: { finish: () => void; abort: () => void } | null = null;
-  private limits: { maxMs: number; noSpeechMs: number; closeWaitMs: number };
+  private turn: TurnLimits;
+  private closeWaitMs: number;
 
   constructor(
     private tokens: TokenSource,
     private opts: ListenerOptions = {},
   ) {
-    this.limits = opts.limits ?? { maxMs: 15_000, noSpeechMs: 8_000, closeWaitMs: 2_500 };
+    this.turn = { ...DEFAULT_TURN, ...opts.turn };
+    this.closeWaitMs = opts.closeWaitMs ?? 2_500;
   }
 
   static supported(): boolean {
@@ -182,7 +239,7 @@ export class CartesiaListener {
         } catch {
           return deliver();
         }
-        timers.push(setTimeout(deliver, this.limits.closeWaitMs));
+        timers.push(setTimeout(deliver, this.closeWaitMs));
       } else deliver();
     };
     this.active = { finish, abort: () => end({}) };
@@ -228,9 +285,12 @@ export class CartesiaListener {
       if (msg.type === "error") return end({ error: STT_MESSAGES.unavailable });
       if (msg.type === "done") return deliver();
       const text = buf.push(msg);
-      if (text) h.onInterim(text);
-      // ink-whisper finalizes after a pause: one utterance per press.
-      if (msg.type === "transcript" && msg.is_final && buf.text.trim()) finish();
+      if (text) {
+        h.onInterim(text);
+        turn?.voice(Date.now()); // words count as speech, even from a quiet voice
+      }
+      // The turn ends on the user's quiet (TurnTimer), not on the service's end-of-sentence:
+      // a pause to think never cuts them off.
     };
     ws.onerror = () => {
       if (finishing) deliver();
@@ -241,7 +301,8 @@ export class CartesiaListener {
       else if (!ended) end({ error: STT_MESSAGES.unavailable });
     };
 
-    // 4. Audio: 16 kHz mono, ~100 ms chunks of Int16 PCM.
+    // 4. Audio: 16 kHz mono, ~100 ms chunks of Int16 PCM. The turn clock starts when the mic is live.
+    let turn: TurnTimer | null = null;
     try {
       ctx = new AudioContext({ sampleRate: STT_SAMPLE_RATE });
       if (this.opts.workletUrl) await ctx.audioWorklet.addModule(this.opts.workletUrl);
@@ -259,10 +320,15 @@ export class CartesiaListener {
         if (finishing || ended) return;
         for (const s of ev.data) acc.push(s);
         if (acc.length < chunk) return;
-        const pcm = floatToPcm16(Float32Array.from(acc)).buffer as ArrayBuffer;
+        const block = Float32Array.from(acc);
+        const pcm = floatToPcm16(block).buffer as ArrayBuffer;
         acc = [];
+        const now = Date.now();
+        turn ??= new TurnTimer(now, this.turn);
+        const over = turn.feed(rms(block), now);
         if (ws?.readyState === WebSocket.OPEN) ws.send(pcm);
         else if (ws?.readyState === WebSocket.CONNECTING) pending.push(pcm);
+        if (over) finish();
       };
       src.connect(node);
       // Chromium only pulls nodes that reach the destination. The worklet writes no output, so this is silent.
@@ -271,11 +337,7 @@ export class CartesiaListener {
       return end({ error: STT_MESSAGES.unavailable });
     }
 
-    timers.push(setTimeout(finish, this.limits.maxMs));
-    timers.push(
-      setTimeout(() => {
-        if (!buf.text.trim()) finish();
-      }, this.limits.noSpeechMs),
-    );
+    // Backstop if audio blocks stop arriving (a stalled device): never listen forever.
+    timers.push(setTimeout(finish, this.turn.maxMs + this.turn.startMs));
   }
 }

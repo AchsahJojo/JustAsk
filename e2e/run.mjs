@@ -338,6 +338,12 @@ const scenarios = {
       };
     }, SITE);
     await ask(s.panel, "help me refill my prescription please");
+    // JustAsk asks first: search the web, or go to the website yourself.
+    await phase(s.panel, "confirming");
+    await caption(s.panel, /search the web/);
+    assert.deepEqual(await s.panel.evaluate(() => window.__searched), [], "nothing searched before the user says yes");
+    await shot(s.panel, "16a-panel-search-offer");
+    await clickText(s.panel, "Yes, search for me");
     await caption(s.panel, /Click the one that says/, 20000);
     assert.deepEqual(await s.panel.evaluate(() => window.__searched), ["refill my prescription"], "searched the user's words, without the filler");
     assert.match(s.page.url(), /\/gaps\/results/, "in the same tab");
@@ -354,6 +360,17 @@ const scenarios = {
     await caption(s.panel, /Click the one that says/, 20000);
     assert.equal((await s.panel.evaluate(() => window.__searched)).length, 2);
     await closeSession(s);
+
+    // "No, I'll go to the website myself": JustAsk waits, and carries on when a site opens.
+    const s2 = await openSession("/");
+    await s2.page.goto("chrome://newtab");
+    await ask(s2.panel, "help me refill my prescription");
+    await phase(s2.panel, "confirming");
+    await clickText(s2.panel, "No, I'll go to the website myself");
+    await caption(s2.panel, /Go to the website you want/);
+    await s2.page.goto(`${SITE}/`);
+    await caption(s2.panel, /Refill a prescription/, 20000);
+    await closeSession(s2);
   },
 
   async "start screen: example requests; the Cartesia mic explains it needs setup"() {
