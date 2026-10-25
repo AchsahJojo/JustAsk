@@ -85,7 +85,7 @@ export interface TurnLimits {
   threshold: number;
 }
 
-export const DEFAULT_TURN: TurnLimits = { startMs: 3_000, silenceMs: 3_000, maxMs: 30_000, threshold: 0.01 };
+export const DEFAULT_TURN: TurnLimits = { startMs: 3_000, silenceMs: 2_000, maxMs: 30_000, threshold: 0.01 };
 
 /** Root mean square of a block of float samples: its loudness. */
 export function rms(samples: ArrayLike<number>): number {
@@ -146,7 +146,7 @@ export interface ListenerOptions {
    * content security policy blocks `blob:` scripts. Default: a blob URL (desktop WebView).
    */
   workletUrl?: string;
-  /** Turn timing; defaults to `DEFAULT_TURN` (3 s to start, 3 s of quiet to finish). */
+  /** Turn timing; defaults to `DEFAULT_TURN` (3 s to start, 2 s of quiet to finish). */
   turn?: Partial<TurnLimits>;
   /** How long to wait for the last words after the turn ends. */
   closeWaitMs?: number;

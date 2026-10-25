@@ -33,7 +33,7 @@ describe("TranscriptBuffer", () => {
   });
 });
 
-describe("TurnTimer (3 s to start, 3 s of quiet to finish)", () => {
+describe("TurnTimer (3 s to start, 2 s of quiet to finish)", () => {
   const quiet = 0.001;
   const loud = 0.05;
   it("gives the user 3 seconds to start talking", () => {
@@ -41,19 +41,19 @@ describe("TurnTimer (3 s to start, 3 s of quiet to finish)", () => {
     expect(t.feed(quiet, 2_900)).toBeNull();
     expect(t.feed(quiet, 3_000)).toBe("no-speech");
   });
-  it("a pause shorter than 3 seconds never ends the turn; 3 seconds of quiet does", () => {
+  it("a pause shorter than 2 seconds never ends the turn; 2 seconds of quiet does", () => {
     const t = new TurnTimer(0);
     expect(t.feed(loud, 1_000)).toBeNull();
-    expect(t.feed(quiet, 3_500)).toBeNull(); // 2.5 s pause to think
-    expect(t.feed(loud, 3_600)).toBeNull();
-    expect(t.feed(quiet, 6_500)).toBeNull();
-    expect(t.feed(quiet, 6_600)).toBe("finished");
+    expect(t.feed(quiet, 2_900)).toBeNull(); // 1.9 s pause to think
+    expect(t.feed(loud, 3_000)).toBeNull();
+    expect(t.feed(quiet, 4_900)).toBeNull();
+    expect(t.feed(quiet, 5_000)).toBe("finished");
   });
   it("words from the speech service count as talking, even from a quiet voice", () => {
     const t = new TurnTimer(0);
     t.voice(2_500);
     expect(t.feed(quiet, 3_100)).toBeNull();
-    expect(t.feed(quiet, 5_500)).toBe("finished");
+    expect(t.feed(quiet, 4_500)).toBe("finished");
   });
   it("stops a very long turn", () => {
     const t = new TurnTimer(0);
