@@ -33,6 +33,9 @@ export class SessionHost {
   private sessionId: string | null = null;
   private pinnedTabId: number | null;
   private recipe: Recipe | null = null;
+  private readonly planner = new HttpPlanner(() => this.settings?.plannerUrl ?? "http://localhost:8787");
+  /** The search words for the current request, asked for while "search the web?" is on screen. */
+  private queryAhead: { request: string; query: Promise<string | null> } | null = null;
 
   constructor(opts: { pinnedTabId?: number | null } = {}) {
     this.pinnedTabId = opts.pinnedTabId ?? null;
@@ -40,7 +43,7 @@ export class SessionHost {
     this.bridge = new ExtensionBridge(() => this.sessionTabId);
     this.controller = new SessionController({
       bridge: this.bridge,
-      planner: new HttpPlanner(() => this.settings?.plannerUrl ?? "http://localhost:8787"),
+      planner: this.planner,
       speech: this.speech,
       deviceToken: () => this.settings?.deviceToken ?? null,
       // Synced "Show me instead": guide every step rather than acting for the user.
@@ -99,6 +102,8 @@ export class SessionHost {
     this.sessionTabId = await this.activeTabId();
     const recipe = opts.recipe ?? null;
     this.recipe = recipe;
+    // On an empty tab JustAsk will ask "search the web?": get the search words ready meanwhile.
+    this.queryAhead = !recipe?.startUrl && (await this.onBlankTab()) ? { request, query: this.planner.searchQuery(request, this.settings?.deviceToken ?? null) } : null;
     this.sessionId = await backend.startSession(request, opts.taskId ?? null);
     if (opts.taskId) await backend.setTaskStatus(opts.taskId, "active");
     await this.controller.start(request, {
@@ -124,8 +129,11 @@ export class SessionHost {
 
   /** Search the user's words in this tab and wait for the results. Returns the history note, or null if it couldn't. */
   private async searchHere(tabId: number, request: string, announce: (line: string) => void): Promise<string | null> {
-    const q = searchQueryFor(request);
     announce(lines.SEARCH_LINE);
+    // Claude rewrites the request into a proper search; the user's own words (filler removed) if that fails.
+    const ahead = this.queryAhead?.request === request ? this.queryAhead.query : null;
+    this.queryAhead = null;
+    const q = (await (ahead ?? this.planner.searchQuery(request, this.settings?.deviceToken ?? null))) ?? searchQueryFor(request);
     const loaded = waitForLoad(tabId);
     if (!(await searchInTab(tabId, q))) return null;
     await loaded;
@@ -164,8 +172,12 @@ export class SessionHost {
 
   private async onBlankTab(): Promise<boolean> {
     if (this.sessionTabId === null) return false;
-    const tab = await browser.tabs.get(this.sessionTabId).catch(() => null);
-    return !!tab && isBlankTab(tab.url);
+    try {
+      const tab = await browser.tabs.get(this.sessionTabId);
+      return isBlankTab(tab.url);
+    } catch {
+      return false; // the tab is gone (or can't be read): not an empty tab to search in
+    }
   }
 
   /** "Look it up": the session tab is empty, so search the user's request there and keep going. */

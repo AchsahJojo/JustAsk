@@ -46,7 +46,8 @@ export function AccountStep({ s, onChange, linkCode, onLinkDone }: { s: Settings
       const { token } = await backend.createSelf(s.convexUrl, name, currentDevice());
       await connected(token, name);
       // The user's account starts with what they already chose on this browser.
-      await pushPrefs({ voice: s.voice, rate: s.rate, consent: s.consent, showMeInstead: s.showMeInstead });
+      // Show me instead isn't copied: it stays at the default (JustAsk guides) until someone chooses.
+      await pushPrefs({ voice: s.voice, rate: s.rate, consent: s.consent });
     } catch (e) {
       setMsg(friendlyError(e));
     } finally {

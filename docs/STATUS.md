@@ -29,7 +29,8 @@ A caregiver is optional. When there is one, the caregiver can set JustAsk up for
   - voice (Cartesia, listening and speaking) or typed requests
   - the step loop with an orb, spoken captions, Say that again, I'm stuck and Stop
   - a big red Stop while JustAsk acts
-- **Drive mode:**
+- **Guide by default:** JustAsk shows each step and the user clicks. "Let JustAsk click and type for me" (settings) or "Click and type for …" (caregiver app) turns drive mode on. Older accounts where nobody chose are guided.
+- **Drive mode (opt-in):**
   - `act` steps click, type, choose, scroll and submit, each announced first
   - it falls back to guiding for sensitive fields, failed actions and Show me instead
   - it switches to guiding after 3 actions that change nothing
@@ -58,7 +59,7 @@ A caregiver is optional. When there is one, the caregiver can set JustAsk up for
   - `#justask-link=<code>` asks "Link to Alex's JustAsk?" before linking
 - **Resilience:** survives rerenders (fingerprint rebinding), open and closed shadow roots, same- and cross-origin iframes, new tabs, `<dialog>` modals, late-loading editors (watches until the page settles), and resume after the panel reloads.
 - **Starting from nothing:**
-  - On an empty New Tab page, JustAsk asks "Do you want me to search the web for that?" Yes searches the user's words (without "help me" or "please") with their default search engine in that tab and carries on from the results. No waits until the user opens a site, then carries on.
+  - On an empty New Tab page, JustAsk asks "Do you want me to search the web for that?" Yes searches in that tab with their default search engine, using words Claude rewrote from the request ("I want to buy a pink owala on Amazon" becomes "pink owala water bottle amazon"), and carries on from the results. No waits until the user opens a site, then carries on.
   - If a session lands on an empty tab, the panel offers **Look it up for me** instead of a dead end.
   - When nothing is on the user's list, the start screen shows example requests.
   - When Chrome opens with tasks waiting, a notification says "You have N things on your list"; clicking it opens the panel.
@@ -125,7 +126,7 @@ A caregiver is optional. When there is one, the caregiver can set JustAsk up for
 ### Tests and tooling
 | Command | What | Status |
 |---|---|---|
-| `npm test` | 420 unit tests (Vitest), including the convex-test backend suites | passing |
+| `npm test` | 428 unit tests (Vitest), including the convex-test backend suites | passing |
 | `npm run test:e2e` | 15 Puppeteer scenarios with the real extension and the mock planner on :8788 | passing |
 | `CONVEX_CODE=… npm run test:e2e` | adds pairing, task card, recipe and completion against local Convex | passing |
 | `npm run test:accounts` | accounts against local Convex (auth, merge, helper codes, Show me instead, task list) | passing |

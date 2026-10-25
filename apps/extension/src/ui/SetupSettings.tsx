@@ -33,11 +33,11 @@ export function SettingsStep({ s, onChange }: { s: Settings; onChange: (s: Setti
 
       <div className="toggles">
         <label className="toggle">
-          <input type="checkbox" checked={s.showMeInstead} onChange={(e) => set({ showMeInstead: e.target.checked })} />
+          <input type="checkbox" checked={!s.showMeInstead} onChange={(e) => set({ showMeInstead: !e.target.checked })} />
           <span>
-            <strong>Show me instead</strong>
+            <strong>Let JustAsk click and type for me</strong>
             <br />
-            <span className="soft">JustAsk shows you where to click instead of doing it.</span>
+            <span className="soft">Off: JustAsk shows you each step and you do the clicking. It can always search the web for you when you say yes.</span>
             {showMeBy === "caregiver" && (
               <>
                 <br />

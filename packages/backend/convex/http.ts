@@ -1,6 +1,6 @@
 import { httpRouter } from "convex/server";
 import { httpAction } from "./_generated/server";
-import { runPlan } from "./plan";
+import { runPlan, runQuery } from "./plan";
 import { auth } from "./auth";
 
 const http = httpRouter();
@@ -27,6 +27,23 @@ http.route({
 
 http.route({
   path: "/plan",
+  method: "OPTIONS",
+  handler: httpAction(async () => new Response(null, { status: 204, headers: cors })),
+});
+
+http.route({
+  path: "/search-query",
+  method: "POST",
+  handler: httpAction(async (ctx, req) => {
+    const body = await req.text();
+    if (body.length > 4_000) return new Response(JSON.stringify({ ok: false, error: "too large" }), { status: 413, headers: cors });
+    const out = await runQuery(ctx, body);
+    return new Response(JSON.stringify(out), { status: 200, headers: { ...cors, "content-type": "application/json" } });
+  }),
+});
+
+http.route({
+  path: "/search-query",
   method: "OPTIONS",
   handler: httpAction(async () => new Response(null, { status: 204, headers: cors })),
 });

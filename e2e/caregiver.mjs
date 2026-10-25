@@ -162,14 +162,15 @@ try {
   await shot("09-person-done");
   step("consent on: task shows Done, stats appear");
 
-  // How JustAsk helps: the caregiver turns on Show me instead; the user's synced prefs see it.
+  // How JustAsk helps: guiding by default; the caregiver lets JustAsk click; the user's synced prefs see it.
   assert.match(await text(), /can change this in Settings/);
+  assert.equal(await page.evaluate(() => [...document.querySelectorAll("label.check")].find((l) => l.textContent.includes("Click and type for"))?.querySelector("input")?.checked), false, "off by default");
   await page.evaluate(() => [...document.querySelectorAll("label.check")].find((l) => l.textContent.includes("Click and type for"))?.querySelector("input")?.click());
   await waitText("Set by a helper");
-  assert.equal((await senior.query("prefs:get", { token })).showMeInstead, true);
+  assert.equal((await senior.query("prefs:get", { token })).showMeInstead, false);
   assert.equal((await senior.query("devices:me", { token })).showMeSetBy, "caregiver");
   await shot("09b-how-it-helps");
-  step("caregiver turns on Show me instead; the senior's synced prefs reflect it");
+  step("JustAsk guides by default; the caregiver lets it click; the senior's synced prefs reflect it");
 
   // Take back a second task.
   await clickText("New task", "button");

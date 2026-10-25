@@ -27,5 +27,25 @@ export const PlanResponse = z.discriminatedUnion("ok", [
 ]);
 export type PlanResponse = z.infer<typeof PlanResponse>;
 
+/** Body of POST /search-query: turn the user's request into words for a web search. No page data. */
+export const QueryRequest = z.object({
+  deviceToken: z.string().nullable(),
+  request: z.string().min(1).max(500),
+});
+export type QueryRequest = z.infer<typeof QueryRequest>;
+
+export const QueryResponse = z.discriminatedUnion("ok", [
+  z.object({ ok: z.literal(true), query: z.string() }),
+  z.object({ ok: z.literal(false), error: z.string() }),
+]);
+export type QueryResponse = z.infer<typeof QueryResponse>;
+
+/** A usable search query: one line, 1–100 characters. Anything else falls back to the user's own words. */
+export function cleanQuery(q: unknown): string | null {
+  if (typeof q !== "string") return null;
+  const t = q.replace(/[\r\n]+/g, " ").replace(/\s+/g, " ").trim();
+  return t && t.length <= 100 ? t : null;
+}
+
 export const EventType = z.enum(["step_shown", "repeat", "clarify", "stuck", "no_change", "done", "abandoned", "blocked", "scam_check", "scam_stopped"]);
 export type EventType = z.infer<typeof EventType>;

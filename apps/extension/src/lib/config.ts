@@ -22,7 +22,7 @@ export const DEFAULTS: Settings = {
   consent: { notifyOnComplete: false, notifyOnStuck: false },
   voice: "cartesia",
   rate: 0.9,
-  showMeInstead: false,
+  showMeInstead: true,
 };
 
 /** Server addresses from the build. They win over saved ones, so a rebuild always takes effect. */
@@ -37,6 +37,8 @@ export async function getSettings(): Promise<Settings> {
   const s = { ...DEFAULTS, ...(got.settings ?? {}) };
   if (BUILT.plannerUrl) s.plannerUrl = BUILT.plannerUrl;
   if (BUILT.convexUrl) s.convexUrl = BUILT.convexUrl;
+  // Without an account there's no way to opt in to JustAsk clicking: always guide.
+  if (!s.deviceToken) s.showMeInstead = true;
   return s;
 }
 

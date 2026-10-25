@@ -7,6 +7,9 @@ import { fileURLToPath } from "node:url";
 import { PlanRequest } from "@justask/shared";
 import { makeClient, planStep } from "../lib/planStep";
 import { mockPlan, type MockRule } from "../lib/mockPlanner";
+import { searchQuery } from "../lib/searchQuery";
+import { QueryRequest } from "@justask/shared";
+import { searchQueryFor } from "@justask/core";
 
 const PORT = Number(process.env.PLANNER_PORT ?? 8787);
 /**
@@ -42,6 +45,16 @@ const server = createServer(async (req, res) => {
   if (req.method === "POST" && req.url === "/event") {
     for await (const _ of req) void _;
     return res.writeHead(204).end();
+  }
+  if (req.method === "POST" && req.url === "/search-query") {
+    let qbody = "";
+    for await (const chunk of req) qbody += chunk;
+    const q = QueryRequest.safeParse(JSON.parse(qbody || "{}"));
+    if (!q.success) return res.writeHead(400, { "content-type": "application/json" }).end(JSON.stringify({ ok: false, error: "bad request" }));
+    if (mode === "no-key") return res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify({ ok: false, error: "planner has no ANTHROPIC_API_KEY" }));
+    // The mock stands in with the plain filler-stripping, so e2e stays deterministic.
+    const out = client ? await searchQuery(client, q.data.request) : { ok: true, query: searchQueryFor(q.data.request) };
+    return res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify(out));
   }
   if (req.method !== "POST" || req.url !== "/plan") return res.writeHead(404).end();
 

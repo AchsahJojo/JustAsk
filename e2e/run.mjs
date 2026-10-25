@@ -445,10 +445,16 @@ const scenarios = {
     await s.panel.click(".card.task .btn.primary");
     await caption(s.panel, /Refill a prescription/, 15000); // recipe startUrl opened in the session tab
     assert.equal(new URL(s.page.url()).pathname, "/");
-    for (const [text, sel] of [["Refill a prescription"], ["Refill", 'a[aria-label="Refill Lisinopril 10 mg"]'], ["Pick up in store"], ["Send my refill request"]]) {
+    // Each click waits for its step to be shown: JustAsk waits for every page to finish loading first.
+    for (const [shown, text, sel] of [
+      [/Refill a prescription/, "Refill a prescription"],
+      [/Refill button next to Lisinopril/, "Refill", 'a[aria-label="Refill Lisinopril 10 mg"]'],
+      [/Pick up in store/, "Pick up in store"],
+      [/Send my refill request/, "Send my refill request"],
+    ]) {
+      await caption(s.panel, shown, 15000);
       if (sel) await s.page.waitForSelector(sel).then((h) => h.click());
       else await clickText(s.page, text);
-      await sleep(300);
     }
     await phase(s.panel, "done", 20000);
     await closeSession(s);

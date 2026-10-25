@@ -2,10 +2,11 @@
 
 Start with `docs/ARCHITECTURE.md`. The current build plan is `docs/refined-plan-2.md`. Where things stand (built, missing, open questions): `docs/STATUS.md`.
 
-- **Drive mode, with safety limits.** JustAsk clicks, types, chooses, scrolls and submits for the user: one numbered action per step, announced and highlighted first, and Stop always works.
+- **Guide by default.** JustAsk shows each step (highlight + one spoken line) and the user does the clicking and typing (`showMeInstead` defaults to true). The one thing it does on its own is a web search on an empty tab, after the user says yes.
+- **Drive mode is opt-in** ("Let JustAsk click and type for me", set by the user or a linked caregiver), with safety limits: one numbered action per step, announced and highlighted first, and Stop always works.
   - It **never types into, stores or reads `sensitive` fields** (passwords, one-time codes, card numbers or CVV, SSN, bank fields). For those it guides the user instead.
   - `money` / `account_change` / `personal_info` steps ask first. `suspicious` blocks.
-  - Never navigate to a URL that Claude produced. Only the recipe's `startUrl`, links on the page, or (on an empty tab) a search for the user's own words with their default search engine (`chrome.search`).
+  - Never navigate to a URL that Claude produced. Only the recipe's `startUrl`, links on the page, or (on an empty tab, after a yes) a web search with their default search engine (`chrome.search`). The search words come from `/search-query`: Claude rewrites the user's request (only their words, never a page); if that fails, the request minus filler words.
   - The `sensitive` classification and these gates are deterministic code, never left to Claude.
   - **Scam check** (`packages/core/src/scam.ts`): a request that looks like a common scam gets one plain question before anything happens. The user's answer decides. It never shames them, and nothing they said leaves the device. Plan: `docs/STATUS.md` §5.
 - Claude returns an element **number** for the current `snapshotId`, never a selector.

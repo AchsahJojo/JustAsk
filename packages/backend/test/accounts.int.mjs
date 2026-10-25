@@ -206,23 +206,23 @@ ok("activity mark-all-read");
   ok("task list: started task stays open after closing; I did it → done + note; removed tasks leave");
 }
 
-// --- Show me instead: the user or a linked caregiver can change it; the caregiver's choice carries over ---
+// --- Show me instead: on by default (JustAsk guides); the user or a linked caregiver can change it ---
 {
   const jo = await caregiver("Jo");
   const { seniorId, code } = await jo.c.mutation("devices:createSeniorWithCode", { name: "Ruth Ng", displayName: "Gran", relation: "Grandmother" });
-  await jo.c.mutation("people:setShowMe", { seniorId, on: true }); // set while setting up, before the user connects
+  await jo.c.mutation("people:setShowMe", { seniorId, on: false }); // the caregiver lets JustAsk click, before the user connects
   const { token: solo3 } = await createSelf("Ruth");
-  assert.equal((await anon.query("prefs:get", { token: solo3 })).showMeInstead, false, "drive mode by default");
+  assert.equal((await anon.query("prefs:get", { token: solo3 })).showMeInstead, true, "JustAsk guides by default");
   assert.ok(await anon.mutation("devices:redeemCode", { code, token: solo3 }));
-  assert.equal((await anon.query("prefs:get", { token: solo3 })).showMeInstead, true, "caregiver's choice carries over on merge");
+  assert.equal((await anon.query("prefs:get", { token: solo3 })).showMeInstead, false, "caregiver's choice carries over on merge");
   assert.equal((await anon.query("devices:me", { token: solo3 })).showMeSetBy, "caregiver");
-  await anon.mutation("prefs:set", { token: solo3, showMeInstead: false });
+  await anon.mutation("prefs:set", { token: solo3, showMeInstead: true });
   const id = (await jo.c.query("people:list", {}))[0].id;
   const p = await jo.c.query("people:get", { seniorId: id });
-  assert.deepEqual([p.showMeInstead, p.showMeSetBy], [false, "self"]);
+  assert.deepEqual([p.showMeInstead, p.showMeSetBy], [true, "self"]);
   const other = await caregiver("Stranger");
   await assert.rejects(other.c.mutation("people:setShowMe", { seniorId: id, on: true }), /not your senior/);
-  ok("show me instead: off by default, caregiver choice carries over, the user can change it, strangers can't");
+  ok("show me instead: on by default, caregiver choice carries over, the user can change it, strangers can't");
 }
 
 // --- The user shares a helper code from the user's Settings; the caregiver types it in the web app ---
