@@ -8,6 +8,8 @@ export function Ask({ host, hs }: { host: DesktopHost; hs: HostState }) {
   const [view, setView] = useState<SessionView>(host.controller.state);
   const [speaking, setSpeaking] = useState(false);
   const [listening, setListening] = useState(false);
+  /** The mic is recording (a moment after the press). Only then does the button say "I'm listening". */
+  const [micReady, setMicReady] = useState(false);
   const [heard, setHeard] = useState("");
   const [note, setNote] = useState("");
   const [typed, setTyped] = useState("");
@@ -17,6 +19,8 @@ export function Ask({ host, hs }: { host: DesktopHost; hs: HostState }) {
 
   useEffect(() => {
     host.speech.onSpeaking = setSpeaking;
+    // Get the voice token now, so pressing the mic starts listening without a network wait.
+    void host.voiceTokens.get().catch(() => {});
     return host.controller.subscribe(setView);
   }, [host]);
 
@@ -40,7 +44,9 @@ export function Ask({ host, hs }: { host: DesktopHost; hs: HostState }) {
     // The mic never hears JustAsk: lines wait until the user stops talking.
     host.speech.hold(true);
     let said = false;
+    setMicReady(false);
     void host.listener.listen({
+      onReady: () => setMicReady(true),
       onInterim: (t) => {
         if (t.trim()) said = true;
         setHeard(t);
@@ -56,6 +62,7 @@ export function Ask({ host, hs }: { host: DesktopHost; hs: HostState }) {
       onEnd: () => {
         host.speech.hold(false, said);
         setListening(false);
+        setMicReady(false);
       },
     });
   };
@@ -107,7 +114,7 @@ export function Ask({ host, hs }: { host: DesktopHost; hs: HostState }) {
               aria-label={listening ? "Listening. Press to stop." : "Press and tell me what you want to do"}
             >
               <Orb mode={orbMode} size={200} />
-              <span className="ask-label">{listening ? "I'm listening… Press when you're done." : "Press and tell me what you want to do"}</span>
+              <span className="ask-label">{listening ? (micReady ? "I'm listening… Press when you're done." : "One moment…") : "Press and tell me what you want to do"}</span>
             </button>
             {heard && <p className="heard">“{heard}”</p>}
           </>
@@ -231,7 +238,7 @@ export function Ask({ host, hs }: { host: DesktopHost; hs: HostState }) {
               </button>
               <div className="row">
                 <button className={`btn soft-btn grow ${listening ? "is-listening" : ""}`} onClick={() => talk((t) => void host.controller.input(t))}>
-                  {listening ? "Listening…" : phase === "asking" ? "Answer out loud" : "Talk to me"}
+                  {listening ? (micReady ? "Listening…" : "One moment…") : phase === "asking" ? "Answer out loud" : "Say something"}
                 </button>
                 <button className="btn soft-btn" onClick={() => void host.controller.stuck()}>
                   I'm stuck

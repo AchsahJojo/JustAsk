@@ -126,6 +126,8 @@ export class TurnTimer {
 }
 
 export interface ListenHandlers {
+  /** The microphone is live and recording (audio is kept from here on, even before Cartesia connects). */
+  onReady?: () => void;
   onInterim: (t: string) => void;
   onFinal: (t: string) => void;
   onError: (msg: string) => void;
@@ -240,22 +242,21 @@ export class CartesiaListener {
           return deliver();
         }
         timers.push(setTimeout(deliver, this.closeWaitMs));
+      } else if (pending.length && (!ws || ws.readyState === WebSocket.CONNECTING)) {
+        // Spoke before the socket was up: the buffered audio goes out when it opens (see onopen).
+        timers.push(setTimeout(deliver, this.closeWaitMs + 5_000));
       } else deliver();
     };
     this.active = { finish, abort: () => end({}) };
 
-    // 1. Token from Convex.
-    let token: string | null = null;
-    let noAccount = false;
-    try {
-      token = await this.tokens.get();
-    } catch (e) {
-      noAccount = (e as Error)?.message === NO_ACCOUNT;
-    }
-    if (ended) return;
-    if (!token) return end({ error: noAccount ? STT_MESSAGES.noAccount : STT_MESSAGES.unavailable });
+    // 1. Token: asked for now, alongside the microphone (usually cached already), never before it.
+    const tokenP = this.tokens.get().then(
+      (token) => ({ token, noAccount: false }),
+      (e: unknown) => ({ token: null as string | null, noAccount: (e as Error)?.message === NO_ACCOUNT }),
+    );
 
-    // 2. Microphone.
+    // 2. Microphone and audio straight away: capture starts with the click. Until the socket is
+    //    open, blocks wait in `pending`, so the start of a sentence is never lost.
     try {
       stream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true } });
     } catch (e) {
@@ -264,7 +265,47 @@ export class CartesiaListener {
     }
     if (ended) return stopMic();
 
-    // 3. Socket.
+    // 16 kHz mono, ~100 ms blocks of Int16 PCM. The turn clock starts when the mic is live.
+    let turn: TurnTimer | null = null;
+    try {
+      ctx = new AudioContext({ sampleRate: STT_SAMPLE_RATE });
+      if (this.opts.workletUrl) await ctx.audioWorklet.addModule(this.opts.workletUrl);
+      else {
+        const url = URL.createObjectURL(new Blob([PCM_WORKLET_SOURCE], { type: "application/javascript" }));
+        await ctx.audioWorklet.addModule(url);
+        URL.revokeObjectURL(url);
+      }
+      if (ended || !ctx || !stream) return;
+      const src = ctx.createMediaStreamSource(stream);
+      const node = new AudioWorkletNode(ctx, "ja-pcm");
+      const chunk = Math.round(ctx.sampleRate / 10);
+      let acc: number[] = [];
+      node.port.onmessage = (ev: MessageEvent<Float32Array>) => {
+        if (finishing || ended) return;
+        for (const s of ev.data) acc.push(s);
+        if (acc.length < chunk) return;
+        const block = Float32Array.from(acc);
+        const pcm = floatToPcm16(block).buffer as ArrayBuffer;
+        acc = [];
+        const now = Date.now();
+        turn ??= new TurnTimer(now, this.turn);
+        const over = turn.feed(rms(block), now);
+        if (ws?.readyState === WebSocket.OPEN) ws.send(pcm);
+        else pending.push(pcm);
+        if (over) finish();
+      };
+      src.connect(node);
+      // Chromium only pulls nodes that reach the destination. The worklet writes no output, so this is silent.
+      node.connect(ctx.destination);
+    } catch {
+      return end({ error: STT_MESSAGES.unavailable });
+    }
+    h.onReady?.();
+
+    // 3. Socket, once the token is here. Buffered audio goes first.
+    const { token, noAccount } = await tokenP;
+    if (ended) return;
+    if (!token) return end({ error: noAccount ? STT_MESSAGES.noAccount : STT_MESSAGES.unavailable });
     try {
       ws = new WebSocket(sttUrl(token));
       ws.binaryType = "arraybuffer";
@@ -272,7 +313,15 @@ export class CartesiaListener {
       return end({ error: STT_MESSAGES.unavailable });
     }
     ws.onopen = () => {
-      for (const chunk of pending.splice(0)) ws?.send(chunk);
+      for (const block of pending.splice(0)) ws?.send(block);
+      if (finishing) {
+        try {
+          ws?.send("close");
+        } catch {
+          return deliver();
+        }
+        timers.push(setTimeout(deliver, this.closeWaitMs));
+      }
     };
     ws.onmessage = (ev) => {
       if (typeof ev.data !== "string") return;
@@ -300,42 +349,6 @@ export class CartesiaListener {
       if (finishing) deliver();
       else if (!ended) end({ error: STT_MESSAGES.unavailable });
     };
-
-    // 4. Audio: 16 kHz mono, ~100 ms chunks of Int16 PCM. The turn clock starts when the mic is live.
-    let turn: TurnTimer | null = null;
-    try {
-      ctx = new AudioContext({ sampleRate: STT_SAMPLE_RATE });
-      if (this.opts.workletUrl) await ctx.audioWorklet.addModule(this.opts.workletUrl);
-      else {
-        const url = URL.createObjectURL(new Blob([PCM_WORKLET_SOURCE], { type: "application/javascript" }));
-        await ctx.audioWorklet.addModule(url);
-        URL.revokeObjectURL(url);
-      }
-      if (ended || !ctx || !stream) return;
-      const src = ctx.createMediaStreamSource(stream);
-      const node = new AudioWorkletNode(ctx, "ja-pcm");
-      const chunk = Math.round(ctx.sampleRate / 10);
-      let acc: number[] = [];
-      node.port.onmessage = (ev: MessageEvent<Float32Array>) => {
-        if (finishing || ended) return;
-        for (const s of ev.data) acc.push(s);
-        if (acc.length < chunk) return;
-        const block = Float32Array.from(acc);
-        const pcm = floatToPcm16(block).buffer as ArrayBuffer;
-        acc = [];
-        const now = Date.now();
-        turn ??= new TurnTimer(now, this.turn);
-        const over = turn.feed(rms(block), now);
-        if (ws?.readyState === WebSocket.OPEN) ws.send(pcm);
-        else if (ws?.readyState === WebSocket.CONNECTING) pending.push(pcm);
-        if (over) finish();
-      };
-      src.connect(node);
-      // Chromium only pulls nodes that reach the destination. The worklet writes no output, so this is silent.
-      node.connect(ctx.destination);
-    } catch {
-      return end({ error: STT_MESSAGES.unavailable });
-    }
 
     // Backstop if audio blocks stop arriving (a stalled device): never listen forever.
     timers.push(setTimeout(finish, this.turn.maxMs + this.turn.startMs));

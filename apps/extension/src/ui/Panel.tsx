@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { browser } from "wxt/browser";
 import type { SessionView } from "@justask/core";
 import { SessionHost } from "../lib/session";
-import { newListener } from "../lib/speech";
+import { newListener, voiceTokens } from "../lib/speech";
 import { backend, type PendingTask, type Task, type TaskList } from "../lib/backend";
 import { getSettings } from "../lib/config";
 import { pullPrefs } from "../lib/prefsSync";
@@ -25,6 +25,8 @@ export function Panel({ pinnedTabId }: { pinnedTabId: number | null }) {
   const [view, setView] = useState<SessionView>(host.controller.state);
   const [speaking, setSpeaking] = useState(false);
   const [listening, setListening] = useState(false);
+  /** The mic is recording (a moment after the press). Only then does the button say "I'm listening". */
+  const [micReady, setMicReady] = useState(false);
   const [heard, setHeard] = useState("");
   const [note, setNote] = useState("");
   const [typed, setTyped] = useState("");
@@ -56,6 +58,8 @@ export function Panel({ pinnedTabId }: { pinnedTabId: number | null }) {
     });
     void getSettings().then((s) => setName(s.displayName));
     void backend.heartbeat();
+    // Get the voice token now, so pressing the mic starts listening without a network wait.
+    void voiceTokens.get().catch(() => {});
     void pullPrefs();
     void browser.storage.local.get("resume").then((r) => {
       const res = (r as { resume?: { request: string; taskId: string | null } }).resume;
@@ -81,7 +85,9 @@ export function Panel({ pinnedTabId }: { pinnedTabId: number | null }) {
     // The mic never hears JustAsk: lines wait until the user stops talking.
     host.speech.hold(true);
     let said = false;
+    setMicReady(false);
     void listener.listen({
+      onReady: () => setMicReady(true),
       onInterim: (t) => {
         if (t.trim()) said = true;
         setHeard(t);
@@ -94,6 +100,7 @@ export function Panel({ pinnedTabId }: { pinnedTabId: number | null }) {
       onEnd: () => {
         host.speech.hold(false, said);
         setListening(false);
+        setMicReady(false);
       },
     });
     if (!listener.listening) host.speech.hold(false);
@@ -197,7 +204,7 @@ export function Panel({ pinnedTabId }: { pinnedTabId: number | null }) {
 
             <button className={`ask ${listening ? "is-listening" : ""}`} onClick={() => talk((t) => start(t))} aria-label={listening ? "Listening. Press to stop." : "Press and tell me what you want to do"}>
               <Orb mode={orbMode} size={200} />
-              <span className="ask-label">{listening ? "I'm listening…" : "Press and tell me what you want to do"}</span>
+              <span className="ask-label">{listening ? (micReady ? "I'm listening…" : "One moment…") : "Press and tell me what you want to do"}</span>
             </button>
             {heard && <p className="heard">“{heard}”</p>}
 
@@ -356,7 +363,7 @@ export function Panel({ pinnedTabId }: { pinnedTabId: number | null }) {
               </button>
               <div className="row">
                 <button className={`btn soft-btn grow ${listening ? "is-listening" : ""}`} onClick={() => talk((t) => void host.controller.input(t))}>
-                  {listening ? "Listening…" : phase === "asking" ? "Answer out loud" : "Say something"}
+                  {listening ? (micReady ? "Listening…" : "One moment…") : phase === "asking" ? "Answer out loud" : "Say something"}
                 </button>
                 <button className="btn soft-btn" onClick={() => host.controller.stuck()}>
                   I'm stuck
