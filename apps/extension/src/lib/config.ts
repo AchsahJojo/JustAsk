@@ -25,10 +25,19 @@ export const DEFAULTS: Settings = {
   showMeInstead: false,
 };
 
-/** Read settings from storage.local, filled in with defaults. */
+/** Server addresses from the build. They win over saved ones, so a rebuild always takes effect. */
+const BUILT = {
+  plannerUrl: import.meta.env.VITE_PLANNER_URL || "",
+  convexUrl: import.meta.env.VITE_CONVEX_URL || "",
+};
+
+/** Read settings from storage.local, filled in with defaults. A saved address counts only when the build has none. */
 export async function getSettings(): Promise<Settings> {
   const got = (await browser.storage.local.get("settings")) as { settings?: Partial<Settings> };
-  return { ...DEFAULTS, ...(got.settings ?? {}) };
+  const s = { ...DEFAULTS, ...(got.settings ?? {}) };
+  if (BUILT.plannerUrl) s.plannerUrl = BUILT.plannerUrl;
+  if (BUILT.convexUrl) s.convexUrl = BUILT.convexUrl;
+  return s;
 }
 
 /** Merge a patch into the stored settings and return the result. */
