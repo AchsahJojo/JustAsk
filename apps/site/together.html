@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Use them together: JustAsk</title>
+<meta name="description" content="The lesson: pair the JustAsk extension with the caregiver app, send a task, and watch it finish.">
+<meta property="og:title" content="Use them together: JustAsk">
+<meta property="og:description" content="The lesson: pair the JustAsk extension with the caregiver app, send a task, and watch it finish.">
+<meta name="theme-color" content="#fbf8f2">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Newsreader:opsz,wght@6..72,400;6..72,500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<header class="top"><div class="wrap">
+<a class="brand" href="/"><svg viewBox="0 0 32 32" aria-hidden="true"><rect x="3" y="3" width="26" height="26" rx="9" fill="none" stroke="#f0a032" stroke-width="2.4"/><rect x="9" y="12" width="14" height="8" rx="4" fill="#1b1a17"/></svg>JustAsk</a>
+<nav class="nav" aria-label="Main"><a href="/why">Why</a><a href="/together" aria-current=page>Use them together</a><a href="/get">Get JustAsk</a><a class="btn secondary" href="/help">I help someone</a></nav>
+</div></header>
+<main id="main">
+
+<section class="hero" style="padding-bottom:56px"><div class="wrap" style="display:block">
+<p class="eyebrow">The lesson</p>
+<h1 class="measure" style="max-width:860px">Use the extension and the caregiver app together.</h1>
+<p class="lede measure">Two people, two computers, one task. Follow these five steps in order.</p>
+</div></section>
+
+<section style="padding-top:20px"><div class="wrap measure">
+<ol class="lesson">
+<li><div><span class="who">The helper</span><h3>Open the caregiver app and create her profile.</h3><p>Sign in at the caregiver app, add the person you help, and read the 6-digit code it shows.</p><p style="margin-top:14px"><a class="btn secondary" href="https://justask-caregiver.vercel.app">Open the caregiver app <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 4h8v8M16 4l-9 9M13 16H4V7"/></svg></a></p></div></li>
+<li><div><span class="who">On her computer</span><h3>Load the extension, turn it on, and enter the code.</h3><p>Load JustAsk into Chrome (<a href="/get">the steps are here</a>), press Turn JustAsk on, and type the helper’s code in Settings.</p></div></li>
+<li><div><span class="who">The helper</span><h3>Send a task.</h3><p>For example: “Refill a prescription.”</p></div></li>
+<li><div><span class="who">On her computer</span><h3>Open JustAsk and press Start.</h3><p>The glowing box and the spoken line take it from there, one step at a time.</p></div></li>
+<li><div><span class="who">The helper</span><h3>Watch it change: Connected, then Done.</h3><p>The caregiver app updates live, without refreshing.</p></div></li>
+</ol>
+</div></section>
+
+<section><div class="wrap">
+<p class="eyebrow">Where this website stops</p>
+<h2 class="measure">This site’s job ends at the links.</h2>
+<p class="measure muted">Everything after happens in the real apps. Chrome setup, the side panel, scanning, and planning live in the extension. Sign-in, the 6-digit code, tasks, and the live Connected pill live in the caregiver app, talking to Convex. This page never sees the page she is on, the code, or the task.</p>
+<div class="flow" role="img" aria-label="Diagram: this teaching site links to the extension setup steps and to the caregiver app. Both the extension and the caregiver app talk to Convex. The site does not.">
+<div class="node site"><b>This teaching site</b><small>static pages and links</small></div>
+<div class="boundary"></div>
+<div class="edge e1 r1" style="grid-column:3">“Load unpacked” steps</div>
+<div class="node r1" style="grid-column:5"><b>Built extension in Chrome</b><small>side panel, scanner, planner</small></div>
+<div class="edge r1" style="grid-column:6"></div>
+<div class="edge e2 r2" style="grid-column:3">“I help someone”</div>
+<div class="node r2" style="grid-column:5"><b>Caregiver app</b><small>on its own URL</small></div>
+<div class="edge r2" style="grid-column:6"></div>
+<div class="node convex"><b>Convex</b><small>accounts, pairing, tasks</small></div>
+</div>
+<p class="boundary-note"><span></span>Past this line, the website is out of the picture.</p>
+</div></section>
+
+</main>
+<footer><div class="wrap">
+<p class="tag">Less <span class="q">“where do I click?”</span><br>More “I did it.”</p>
+<div class="foot">
+<span>JustAsk is a Chrome extension and a caregiver site.</span>
+<a href="https://github.com/AchsahJojo/JustAsk">Source on GitHub</a>
+<span>This teaching site was built and deployed with Mana.</span>
+</div>
+</div></footer>
+</body>
+</html>

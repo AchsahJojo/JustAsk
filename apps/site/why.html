@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Why JustAsk</title>
+<meta name="description" content="Mission, vision, and what the AI in JustAsk actually is.">
+<meta property="og:title" content="Why JustAsk">
+<meta property="og:description" content="Mission, vision, and what the AI in JustAsk actually is.">
+<meta name="theme-color" content="#fbf8f2">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Newsreader:opsz,wght@6..72,400;6..72,500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<header class="top"><div class="wrap">
+<a class="brand" href="/"><svg viewBox="0 0 32 32" aria-hidden="true"><rect x="3" y="3" width="26" height="26" rx="9" fill="none" stroke="#f0a032" stroke-width="2.4"/><rect x="9" y="12" width="14" height="8" rx="4" fill="#1b1a17"/></svg>JustAsk</a>
+<nav class="nav" aria-label="Main"><a href="/why" aria-current=page>Why</a><a href="/together">Use them together</a><a href="/get">Get JustAsk</a><a class="btn secondary" href="/help">I help someone</a></nav>
+</div></header>
+<main id="main">
+
+<section class="hero" style="padding-bottom:56px"><div class="wrap" style="display:block">
+<p class="eyebrow">Why JustAsk</p>
+<h1 class="measure" style="max-width:820px">Help should arrive the moment it’s needed.</h1>
+</div></section>
+
+<section><div class="wrap measure">
+<h2>Mission</h2>
+<p><em class="k">Seamless</em> access to everyday technology should not depend on how old you are, or on whether family is in the room. As AI becomes part of daily life, younger people absorb the next interface. Older adults are left waiting.</p>
+<p>JustAsk is there the moment they need help, including when family is away and there is no class, no IT desk, and no video to watch first.</p>
+<h2 style="margin-top:48px">Vision</h2>
+<p>An older adult, especially in a community where family is not nearby, can finish the task in front of her when it matters. She says what she needs. JustAsk shows the next step in a way she can see and hear, or it does the safe step for her.</p>
+<p>She stops having to hand every immediate task to someone else.</p>
+<h2 style="margin-top:48px">Who it’s for</h2>
+<p>Someone who is capable of the task but stuck on the next click, at the moment it is urgent: when the family member who usually helps is at work, in another city, or asleep in another time zone.</p>
+</div></section>
+
+<section><div class="wrap">
+<p class="eyebrow">The next click is urgent</p>
+<h2 class="measure">The same hour can bring any of these.</h2>
+<ul class="tasks">
+<li>Signing up for, or signing in to, a patient portal</li>
+<li>Joining a video visit with a doctor</li>
+<li>Reading a test result</li>
+<li>Refilling a prescription</li>
+<li>Making the email account a benefits site requires</li>
+<li>Filling out a form, or uploading a document</li>
+<li>A browser video call with family on Zoom or Meet</li>
+<li>Telling whether a page is a scam</li>
+</ul>
+<div class="stats"><div class="stat"><div class="big">36%<small> · 32%</small></div><p class="what">asked for help setting up a patient portal account (36%) and signing in (32%), the two most requested kinds of help.</p><p class="src">Women 65+ asking for help with a patient portal. <a href="https://pmc.ncbi.nlm.nih.gov/articles/PMC9277451/">PMC9277451</a></p></div><div class="stat"><div class="big">92%<small> · 77%</small></div><p class="what">feel confident making a telehealth video call: 92% at ages 50–64, 77% at 65 and older.</p><p class="src">U.S. adults, by age group, reported separately. AARP / NORC, 2026.</p></div><div class="stat"><div class="big">71%</div><p class="what">want tech support designed for older adults.</p><p class="src">U.S. adults 50+. AARP, 2025.</p></div></div>
+</div></section>
+
+<section><div class="wrap">
+<p class="eyebrow">The size of the harm</p>
+<h2 class="measure">Scams find people at exactly this moment.</h2>
+<p class="measure muted">JustAsk’s safety rules block a page that looks like a scam. That is a guardrail on the help it gives, not a promise to stop fraud.</p>
+<div class="stats"><div class="stat"><div class="big">$7.748B</div><p class="what">reported lost by people 60+ in 2025, across all elder-fraud complaints.</p><p class="src">People 60+, all elder-fraud complaints reported to the FBI. FBI IC3, 2025 Elder Fraud Report.</p></div><div class="stat"><div class="big">$1.04B</div><p class="what">of those losses came from tech and customer-support scams: fake help desks and pop-ups.</p><p class="src">People 60+, tech and customer-support scams only. FBI IC3, 2025 Elder Fraud Report.</p></div></div>
+</div></section>
+
+<section><div class="wrap">
+<p class="eyebrow">What she can ask</p>
+<h2>Plain words, on the site she already has open.</h2>
+<ul class="asks"><li>“Help me sign in.”</li><li>“Help me refill my prescription.”</li><li>“Help me join the video visit.”</li><li>“Help me send this email.”</li><li>“Help me fill out this form.”</li></ul>
+</div></section>
+
+<section><div class="wrap">
+<p class="eyebrow">What the AI actually is</p>
+<h2 class="measure">One step, then look again.</h2>
+<div class="parts">
+<div><h3>Claude’s one-step loop</h3><p>Claude (<code>claude-opus-5-5</code>) sees a numbered snapshot of the current page and returns one next step. JustAsk highlights it, speaks it, and either guides her or does that one safe action. It checks that the page changed, then plans again. It isn’t an open-ended agent, and it never leaves the browser.</p></div>
+<div><h3>The page scanner</h3><p>Turns what’s on screen into numbered controls Claude can point at. Snapshots are not stored.</p></div>
+<div><h3>Cartesia voice</h3><p>Speech-to-text and text-to-speech in the extension. Convex mints a short-lived token, so the Cartesia key stays on the server. Browser speech remains a setting if Cartesia is unavailable.</p></div>
+<div><h3>Convex for the helper</h3><p>Powers the caregiver side: sign-in, the live pairing code, tasks, and the Connected pill that updates without a refresh.</p></div>
+</div>
+<h3 style="margin-top:48px">Safety gates</h3>
+<ul class="rules measure">
+<li>Passwords, codes, and card numbers are never typed by JustAsk.</li>
+<li>Money, account changes, and personal information ask first.</li>
+<li>A page that looks like a scam is blocked.</li>
+<li>Repeat and Stop are always on the surface.</li>
+<li>Snapshots of the page are not stored.</li>
+</ul>
+</div></section>
+
+</main>
+<footer><div class="wrap">
+<p class="tag">Less <span class="q">“where do I click?”</span><br>More “I did it.”</p>
+<div class="foot">
+<span>JustAsk is a Chrome extension and a caregiver site.</span>
+<a href="https://github.com/AchsahJojo/JustAsk">Source on GitHub</a>
+<span>This teaching site was built and deployed with Mana.</span>
+</div>
+</div></footer>
+</body>
+</html>
