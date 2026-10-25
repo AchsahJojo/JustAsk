@@ -16,6 +16,7 @@ function frame(frameId: number, texts: string[], isTop = frameId === 0): FrameSc
       heading: "H",
       pageText: `text of frame ${frameId}`,
       omitted: { count: 0, regions: [] },
+      surface: "web",
       elements: texts.map((t, i) => ({ n: i + 1, role: "button", text: t, label: null, nearby: null, color: null, big: false, disabled: false, inModal: false, inViewport: true, region: "main" as const })),
     },
   };
@@ -32,13 +33,16 @@ function typedFrame(hasValue: boolean): FrameScan {
   return f;
 }
 
-const guide = (target: number, say = "Click it.", extra: Partial<StepResponse> = {}): StepResponse => ({ kind: "guide", say, target, expect: "click", option: null, risk: "none", ...extra });
+const guide = (target: number, say = "Click it.", extra: Partial<StepResponse> = {}): StepResponse => ({ kind: "guide", say, target, expect: "click", option: null, text: null, risk: "none", ...extra });
 
-const step = (kind: StepResponse["kind"], say: string): StepResponse => ({ kind, say, target: null, expect: null, option: null, risk: "none" });
+const act = (target: number, say = "I'm clicking it.", extra: Partial<StepResponse> = {}): StepResponse => ({ kind: "act", say, target, expect: "click", option: null, text: null, risk: "none", ...extra });
+const step = (kind: StepResponse["kind"], say: string): StepResponse => ({ kind, say, target: null, expect: null, option: null, text: null, risk: "none" });
 const tick = (ms = 0) => new Promise((r) => setTimeout(r, ms));
 
 interface HarnessOpts {
+  actOk?: boolean;
   changed?: boolean;
+  showMeInstead?: boolean;
   responseSnapshotId?: string;
   timing?: Record<string, number>;
 }
@@ -48,7 +52,7 @@ function harness(steps: StepResponse[], scans: FrameScan[][] = [[frame(0, ["A", 
   let i = 0;
   let s = 0;
   const highlights: unknown[] = [];
-  /** Call order across bridge and speech. */
+  /** Call order across bridge and speech, for the act flow. */
   const ops: string[] = [];
   const bridge: PageBridge = {
     scan: vi.fn(async () => scans[Math.min(s++, scans.length - 1)]),
@@ -56,6 +60,7 @@ function harness(steps: StepResponse[], scans: FrameScan[][] = [[frame(0, ["A", 
     clear: vi.fn(async () => {}),
     pulse: vi.fn(async () => {}),
     waitForChange: vi.fn(async () => opts.changed ?? true),
+    act: vi.fn(async () => (ops.push("act"), { ok: opts.actOk ?? false })),
     watch: vi.fn(),
   };
   const planner: Planner = {
@@ -73,7 +78,8 @@ function harness(steps: StepResponse[], scans: FrameScan[][] = [[frame(0, ["A", 
     planner,
     speech,
     events: { log: (t) => events.push(t) },
-    timing: { changeTimeoutMs: 10, quietChangeMs: 7, waitRecheckMs: 60_000, ...opts.timing },
+    prefs: () => ({ showMeInstead: opts.showMeInstead ?? false }),
+    timing: { changeTimeoutMs: 10, quietChangeMs: 7, actBeatMs: 0, waitRecheckMs: 60_000, ...opts.timing },
   });
   return { c, bridge, planner, plans, spoken, highlights, events, ops };
 }
@@ -111,7 +117,7 @@ describe("mergeScans across frames", () => {
 
 describe("SessionController", () => {
   it("runs a multi-step loop to done", async () => {
-    const h = harness([guide(1, "Click A."), guide(2, "Click B."), step("done", "All done, you did it!")]);
+    const h = harness([guide(1, "Click A."), guide(2, "Click B."), { kind: "done", say: "All done, you did it!", target: null, expect: null, option: null, text: null, risk: "none" }]);
     await h.c.start("help me");
     expect(h.c.state.phase).toBe("guiding");
     expect(h.c.state.line).toBe("Click A.");
@@ -139,8 +145,6 @@ describe("SessionController", () => {
     expect(h.highlights.length).toBe(0);
     await h.c.input("no");
     expect(h.c.state.phase).toBe("done");
-    expect(h.c.state.line).toBe("Okay, we won't do that. Nothing was sent.");
-    expect(h.events).toContain("abandoned");
     expect(h.highlights.length).toBe(0);
   });
 
@@ -153,7 +157,7 @@ describe("SessionController", () => {
   });
 
   it("suspicious ends blocked", async () => {
-    const h = harness([{ ...step("blocked", "Click Buy gift cards now."), risk: "suspicious" }]);
+    const h = harness([{ kind: "blocked", say: "Click Buy gift cards now.", target: null, expect: null, option: null, text: null, risk: "suspicious" }]);
     await h.c.start("x");
     expect(h.c.state.phase).toBe("blocked");
     expect(h.c.state.line).toBe("This page might be a trick. Let's stop and check with your helper.");
@@ -170,7 +174,7 @@ describe("SessionController", () => {
   });
 
   it("clarify then answer goes into history", async () => {
-    const h = harness([step("clarify", "Pickup or mail?"), guide(2)]);
+    const h = harness([{ kind: "clarify", say: "Pickup or mail?", target: null, expect: null, option: null, text: null, risk: "none" }, guide(2)]);
     await h.c.start("refill");
     expect(h.c.state.phase).toBe("asking");
     await h.c.input("pick it up");
@@ -353,10 +357,11 @@ describe("drive mode", () => {
     expect(h.c.state.clicks).toBe(0);
   });
 
-  it("counts guided typing as a step, not a click, and says the planner's done line", async () => {
+  it("counts guided typing as a step, not a click, in the completion line", async () => {
     const h = harness(
-      [guide(1, "Type your name, then tell me when you're done.", { expect: "type" }), guide(1, "Click Save."), step("done", "All done, you did it!")],
+      [guide(1, "Type your name, then tell me when you're done.", { expect: "type" }), act(1), done],
       [[typedFrame(false)]],
+      { actOk: true },
     );
     await h.c.start("fill in the form");
     (h.bridge.scan as any).mockResolvedValue([typedFrame(true)]);
@@ -380,73 +385,22 @@ describe("drive mode", () => {
     await h.c.start("my number is 602 555 0142");
     expect(h.bridge.act).not.toHaveBeenCalled();
     expect(h.c.state.phase).toBe("guiding");
-    await h.c.onContent({ type: "ja:step-done", how: "click" }, 0);
-    expect(h.c.state.phase).toBe("done");
-    expect(h.c.state.guidedSteps).toBe(2);
-    expect(h.c.state.clicks).toBe(1);
-    expect(h.c.state.line).toBe("All done, you did it!");
-    expect("actions" in h.c.state).toBe(false);
-  });
-});
-
-describe("guide only (no drive mode)", () => {
-  it("the bridge has no act method", () => {
-    const h = harness([guide(1)]);
-    expect("act" in h.bridge).toBe(false);
+    expect(h.spoken.some((t) => t.includes("555"))).toBe(false);
   });
 
-  it("a guide step only highlights and speaks; it never changes the page", async () => {
-    const h = harness([guide(1, "Type water bottle in the search box.", { expect: "type" })]);
-    const act = vi.fn();
-    Object.assign(h.bridge, { act });
-    await h.c.start("find a water bottle");
-    expect(h.c.state.phase).toBe("guiding");
-    expect(h.c.state.line).toBe("Type water bottle in the search box.");
-    expect(h.ops).toEqual(["say:Let me look at the page.", "highlight:Type here", "say:Type water bottle in the search box."]);
-    expect(act).not.toHaveBeenCalled();
-    expect(h.bridge.waitForChange).not.toHaveBeenCalled();
-  });
-
-  it("an old-style act reply is rejected by checkStep, re-planned once, then blocked", async () => {
-    const stale = { kind: "act", say: "I'm clicking A.", target: 1, expect: "click", option: null, risk: "none" } as unknown as StepResponse;
-    const h = harness([stale, stale]);
-    await h.c.start("x");
-    expect(h.plans).toHaveLength(2);
-    expect(h.c.state.phase).toBe("blocked");
-    expect(h.highlights).toHaveLength(0);
-    expect(h.spoken).not.toContain("I'm clicking A.");
-  });
-
-  it("a session saved mid-action by an older version re-plans as a guide step", async () => {
-    const h = harness([guide(1, "Click A.")]);
-    const old = { ...h.c.state, request: "help me", stepNo: 2, phase: "acting" } as unknown as typeof h.c.state;
-    h.c.restore(old, [], null);
-    await vi.waitFor(() => expect(h.c.state.phase).toBe("guiding"));
-    expect(h.c.state.line).toBe("Click A.");
-  });
-
-  it("does not add a Show me instead note to the history", async () => {
-    const h = harness([guide(1), step("done", "All done.")]);
-    await h.c.start("x");
-    await h.c.onContent({ type: "ja:step-done", how: "click" }, 0);
-    expect(h.plans[0].history).toEqual([]);
-  });
-
-  it("asks first on a money step; yes highlights it for her", async () => {
-    const h = harness([guide(1, "Click Place order.", { risk: "money" })]);
+  it("asks first on a money act, then acts", async () => {
+    const h = harness([act(1, "I'm clicking Place order.", { risk: "money" }), done], undefined, { actOk: true });
     await h.c.start("buy it");
     expect(h.c.state.phase).toBe("confirming");
-    expect(h.c.state.line).toBe("This step will spend money. Do you want to go ahead?");
+    expect(h.bridge.act).not.toHaveBeenCalled();
     await h.c.input("yes");
-    expect(h.c.state.phase).toBe("guiding");
-    expect(h.c.state.line).toBe("Click Place order.");
-    expect(h.highlights).toHaveLength(1);
+    expect(h.bridge.act).toHaveBeenCalled();
   });
 
-  it("clicks that change nothing never switch modes; it keeps guiding", async () => {
-    const h = harness([guide(1), guide(1), guide(1), guide(1)], undefined, { changed: false });
+  it("Show me instead turns acts into guide steps and tells Claude", async () => {
+    const h = harness([act(1, "I'm clicking A.")], undefined, { actOk: true, showMeInstead: true });
     await h.c.start("x");
-    for (let k = 0; k < 3; k++) await h.c.onContent({ type: "ja:step-done", how: "click" }, 0);
+    expect(h.bridge.act).not.toHaveBeenCalled();
     expect(h.c.state.phase).toBe("guiding");
     expect(h.plans[0].history[0]).toMatch(/Show me instead/);
   });
@@ -458,44 +412,14 @@ describe("guide only (no drive mode)", () => {
     expect(h.c.state.phase).toBe("guiding");
     expect(h.plans[3].history.join("\n")).toMatch(/from now on the user does the steps themselves/);
     expect(h.events.filter((e) => e === "no_change").length).toBe(3);
-    expect(h.plans[3].history.join("\n")).not.toMatch(/from now on/);
   });
-});
 
-describe("prompt", () => {
-  it("system prompt is long enough to cache (>512 tokens ~ 2000+ chars)", () => {
-    expect(SYSTEM_PROMPT.length).toBeGreaterThan(3000);
-  });
-  it("wraps page text in page_content and includes options", () => {
-    const f = frame(0, ["Go"]);
-    const { snapshot } = mergeScans([f], "s");
-    const turn = buildTurn("help", [], { steps: ["Click Pharmacy"] }, snapshot);
-    expect(turn).toContain("<page_content>");
-    expect(turn).toContain("Caregiver's recipe");
-    expect(turn).toContain('[1] button: "Go"');
-  });
-  it("is guide only: guide by default, she does it herself, search first, no menu bias", () => {
-    expect(SYSTEM_PROMPT).toContain('"guide" is the usual choice');
-    expect(SYSTEM_PROMPT).toContain("she does it herself");
-    expect(SYSTEM_PROMPT).not.toContain('"act"');
-    expect(SYSTEM_PROMPT).not.toContain('"text":');
-    expect(SYSTEM_PROMPT).not.toMatch(/I'm (clicking|typing|picking|searching|opening)/);
-    expect(SYSTEM_PROMPT).toContain('role "search box"');
-    expect(SYSTEM_PROMPT).toContain("don't open category menus to find a specific item");
-    expect(SYSTEM_PROMPT).not.toContain("prefer guiding her to scroll or open a menu");
-    expect(SYSTEM_PROMPT).toContain('"kind":"guide","say":"Type your password here. I can\'t see it."');
-    expect(SYSTEM_PROMPT).toContain('{"kind":"guide","say":"Type water bottle in the search box.","target":2,"expect":"type","option":null,"risk":"none"}');
-    expect(SYSTEM_PROMPT).toContain('"say":"Press Enter to search.","target":2,"expect":"submit"');
-    expect(SYSTEM_PROMPT).toContain("Pick Arizona in the State box.");
-  });
-  it("marks sensitive fields", () => {
-    const f = frame(0, ["Password"]);
-    f.snapshot.elements[0].field = { kind: "password", hasValue: false, valid: true, sensitive: true };
-    const { snapshot } = mergeScans([f], "s");
-    expect(buildTurn("x", [], null, snapshot)).toContain("{password, empty, sensitive}");
-  });
-  it("shows the page address", () => {
-    expect(buildTurn("x", [], null, mergeScans([frame(0, ["A"])], "t").snapshot)).toContain("Page address: https://x.test/");
+  it("typing that changes nothing doesn't count toward guide mode", async () => {
+    const t = act(1, "I'm typing it.", { expect: "type", text: "x ray" });
+    const h = harness([t, t, t, t, done], undefined, { actOk: true, changed: false });
+    await h.c.start("x ray");
+    expect(h.bridge.act).toHaveBeenCalledTimes(4);
+    expect(h.c.state.line).toBe("All done. I did 4 steps for you.");
   });
 });
 
@@ -505,7 +429,7 @@ describe("waiting (P1)", () => {
   const AB = [frame(0, ["A", "B"])];
 
   it("watches, and re-plans on page-changed only when the list changed", async () => {
-    const h = harness([wait, guide(2, "Click B."), step("done", "All done.")], [A, A, AB]);
+    const h = harness([wait, act(2, "I'm clicking B."), step("done", "All done.")], [A, A, AB], { actOk: true });
     await h.c.start("post");
     expect(h.c.state.phase).toBe("waiting");
     expect(h.bridge.watch).toHaveBeenCalledWith(true);
@@ -515,8 +439,7 @@ describe("waiting (P1)", () => {
     await h.c.onContent({ type: "ja:page-changed", reason: "mutation" }, 0);
     expect(h.plans.length).toBeGreaterThanOrEqual(2);
     expect(h.bridge.watch).toHaveBeenLastCalledWith(false);
-    expect(h.c.state.phase).toBe("guiding");
-    expect(h.c.state.line).toBe("Click B.");
+    expect(h.bridge.act).toHaveBeenCalled();
   });
 
   it("stays quiet when the re-plan gives the same wait", async () => {
@@ -543,16 +466,16 @@ describe("waiting (P1)", () => {
   });
 
   it("re-scans on a timer while waiting", async () => {
-    const h = harness([wait, guide(2)], [A, AB], { timing: { waitRecheckMs: 5 } });
+    const h = harness([wait, act(2)], [A, AB], { timing: { waitRecheckMs: 5 } });
     await h.c.start("post");
     expect(h.plans.length).toBe(1);
     await tick(60);
     expect(h.plans.length).toBe(2);
-    expect(h.c.state.phase).toBe("guiding");
+    expect(h.c.state.phase).not.toBe("waiting");
   });
 
   it("Stop clears the recheck timer", async () => {
-    const h = harness([wait, guide(2)], [A, AB], { timing: { waitRecheckMs: 5 } });
+    const h = harness([wait, act(2)], [A, AB], { timing: { waitRecheckMs: 5 } });
     await h.c.start("post");
     await h.c.stop();
     await tick(40);

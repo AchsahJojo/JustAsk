@@ -10,7 +10,6 @@ import { buildCapture, captureFileName } from "../lib/capture";
 import { Orb, type OrbMode } from "./Orb";
 import { useTaskList } from "./useTaskList";
 import { focusCaptionUnlessAsking } from "./focusCaption";
-import { doneLine } from "./doneLine";
 
 const ALL_SITES = { origins: ["<all_urls>"] };
 /** Example requests for when the user opens JustAsk and isn't sure what to ask. Plain words, no sites. */
@@ -53,7 +52,10 @@ export function Panel({ pinnedTabId }: { pinnedTabId: number | null }) {
   useEffect(() => {
     host.speech.onSpeaking = setSpeaking;
     const off = host.controller.subscribe(setView);
-    void host.init();
+    void host.init().then(async () => {
+      // A handoff claimed by the background (desktop app -> browser) starts right away.
+      if (await browser.permissions.contains(ALL_SITES)) await host.startFromHandoff();
+    });
     void getSettings().then((s) => setName(s.displayName));
     void backend.heartbeat();
     // Get the voice token now, so pressing the mic starts listening without a network wait.
@@ -140,6 +142,8 @@ export function Panel({ pinnedTabId }: { pinnedTabId: number | null }) {
     a.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
+
+  const actions = actionsOf(view);
 
   return (
     <div className="panel" data-phase={phase}>
@@ -344,6 +348,11 @@ export function Panel({ pinnedTabId }: { pinnedTabId: number | null }) {
             </button>
           ) : (
             <>
+              {phase === "acting" && (
+                <button className="btn danger huge stop-now" onClick={() => host.controller.stop()} aria-label="Stop. JustAsk will not do anything else.">
+                  <StopIcon /> Stop
+                </button>
+              )}
               {phase === "guiding" && view.expect === "type" && (
                 <button className="btn primary huge" onClick={() => host.controller.doneTyping()}>
                   I'm done typing
@@ -360,9 +369,11 @@ export function Panel({ pinnedTabId }: { pinnedTabId: number | null }) {
                   I'm stuck
                 </button>
               </div>
-              <button className="btn ghost stop" onClick={() => host.controller.stop()}>
-                Stop
-              </button>
+              {phase !== "acting" && (
+                <button className="btn ghost stop" onClick={() => host.controller.stop()}>
+                  Stop
+                </button>
+              )}
             </>
           )}
         </footer>

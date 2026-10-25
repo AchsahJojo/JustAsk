@@ -2,11 +2,12 @@
 
 ## Context
 
-This document builds on `docs/initial-plan.md` and does not repeat it. It changes that plan in three ways:
+This document builds on `docs/initial-plan.md` and does not repeat it. It changes that plan in four ways:
 
-1. **Every major browser.** This is a phased roadmap. The hackathon (Oct 23–25 2026) still ships Chrome. The code is split so that each later browser is an adapter rather than a rewrite.
+1. **Every major browser, then Mac and Windows apps.** This is a phased roadmap. The hackathon (Oct 23–25 2026) still ships Chrome. The code is split so that each later browser, and the desktop app, is an adapter rather than a rewrite.
 2. **Six logic gaps found in review are closed:** typing steps, native pickers, Shadow DOM and iframes, rerenders, new tabs, and user gestures. Review also turned up more gaps (§3.7).
 3. **The `planStep` Claude call is corrected** against the current API docs. The fallback feature is beta-only and breaks the loop without its header (§4).
+4. **The desktop app has a direction:** first a companion tray app, then guidance for native apps (§5).
 
 Rules from the initial plan that still hold: guide mode only (the user always clicks), no site-specific code, no keys in clients, never capture or send field values, and page text is untrusted.
 
@@ -28,6 +29,7 @@ apps/extension/          WXT. entrypoints: background, content, panel (html), se
   src/platform/          chromium.ts, firefox.ts, safari.ts: PanelHost, gestures, shadow-root access
 apps/caregiver/          unchanged
 apps/fixtures/           mock pharmacy + gap fixtures (§8)
+apps/desktop/            Phase 4: Tauri 2 companion app (Windows + macOS)
 packages/shared/         Zod schemas: PageSnapshot, StepResponse, messages, events
 packages/core/           NEW. Session state machine, step loop, interfaces. No browser APIs
 packages/page-agent/     NEW. Scanner, ranker, fingerprint, overlay, observers. DOM-only
@@ -39,15 +41,15 @@ reference/mana/          read-only reference
 
 ### Interfaces in `packages/core`
 
-| Interface | What it does | Chrome / Edge | Firefox | Safari |
-|---|---|---|---|---|
-| `PanelHost` | show, focus and close the panel | `sidePanel` | `sidebarAction` | dock iframe |
-| `PageBridge` | scan, highlight, observe, resolve | content script | content script | content script |
-| `SpeechOut` | speak, stop | speechSynthesis → Cartesia | same | same |
-| `SpeechIn` | listen | Web Speech (Chrome, Edge) or Cartesia STT | Cartesia STT | Cartesia STT |
-| `Store` | session and local state | `storage.session` / `local` | same | same |
-| `Notifier` | badge, toast | `action` + `notifications` | same | badge only |
-| `TabWatcher` | new tabs, navigation | `tabs` + `webNavigation` | same | same (verify) |
+| Interface | What it does | Chrome / Edge | Firefox | Safari | Desktop (Phase 5) |
+|---|---|---|---|---|---|
+| `PanelHost` | show, focus and close the panel | `sidePanel` | `sidebarAction` | dock iframe | app window |
+| `PageBridge` | scan, highlight, observe, resolve | content script | content script | content script | UIA / AX |
+| `SpeechOut` | speak, stop | speechSynthesis → Cartesia | same | same | same |
+| `SpeechIn` | listen | Web Speech (Chrome, Edge) or Cartesia STT | Cartesia STT | Cartesia STT | Cartesia STT |
+| `Store` | session and local state | `storage.session` / `local` | same | same | app storage |
+| `Notifier` | badge, toast | `action` + `notifications` | same | badge only | OS notifications |
+| `TabWatcher` | new tabs, navigation | `tabs` + `webNavigation` | same | same (verify) | n/a |
 
 **Where the controller runs.** In panel mode it runs in the panel page, which lives through navigations. In dock mode it runs in the background (a Chrome service worker or Firefox event page). The open port from the dock keeps the background alive, and state is saved at every transition, so a restart resumes at the current step. The loop is event-driven (one short request per step), so neither home has to stay up for long.
 
@@ -285,6 +287,7 @@ The step loop is the same. Only `PageBridge` changes.
 | Edge Add-ons | same zip and same privacy answers |
 | AMO (Firefox) | readable source plus build steps, `gecko.id`, data-collection disclosure (check current AMO policy) |
 | Mac App Store (Safari) | Apple Developer account, Xcode wrapper app, App Privacy label, review notes explaining the guide-only design |
+| Windows / macOS direct download (desktop) | code signing, notarization (macOS), signed updater feed |
 
 All stores get one privacy policy: page text goes to Claude through Convex for the current step only. It isn't stored. Field values are never collected. Caregivers see outcomes only.
 
@@ -301,7 +304,7 @@ All stores get one privacy policy: page text goes to Claude through Convex for t
 | Sat 2–6 PM | CP4, accounts | `risk` confirmations; notification fallback ladder (§3.6) |
 | Sat 6 PM | Feature freeze | **Load-unpacked smoke test in Edge** (no code changes expected) |
 
-Not in the hackathon: dock mode, Firefox, Safari, screenshot fallback.
+Not in the hackathon: dock mode, Firefox, Safari, desktop, screenshot fallback.
 
 ### After the hackathon
 
@@ -310,6 +313,8 @@ Not in the hackathon: dock mode, Firefox, Safari, screenshot fallback.
 | 1 | Dock mode; Cartesia STT as the default where Web Speech is missing; publish to Chrome Web Store and Edge Add-ons; Brave, Opera and Vivaldi checks | fixture suite passes in Chrome, Edge, Brave and Opera |
 | 2 | Firefox adapter (sidebar, event page), AMO listing | fixture suite passes under `web-ext run` |
 | 3 | Safari macOS (dock mode, Xcode wrapper), App Store | fixture suite passes in Safari; review approved |
+| 4 | Tauri companion app for Windows and macOS, native messaging, signed installers | task alert with the browser closed → Start → guided in browser |
+| 5 | Native-app guidance through UIA and AX | 3 target apps finish one task each |
 | Later | Opt-in screenshot fallback, other languages, iPad/iOS Safari, Firefox for Android | — |
 
 ## 8. Verification (added to the initial plan)

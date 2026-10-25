@@ -17,6 +17,7 @@ import type * as cleanup from "../cleanup.js";
 import type * as crons from "../crons.js";
 import type * as devSeed from "../devSeed.js";
 import type * as devices from "../devices.js";
+import type * as handoffs from "../handoffs.js";
 import type * as http from "../http.js";
 import type * as lib from "../lib.js";
 import type * as migrations from "../migrations.js";
@@ -45,6 +46,7 @@ declare const fullApi: ApiFromModules<{
   crons: typeof crons;
   devSeed: typeof devSeed;
   devices: typeof devices;
+  handoffs: typeof handoffs;
   http: typeof http;
   lib: typeof lib;
   migrations: typeof migrations;

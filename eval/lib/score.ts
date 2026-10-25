@@ -36,7 +36,7 @@ export interface Score {
   pass: boolean;
 }
 
-const TARGETING = new Set(["guide"]);
+const TARGETING = new Set(["guide", "act"]);
 
 /** Score one step against a case's expectations. Pure; no I/O. */
 export function scoreStep(c: EvalCase, step: StepResponse, snapshot: PageSnapshot): Score {

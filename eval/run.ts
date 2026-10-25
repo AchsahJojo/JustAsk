@@ -70,8 +70,8 @@ interface CallResult {
 const STEP_JSON_SCHEMA = stepJsonSchema();
 // Longer timeout than planStep's 10 s so medium/high effort isn't cut off in the eval.
 const client = dry ? null : new Anthropic({ apiKey, timeout: 60_000, maxRetries: 1 });
-const BLOCKED = (say: string): StepResponse => ({ kind: "blocked", say, target: null, expect: null, option: null, risk: "none" });
-const DRY_STEP: StepResponse = { kind: "guide", say: "Click the first thing on the page.", target: 1, expect: "click", option: null, risk: "none" };
+const BLOCKED = (say: string): StepResponse => ({ kind: "blocked", say, target: null, expect: null, option: null, text: null, risk: "none" });
+const DRY_STEP: StepResponse = { kind: "guide", say: "Click the first thing on the page.", target: 1, expect: "click", option: null, text: null, risk: "none" };
 
 async function callClaude(c: EvalCase, snapshot: PageSnapshot): Promise<CallResult> {
   const r: CallResult = { step: null, error: null, latencyMs: 0, outputTokens: 0, inputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, servedBy: dry ? "dry-stub" : model };

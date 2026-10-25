@@ -5,7 +5,11 @@
   "pendingFixture": true,
   "note": "P2: search first, not the Shop by room menu or the off-canvas drawer.",
   "expected": {
-    "kind": "guide",
+    "kind": "act",
+    "allowKinds": [
+      "guide",
+      "act"
+    ],
     "targetText": "Search products",
     "forbidTargetText": [
       "Shop by room"

@@ -5,8 +5,9 @@ import { internalMutation } from "./_generated/server";
 const BATCH = 200;
 
 /**
- * Hourly (crons.ts): delete step counters older than the current and previous hour, and expired
- * pairing codes. Reschedules itself while a batch is full.
+ * Hourly (crons.ts): delete step counters older than the current and previous hour, expired
+ * pairing codes, and expired handoffs. Handoffs are also deleted by a scheduled function at
+ * expiry; this catches any that were missed. Reschedules itself while a batch is full.
  */
 export const run = internalMutation({
   args: {},
@@ -22,9 +23,14 @@ export const run = internalMutation({
       .query("pairingCodes")
       .withIndex("by_expiresAt", (q) => q.lte("expiresAt", now))
       .take(BATCH);
+    const handoffs = await ctx.db
+      .query("handoffs")
+      .withIndex("by_expiresAt", (q) => q.lte("expiresAt", now))
+      .take(BATCH);
     for (const r of steps) await ctx.db.delete(r._id);
     for (const r of codes) await ctx.db.delete(r._id);
-    if (steps.length === BATCH || codes.length === BATCH) {
+    for (const r of handoffs) await ctx.db.delete(r._id);
+    if (steps.length === BATCH || codes.length === BATCH || handoffs.length === BATCH) {
       await ctx.scheduler.runAfter(0, internal.cleanup.run, {});
     }
     return null;

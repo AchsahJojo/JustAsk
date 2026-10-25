@@ -260,7 +260,7 @@ try {
   step("duplicate sign-up says sign in instead");
 
   await page.setViewport({ width: 1280, height: 860 });
-  await shot("18-wide-signup-final");
+  await shot("18-desktop-signup-final");
 
   const real = errors.filter((e) => !/InvalidSecret|already exists|InvalidAccountId|Server Error|\[CONVEX/.test(e));
   assert.deepEqual(real, [], "no unexpected console errors");

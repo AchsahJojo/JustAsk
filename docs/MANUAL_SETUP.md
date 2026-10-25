@@ -2,7 +2,7 @@
 
 This is the list of things a person has to do by hand. Everything else has an automated test (see "What is already tested" at the end).
 
-Status: the Chrome extension, the step loop, the page agent, the Convex backend, the fixtures and the caregiver web app are built.
+Status: the Chrome extension, the step loop, the page agent, the Convex backend, the fixtures and the caregiver web app are built. The desktop app is not built yet.
 
 ## 1. Keys and accounts you need
 
@@ -100,6 +100,7 @@ Run these in a real, headed Chrome with the production build (`apps/extension/.o
 - **Dock mode** (Phase 1): the in-page panel for Opera, Safari and popup windows. The panel already accepts `?tabId=` and `sidepanel.html` is web-accessible.
 - **Firefox and Safari** builds compile (`wxt build -b firefox`) but are not tested.
 - `matchOriginAsFallback` for `about:blank` / `srcdoc` frames: `executeScript` doesn't support it. A registered content script would.
+- Desktop companion app (Phase 4).
 - Muting recognition while JustAsk speaks. Using `storage.local` to resume after a browser restart is built but not e2e-tested.
 
 ## 5b. Accounts (how they work)
@@ -131,7 +132,7 @@ Run these in a real, headed Chrome with the production build (`apps/extension/.o
 - [ ] Real Chrome: install fresh, skip step 4, and use JustAsk with no caregiver against the Convex `/plan` (needs the API key).
 - [ ] Caregiver app on a phone (layout was checked at 390 px in Puppeteer, not on a device).
 - [ ] Two caregivers connected to one senior: both get the completion note for their own tasks only.
-- [ ] Guide only on real sites with a real key: it rings the search box and tells her what to type, never types anything itself, rings password and card boxes with "I can't see it", and asks "Check first…" before checkout.
+- [ ] Drive mode on real sites with a real key: it types searches, never a password or card box, and asks before checkout. Then turn on Show me instead from the caregiver app and check the panel only guides.
 - [ ] Email verification and password reset need Resend: whoever owns the Convex project sets `AUTH_RESEND_KEY` and verifies a sending domain.
 
 ## 6. What is already tested (and how to rerun)

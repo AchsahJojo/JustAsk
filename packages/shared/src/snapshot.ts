@@ -75,5 +75,9 @@ export const PageSnapshot = z.object({
   pageText: z.string(),
   elements: z.array(SnapshotElement),
   omitted: z.object({ count: z.number().int(), regions: z.array(z.string()) }),
+  /** "native": a desktop app window scanned through UIA / AX (apps/desktop). */
+  surface: z.enum(["web", "native"]),
+  /** Native surfaces only: the app and window being guided. `url` is "" there. */
+  app: z.object({ name: z.string(), window: z.string() }).optional(),
 });
 export type PageSnapshot = z.infer<typeof PageSnapshot>;

@@ -5,6 +5,10 @@
   "pendingFixture": true,
   "expected": {
     "kind": "guide",
+    "allowKinds": [
+      "guide",
+      "act"
+    ],
     "targetText": "Start a post"
   }
 }

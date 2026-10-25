@@ -8,6 +8,10 @@
   ],
   "expected": {
     "kind": "guide",
+    "allowKinds": [
+      "guide",
+      "act"
+    ],
     "targetText": "Pick up in store",
     "forbidTargetText": [
       "Mail to my home"

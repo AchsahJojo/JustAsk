@@ -20,6 +20,7 @@ const req: PlanRequest = {
     heading: "",
     pageText: "",
     omitted: { count: 0, regions: [] },
+    surface: "web",
     elements: [{ n: 1, role: "button", text: "Refill", label: null, nearby: null, color: "blue", big: true, disabled: false, inModal: false, inViewport: true, region: "main" }],
   },
 };
@@ -50,7 +51,7 @@ function client(replies: unknown[], seen: Array<{ headers: Headers; body: any }>
   });
 }
 
-const good = JSON.stringify({ kind: "guide", say: "Click the blue Refill button.", target: 1, expect: "click", option: null, risk: "none" });
+const good = JSON.stringify({ kind: "guide", say: "Click the blue Refill button.", target: 1, expect: "click", option: null, text: null, risk: "none" });
 
 describe("planStep request shape (plan §4.2)", () => {
   it("uses the beta endpoint with fallbacks default, low effort, json_schema, cached system, no sampling params or thinking", async () => {
@@ -91,33 +92,10 @@ describe("planStep request shape (plan §4.2)", () => {
     expect(res).toEqual({ ok: false, error: "unparseable reply", retryable: true });
   });
 
-  it("parses a guide reply with no text field", async () => {
-    const res = await planStep(client([message("end_turn", good)], []), req);
-    expect(res).toEqual({ ok: true, snapshotId: "snap-1", latencyMs: expect.any(Number), step: JSON.parse(good) });
-  });
-
-  it("rejects the old act kind and a text field (guide-only schema)", async () => {
-    const act = JSON.stringify({ kind: "act", say: "I'm clicking Refill.", target: 1, expect: "click", option: null, risk: "none" });
-    expect(await planStep(client([message("end_turn", act)], []), req)).toEqual({ ok: false, error: "unparseable reply", retryable: true });
-    const withText = JSON.stringify({ ...JSON.parse(good), text: null });
-    expect(await planStep(client([message("end_turn", withText)], []), req)).toEqual({ ok: false, error: "unparseable reply", retryable: true });
-  });
-
-  it("the JSON Schema sent to Claude has no act kind and no text field", async () => {
-    const seen: Array<{ headers: Headers; body: any }> = [];
-    await planStep(client([message("end_turn", good)], seen), req);
-    const schema = seen[0].body.output_config.format.schema;
-    expect(Object.keys(schema.properties)).not.toContain("text");
-    expect(JSON.stringify(schema.properties.kind)).not.toContain('"act"');
-  });
-
-  it("fallback blocked steps carry no text field", async () => {
-    const refused = await planStep(client([message("refusal", "", { stop_details: { type: "refusal", category: "cyber", explanation: null } })], []), req);
-    const exhausted = await planStep(client([message("max_tokens", ""), message("max_tokens", "")], []), req);
-    for (const r of [refused, exhausted]) {
-      if (!r.ok) throw new Error("expected ok");
-      expect(r.step).not.toHaveProperty("text");
-    }
+  it("accepts an act reply with text", async () => {
+    const reply = JSON.stringify({ kind: "act", say: "I'm clicking Refill.", target: 1, expect: "click", option: null, text: null, risk: "none" });
+    const res = await planStep(client([message("end_turn", reply)], []), req);
+    expect(res).toMatchObject({ ok: true, step: { kind: "act", target: 1 } });
   });
 
   it("takes eval options (model, effort) as the third or fourth argument; defaults unchanged", async () => {
@@ -143,73 +121,52 @@ describe("planStep request shape (plan §4.2)", () => {
   });
 });
 
-describe("mock-script guide rules (titles are a contract with the fixture pages)", () => {
+describe("mock-script drive-mode rules (titles are a contract with the fixture pages)", () => {
   const rules: MockRule[] = JSON.parse(readFileSync(fileURLToPath(new URL("../../../apps/fixtures/mock-script.json", import.meta.url)), "utf8"));
   let n = 0;
   const el = (role: string, text: string, field?: SnapshotElement["field"], label: string | null = null): SnapshotElement => ({
     n: ++n, role, text, label, nearby: null, color: null, big: false, disabled: false, inModal: false, inViewport: true, region: "main", ...(field ? { field } : {}),
   });
   const plan = (title: string, elements: SnapshotElement[], history: string[] = [], request = "find me a water bottle") => {
-    const snapshot: PageSnapshot = { snapshotId: "s", url: "http://localhost/", title, heading: "", pageText: "", elements: elements.map((e, i) => ({ ...e, n: i + 1 })), omitted: { count: 0, regions: [] } };
+    const snapshot: PageSnapshot = { snapshotId: "s", url: "http://localhost/", title, heading: "", pageText: "", elements: elements.map((e, i) => ({ ...e, n: i + 1 })), omitted: { count: 0, regions: [] }, surface: "web" };
     const res = mockPlan({ ...req, request, history, snapshot }, rules);
     if (!res.ok) throw new Error("mock failed");
-    expect(res.step).not.toHaveProperty("text");
     return res.step;
   };
   const search = (hasValue: boolean) => el("search box", "", { kind: "search", hasValue, valid: true }, "Search products");
 
-  it("every rule is a guide-only kind with no text field", () => {
-    for (const r of rules) {
-      expect(["guide", "clarify", "wait", "done", "blocked"]).toContain(r.step.kind);
-      expect(r.step).not.toHaveProperty("text");
-    }
+  it("Store | Home: types the request words, then submits", () => {
+    expect(plan("Store | Home", [el("button", "Shop by room"), search(false)])).toMatchObject({ kind: "act", expect: "type", text: "water bottle", target: 2 });
+    const typed = ['On "Store | Home": JustAsk did: "I\'m typing water bottle in the search box." (type)'];
+    expect(plan("Store | Home", [el("button", "Shop by room"), search(true)], typed)).toMatchObject({ kind: "act", expect: "submit", target: 2 });
   });
 
-  it("Store | Home: tells her to type in the search box, then click Search", () => {
-    const page = (v: boolean) => [el("button", "Shop by room"), search(v), el("button", "Search")];
-    expect(plan("Store | Home", page(false))).toMatchObject({ kind: "guide", expect: "type", target: 2, say: "Type water bottle in the search box." });
-    expect(plan("Store | Home", page(true))).toMatchObject({ kind: "guide", expect: "click", target: 3 });
+  it("Store | Results: clicks Add to cart, then done", () => {
+    expect(plan("Store | Results", [el("link", "Water bottle 24 oz"), el("button", "Add to cart")])).toMatchObject({ kind: "act", expect: "click", target: 2 });
+    expect(plan("Store | Results", [el("button", "Add to cart")], ['JustAsk did: "I\'m clicking the Add to cart button." (click)'])).toMatchObject({ kind: "done" });
   });
 
-  it("Store | Results: tells her to click Add to cart, then done", () => {
-    expect(plan("Store | Results", [el("link", "Water bottle 24 oz"), el("button", "Add to cart")])).toMatchObject({ kind: "guide", expect: "click", target: 2 });
-    const added = ['On "Store | Results": She did: "Click the button that says Add to cart." (click)'];
-    expect(plan("Store | Results", [el("button", "Add to cart")], added)).toMatchObject({ kind: "done" });
-  });
-
-  it("Checkout: guides the card number, then Place order (money)", () => {
+  it("Checkout: guides the card number, asks first on Place order", () => {
     const card = (hasValue: boolean) => el("text box", "", { kind: "text", hasValue, valid: true, sensitive: true }, "Card number");
     expect(plan("Checkout", [card(false), el("button", "Place order $42.10")])).toMatchObject({ kind: "guide", expect: "type", target: 1 });
-    expect(plan("Checkout", [card(true), el("button", "Place order $42.10")])).toMatchObject({
-      kind: "guide", expect: "click", target: 2, risk: "money", say: "Click the green button that says Place order.",
-    });
+    expect(plan("Checkout", [card(true), el("button", "Place order $42.10")])).toMatchObject({ kind: "act", expect: "click", target: 2, risk: "money" });
   });
 
-  it("Sign in: guides email, password, then the Sign in button", () => {
+  it("Sign in: guides email and password, never acts on them", () => {
     const email = (v: boolean) => el("text box", "", { kind: "email", hasValue: v, valid: true }, "Email");
     const pw = (v: boolean) => el("text box", "", { kind: "password", hasValue: v, valid: true, sensitive: true }, "Password");
     const btn = el("button", "Sign in");
     expect(plan("Sign in", [email(false), pw(false), btn])).toMatchObject({ kind: "guide", target: 1 });
     expect(plan("Sign in", [email(true), pw(false), btn])).toMatchObject({ kind: "guide", target: 2 });
-    expect(plan("Sign in", [email(true), pw(true), btn])).toMatchObject({ kind: "guide", expect: "click", target: 3 });
+    expect(plan("Sign in", [email(true), pw(true), btn])).toMatchObject({ kind: "act", expect: "click", target: 3 });
   });
 
-  it("Composer: Start a post, then the post box, then done; waits while loading", () => {
-    expect(plan("Composer", [el("button", "Start a post")])).toMatchObject({ kind: "guide", expect: "click", target: 1 });
+  it("Composer: waits while loading, then clicks the post box", () => {
     expect(plan("Composer", [el("button", "Close")])).toMatchObject({ kind: "wait", target: null });
-    const box = el("text box", "", { kind: "contenteditable", hasValue: false, valid: true }, "What's on your mind?");
-    const step = plan("Composer", [el("button", "Close"), box]);
-    expect(step).toMatchObject({ kind: "guide", expect: "click", target: 2 });
-    const clicked = [`On "Composer": She did: ${JSON.stringify(step.say)} (click)`];
-    expect(plan("Composer", [el("button", "Close"), box], clicked)).toMatchObject({ kind: "done" });
+    expect(plan("Composer", [el("button", "Close"), el("text box", "What's on your mind?", { kind: "contenteditable", hasValue: false, valid: true })])).toMatchObject({ kind: "act", expect: "click", target: 2 });
   });
 
   it("existing fixture rules stay guide steps", () => {
     expect(plan("Maple Pharmacy | Home", [el("button", "Refill a prescription")])).toMatchObject({ kind: "guide" });
-  });
-
-  it("the heuristic fallback and blocked step are guide-only with no text", () => {
-    expect(plan("Unknown page", [el("button", "Water bottle deals")])).toMatchObject({ kind: "guide", target: 1 });
-    expect(plan("Unknown page", [el("button", "Nothing related")])).toMatchObject({ kind: "blocked", target: null });
   });
 });

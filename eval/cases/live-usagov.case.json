@@ -7,6 +7,7 @@
     "kind": "guide",
     "allowKinds": [
       "guide",
+      "act",
       "clarify"
     ],
     "targetText": [

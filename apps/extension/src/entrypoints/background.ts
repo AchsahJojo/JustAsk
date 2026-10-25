@@ -3,10 +3,15 @@ import { defineBackground } from "wxt/utils/define-background";
 import { openPanel, setPanelOnActionClick } from "../platform";
 import { backend } from "../lib/backend";
 import { getSettings } from "../lib/config";
+import { parseHandoffFragment, parseLinkFragment } from "../lib/fragments";
+import type { PendingHandoff } from "../lib/session";
 
 const CONTENT_FILE = "/content-scripts/content.js";
+const HANDOFF_BANNER = "Press Start to keep going";
+const claimingHandoffs = new Set<string>();
+const openingLinkCodes = new Set<string>();
 
-// The background only does notifications, badge and permission plumbing
+// The background only does notifications, badge, permission plumbing and handoff links
 // (it is killed when idle, so it polls on alarms instead of holding a socket).
 export default defineBackground(() => {
   setPanelOnActionClick();
@@ -80,6 +85,16 @@ export default defineBackground(() => {
       void openPanel({ tabId: sender.tab.id, windowId: sender.tab.windowId });
     }
   });
+
+  // Handoff (`#justask=<id>`) and link (`#justask-link=<code>`) fragments (ARCHITECTURE.md §8, §9).
+  browser.tabs.onUpdated.addListener((tabId, info, tab) => {
+    const url = info.url ?? (info.status === "complete" ? tab.url : undefined);
+    if (!url || !url.includes("#justask")) return;
+    const handoffId = parseHandoffFragment(url);
+    if (handoffId) void claimHandoff(tabId, handoffId);
+    const code = parseLinkFragment(url, import.meta.env.VITE_LINK_ORIGIN);
+    if (code) void openLinkSetup(tabId, code);
+  });
 });
 
 /** Inject the content script and show the in-page banner. False when the page can't take it. */
@@ -90,5 +105,57 @@ async function showBanner(tabId: number, text: string): Promise<boolean> {
     return true;
   } catch {
     return false; // no host access on this page
+  }
+}
+
+async function hasSeen(key: string, id: string): Promise<boolean> {
+  const got = (await browser.storage.session.get(key).catch(() => ({}))) as Record<string, string[] | undefined>;
+  return (got[key] ?? []).includes(id);
+}
+
+async function remember(key: string, id: string): Promise<void> {
+  const got = (await browser.storage.session.get(key).catch(() => ({}))) as Record<string, string[] | undefined>;
+  const seen = got[key] ?? [];
+  await browser.storage.session.set({ [key]: [...seen.filter((x) => x !== id), id].slice(-20) }).catch(() => {});
+}
+
+async function claimHandoff(tabId: number, handoffId: string) {
+  if (claimingHandoffs.has(handoffId) || (await hasSeen("claimedHandoffs", handoffId))) return;
+  claimingHandoffs.add(handoffId);
+  try {
+    const h = await backend.claimHandoff(handoffId);
+    if (!h) return; // Network/temporary failures can retry on a later tab update.
+    const pending: PendingHandoff = { ...h, tabId, at: Date.now() };
+    try {
+      await browser.storage.session.set({ pendingHandoff: pending });
+    } catch {
+      return;
+    }
+    await remember("claimedHandoffs", handoffId);
+    if (await showBanner(tabId, HANDOFF_BANNER)) return;
+    // No host access on this page: a toast whose click opens the panel instead.
+    browser.notifications.create(`handoff:${handoffId}`, {
+      type: "basic",
+      iconUrl: browser.runtime.getURL("/icon/128.png"),
+      title: "JustAsk is ready to keep going",
+      message: "Click here, or the JustAsk button at the top right, then press Start.",
+      priority: 2,
+    });
+  } finally {
+    claimingHandoffs.delete(handoffId);
+  }
+}
+
+async function openLinkSetup(tabId: number, code: string) {
+  const key = `${tabId}:${code}`;
+  if (openingLinkCodes.has(key) || (await hasSeen("seenLinkCodes", key))) return;
+  openingLinkCodes.add(key);
+  try {
+    await browser.tabs.create({ url: browser.runtime.getURL(`/setup.html?link=${code}`) });
+    await remember("seenLinkCodes", key);
+  } catch {
+    // A later tab update can retry if the setup tab couldn't be opened.
+  } finally {
+    openingLinkCodes.delete(key);
   }
 }

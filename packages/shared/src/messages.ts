@@ -36,6 +36,7 @@ export type ToContent =
   | { type: "ja:ping" }
   | { type: "ja:scan"; context: string[] }
   | { type: "ja:highlight"; spec: HighlightSpec }
+  | { type: "ja:act"; spec: ActSpec }
   /** While on, the page agent sends `ja:page-changed` after the DOM changes and settles (waiting phase). */
   | { type: "ja:watch"; on: boolean }
   | { type: "ja:clear" }

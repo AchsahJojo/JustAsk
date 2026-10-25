@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { api } from "../convex/_generated/api";
-import { caregiver, ext, linkDevice, newAccount, setup } from "./helpers";
+import { caregiver, desk, ext, linkDevice, newAccount, setup } from "./helpers";
 
 beforeEach(() => vi.useFakeTimers());
 afterEach(() => vi.useRealTimers());
@@ -19,7 +19,7 @@ describe("accounts:createSelf", () => {
     });
     const devices = await t.query(api.devices.list, { token: res.token });
     expect(devices).toHaveLength(1);
-    expect(devices[0]).toMatchObject({ kind: "extension", platform: "chrome-windows", label: "Chrome", isThisDevice: true });
+    expect(devices[0]).toMatchObject({ kind: "extension", platform: "chrome-windows", label: "Chrome", machineId: null, isThisDevice: true });
     expect(devices[0]).not.toHaveProperty("tokenHash");
     const seniors = await t.run((ctx) => ctx.db.query("seniors").collect());
     expect(seniors[0].createdBy).toBe("self");
@@ -33,6 +33,7 @@ describe("accounts:createSelf", () => {
     await expect(t.mutation(api.accounts.createSelf, { displayName: "   ", device: ext() })).rejects.toThrow(/displayName/);
     await expect(t.mutation(api.accounts.createSelf, { displayName: "x".repeat(61), device: ext() })).rejects.toThrow(/displayName/);
     await expect(t.mutation(api.accounts.createSelf, { displayName: "M", device: { ...ext(), label: "x".repeat(81) } })).rejects.toThrow(/label/);
+    await expect(t.mutation(api.accounts.createSelf, { displayName: "M", device: { ...ext(), machineId: "m".repeat(129) } })).rejects.toThrow(/machineId/);
   });
 
   test("global creation rate limit", async () => {
@@ -53,7 +54,7 @@ describe("link codes", () => {
     expect(await t.mutation(api.devices.peekCode, { code })).toEqual({ displayName: "Margaret" });
     expect(await t.mutation(api.devices.peekCode, { code })).toEqual({ displayName: "Margaret" });
 
-    const res = await t.mutation(api.devices.redeemCode, { code: ` ${code} `, device: ext("Edge") });
+    const res = await t.mutation(api.devices.redeemCode, { code: ` ${code} `, device: desk("pc-1") });
     expect(res?.displayName).toBe("Margaret");
     expect(await t.mutation(api.devices.redeemCode, { code })).toBeNull();
     expect(await t.mutation(api.devices.peekCode, { code })).toBeNull();
@@ -61,7 +62,7 @@ describe("link codes", () => {
     const list = await t.query(api.devices.list, { token: res!.token });
     expect(list).toHaveLength(2);
     const me = list.find((d) => d.isThisDevice)!;
-    expect(me).toMatchObject({ kind: "extension", platform: "chrome-windows", label: "Edge" });
+    expect(me).toMatchObject({ kind: "desktop", platform: "windows", label: "Margaret's PC", machineId: "pc-1" });
   });
 
   test("codes expire after 15 minutes", async () => {

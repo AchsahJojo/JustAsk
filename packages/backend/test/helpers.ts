@@ -16,16 +16,19 @@ export function setup() {
 
 export type T = ReturnType<typeof setup>;
 
-export const ext = (label = "Chrome") => ({ kind: "extension", platform: "chrome-windows", label }) as const;
+export const ext = (machineId?: string) =>
+  ({ kind: "extension", platform: "chrome-windows", label: "Chrome", ...(machineId ? { machineId } : {}) }) as const;
+export const desk = (machineId?: string) =>
+  ({ kind: "desktop", platform: "windows", label: "Margaret's PC", ...(machineId ? { machineId } : {}) }) as const;
 
 /** createSelf, returning the token. */
-export async function newAccount(t: T, displayName = "Margaret", device: ReturnType<typeof ext> = ext()) {
+export async function newAccount(t: T, displayName = "Margaret", device: ReturnType<typeof ext> | ReturnType<typeof desk> = ext()) {
   const { token } = await t.mutation(api.accounts.createSelf, { displayName, device });
   return token;
 }
 
 /** Link a second install to the account behind `token`. */
-export async function linkDevice(t: T, token: string, device?: ReturnType<typeof ext>) {
+export async function linkDevice(t: T, token: string, device?: ReturnType<typeof ext> | ReturnType<typeof desk>) {
   const { code } = await t.mutation(api.devices.createLinkCode, { token });
   const res = await t.mutation(api.devices.redeemCode, { code, ...(device ? { device } : {}) });
   if (!res) throw new Error("link failed");

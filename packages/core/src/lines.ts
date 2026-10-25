@@ -46,6 +46,10 @@ export function choiceMismatch(option: string) {
   return `That picked a different one. We want ${option}. Click the box again.`;
 }
 
+// ───────────── drive mode (docs/ARCHITECTURE.md §11) ─────────────
+
+/** Caption on the ring while JustAsk is about to act. */
+export const ACT_LABEL = "Doing this";
 export const LOOKING_NEXT = "Let me look at the next page…";
 export const SEE_IT_NOW = "Do you see it now?";
 /** History notes (for Claude, not spoken). */

@@ -10,6 +10,14 @@ import { isBlankTab, isInjectable, searchInTab } from "../platform";
 import type { Handoff } from "./prefs";
 
 const FOLLOW_WINDOW_MS = 5000;
+/** A claimed handoff older than this is dropped instead of started. */
+const HANDOFF_TTL_MS = 10 * 60 * 1000;
+
+/** What the background stores in storage.session after claiming a handoff. */
+export interface PendingHandoff extends Handoff {
+  tabId: number | null;
+  at: number;
+}
 
 /**
  * Hosts the SessionController in the side panel: owns the session tab id, relays

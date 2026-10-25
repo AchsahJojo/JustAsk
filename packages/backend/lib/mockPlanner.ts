@@ -1,4 +1,4 @@
-import { checkStep, StepResponse, type PageSnapshot, type PlanRequest, type PlanResponse } from "@justask/shared";
+import { checkStep, type PageSnapshot, type PlanRequest, type PlanResponse, type StepResponse } from "@justask/shared";
 
 /**
  * Deterministic stand-in for Claude, for local dev and e2e tests only. It reads a
@@ -11,13 +11,11 @@ export interface MockRule {
   unlessFilled?: boolean;
   /** Only when the history contains this text. */
   afterHistory?: string;
-  /** Only when her request contains this text (case-insensitive). */
-  request?: string;
   /**
-   * A guide-only step kind (`guide`, `clarify`, `wait`, `done` or `blocked`).
-   * JustAsk never acts for her, so there is no `act` and no `text`. Rules that fail `checkStep` are skipped.
+   * Any step kind, including `act` (drive mode). `text` is what an act + type step types; it
+   * may be left out of the script and defaults to null. Rules that fail `checkStep` are skipped.
    */
-  step: Omit<StepResponse, "target"> & { targetText?: string };
+  step: Omit<StepResponse, "target" | "text"> & { text?: string | null; targetText?: string };
 }
 
 function findTarget(snapshot: PageSnapshot, text: string) {
@@ -34,9 +32,7 @@ export function mockPlan(req: PlanRequest, rules: MockRule[]): PlanResponse {
   for (const r of rules) {
     if (!s.title.includes(r.title)) continue;
     if (r.afterHistory && !hist.includes(r.afterHistory)) continue;
-    if (r.request && !req.request.toLowerCase().includes(r.request.toLowerCase())) continue;
-    // Only the StepResponse fields are copied, so a stray key in the script (like an old `text`) never reaches the client.
-    const { kind, say, expect, option, risk, targetText } = r.step;
+    const { targetText, ...rest } = r.step;
     let target: number | null = null;
     if (targetText) {
       const el = findTarget(s, targetText);
@@ -44,9 +40,8 @@ export function mockPlan(req: PlanRequest, rules: MockRule[]): PlanResponse {
       if (r.unlessFilled && el.field?.hasValue) continue;
       target = el.n;
     }
-    const step: StepResponse = { kind, say, target, expect, option, risk };
-    // The schema check drops any kind the contract no longer has (such as the old `act`).
-    if (StepResponse.safeParse(step).success && checkStep(step, s).ok) return { ok: true, snapshotId: s.snapshotId, step, latencyMs: 1 };
+    const step: StepResponse = { ...rest, text: rest.text ?? null, target };
+    if (checkStep(step, s).ok) return { ok: true, snapshotId: s.snapshotId, step, latencyMs: 1 };
   }
   // Heuristic fallback: the element sharing the most words with the request.
   const words = new Set(req.request.toLowerCase().split(/\W+/).filter((w) => w.length > 2));
@@ -60,8 +55,8 @@ export function mockPlan(req: PlanRequest, rules: MockRule[]): PlanResponse {
       ok: true,
       snapshotId: s.snapshotId,
       latencyMs: 1,
-      step: { kind: "guide", say: `Click the one that says ${best.text}.`.split(/\s+/).slice(0, 20).join(" "), target: best.n, expect: "click", option: null, risk: "none" },
+      step: { kind: "guide", say: `Click the one that says ${best.text}.`.split(/\s+/).slice(0, 20).join(" "), target: best.n, expect: "click", option: null, text: null, risk: "none" },
     };
   }
-  return { ok: true, snapshotId: s.snapshotId, latencyMs: 1, step: { kind: "blocked", say: "I'm not sure what to do on this page.", target: null, expect: null, option: null, risk: "none" } };
+  return { ok: true, snapshotId: s.snapshotId, latencyMs: 1, step: { kind: "blocked", say: "I'm not sure what to do on this page.", target: null, expect: null, option: null, text: null, risk: "none" } };
 }

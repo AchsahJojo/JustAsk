@@ -21,7 +21,7 @@ export const authorize = internalMutation({
 });
 
 /**
- * A short-lived Cartesia access token (STT + TTS grants, 10 minutes).
+ * Desktop app: a short-lived Cartesia access token (STT + TTS grants, 10 minutes).
  * The client connects with `?access_token=<token>`. The API key never leaves Convex.
  */
 export const cartesiaToken = action({

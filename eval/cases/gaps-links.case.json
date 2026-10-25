@@ -4,6 +4,10 @@
   "request": "renew my library card",
   "expected": {
     "kind": "guide",
+    "allowKinds": [
+      "guide",
+      "act"
+    ],
     "targetText": "Renew my library card",
     "forbidTargetText": [
       "Branch library"

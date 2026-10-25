@@ -1,14 +1,11 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-const mocks = vi.hoisted(() => ({ events: [] as string[], deps: null as Record<string, unknown> | null }));
+const mocks = vi.hoisted(() => ({ events: [] as string[] }));
 
 vi.mock("@justask/core", () => ({
   lines: {},
   SessionController: class {
     state = { phase: "idle" };
-    constructor(deps: Record<string, unknown>) {
-      mocks.deps = deps;
-    }
     subscribe() {
       return () => {};
     }
@@ -37,14 +34,6 @@ import { SessionHost } from "../src/lib/session";
 
 afterEach(() => {
   mocks.events.length = 0;
-});
-
-describe("SessionHost (guide-only)", () => {
-  it("passes no prefs (no Show me instead) to the controller", () => {
-    new SessionHost({ pinnedTabId: 42 });
-    expect(mocks.deps).not.toBeNull();
-    expect(mocks.deps).not.toHaveProperty("prefs");
-  });
 });
 
 describe("SessionHost.start", () => {

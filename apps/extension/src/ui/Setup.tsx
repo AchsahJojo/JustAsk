@@ -8,6 +8,12 @@ import { Orb } from "./Orb";
 
 const ALL_SITES = { origins: ["<all_urls>"] };
 
+/** A 6-digit `?link=` code, set when the background saw `#justask-link=` on the link page. */
+function linkCodeFromUrl(): string | null {
+  const v = new URLSearchParams(location.search).get("link");
+  return v && /^\d{6}$/.test(v) ? v : null;
+}
+
 /**
  * Setup and settings tab: host access (the gesture lives here, never mid-session), the mic
  * prompt (side panels can't show it reliably), the user's account, and synced settings.
@@ -53,6 +59,11 @@ export function Setup() {
     window.close();
   };
 
+  const linkDone = () => {
+    setLinkCode(null);
+    history.replaceState(null, "", location.pathname);
+  };
+
   return (
     <div className="setup">
       <header className="setup-head">
@@ -66,7 +77,7 @@ export function Setup() {
       <ol className="steps">
         <li className={`step ${access ? "ok" : ""}`}>
           <h2>1. Let JustAsk see web pages</h2>
-          <p>JustAsk shows you exactly where to click, one step at a time. You do each step yourself. It reads the page you're on to find the right button, and it never reads what you have typed.</p>
+          <p>JustAsk reads the page you're on so it can find the right button and press it for you. It never reads what you have typed, and it never types passwords or card numbers.</p>
           {access ? (
             <p className="done">✓ JustAsk is on</p>
           ) : (
@@ -91,7 +102,7 @@ export function Setup() {
           )}
         </li>
 
-        <AccountStep s={s} onChange={setS} />
+        <AccountStep s={s} onChange={setS} linkCode={linkCode} onLinkDone={linkDone} />
         {s.deviceToken && <SettingsStep s={s} onChange={setS} />}
       </ol>
 

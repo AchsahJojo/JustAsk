@@ -1,4 +1,4 @@
-import { checkStep, type EventType, type FrameScan, type FromContent, type HighlightSpec, type PageSnapshot, type PlanRequest, type PlanResponse, type Recipe, type SnapshotElement, type StepResponse } from "@justask/shared";
+import { checkStep, type ActResult, type ActSpec, type EventType, type FrameScan, type FromContent, type HighlightSpec, type PageSnapshot, type PlanRequest, type PlanResponse, type Recipe, type SnapshotElement, type StepResponse } from "@justask/shared";
 import { mergeScans, type TargetRef } from "./merge";
 import * as L from "./lines";
 import { parseCommand } from "./commands";
@@ -6,7 +6,7 @@ import { gateAct, userWords } from "./drive";
 import { snapshotSignature } from "./signature";
 import { scamCheck, type ScamKind } from "./scam";
 
-export type Phase = "idle" | "planning" | "confirming" | "guiding" | "verifying" | "asking" | "waiting" | "paused" | "done" | "blocked";
+export type Phase = "idle" | "planning" | "confirming" | "acting" | "guiding" | "verifying" | "asking" | "waiting" | "paused" | "done" | "blocked";
 
 export interface SessionView {
   phase: Phase;
@@ -32,7 +32,6 @@ export interface SessionView {
   offer: "search" | null;
 }
 
-/** Read and point only: nothing here changes the page. She does every step herself. */
 export interface PageBridge {
   /** Scan every frame of the session tab. An empty array means the page can't be injected. */
   scan(context: string[]): Promise<FrameScan[]>;
@@ -92,6 +91,8 @@ export const DEFAULT_TIMING = {
   quietChangeMs: 700,
   maxSteps: 40,
   wrongDebounceMs: 250,
+  /** Drive mode: the pause between announcing an action and doing it (Stop cancels it). */
+  actBeatMs: 1_000,
   /** Waiting phase: how often to re-scan for a change. */
   waitRecheckMs: 1_500,
   /** Waiting phase: at most this many automatic re-plans per wait… */
@@ -99,6 +100,9 @@ export const DEFAULT_TIMING = {
   /** …within this window; then it asks "Do you see it now?" and stops polling. */
   waitWindowMs: 20_000,
 };
+
+/** Consecutive click/submit actions that changed nothing before the session switches to guide mode. */
+const NO_CHANGE_LIMIT = 3;
 
 const INITIAL: SessionView = {
   phase: "idle",
@@ -117,6 +121,9 @@ const INITIAL: SessionView = {
   offer: null,
 };
 
+/** What a "yes" in the confirming phase does next. */
+type Pending = "guide" | "act" | "risk-text" | "text";
+
 interface WaitState {
   /** kind + say of the current wait step, so an identical re-plan stays quiet. */
   key: string;
@@ -133,7 +140,7 @@ interface WaitState {
 /**
  * The session state machine and step loop. No browser APIs: everything goes through
  * the injected PageBridge / Planner / SpeechOut, so the same controller runs in the
- * side panel or in tests.
+ * side panel, in the desktop app, or in tests.
  */
 export class SessionController {
   private view: SessionView = { ...INITIAL };
@@ -151,7 +158,12 @@ export class SessionController {
   private sessionId: string | null = null;
   private lastWrongAt = 0;
   private t: typeof DEFAULT_TIMING;
+  /** Drive mode was switched off for this session (3 actions that changed nothing). */
+  private guideMode = false;
+  private noChange = 0;
+  private pending: Pending | null = null;
   private waiting: WaitState | null = null;
+  private sleeps = new Set<() => void>();
 
   constructor(private deps: ControllerDeps) {
     this.t = { ...DEFAULT_TIMING, ...deps.timing };
@@ -186,9 +198,24 @@ export class SessionController {
     this.deps.speech.speak(text, { interrupt });
   }
 
-  /** A new generation: anything in flight (planner calls, wait rechecks) is dropped. */
+  /** A new generation: anything in flight (planner calls, the act beat, wait rechecks) is dropped. */
   private bump(): number {
-    return ++this.gen;
+    this.gen++;
+    for (const cancel of [...this.sleeps]) cancel();
+    return this.gen;
+  }
+
+  /** Resolves true after `ms`, or false as soon as a newer generation starts (Stop, pause, a new plan). */
+  private sleep(ms: number, gen: number): Promise<boolean> {
+    return new Promise((resolve) => {
+      const done = () => {
+        clearTimeout(timer);
+        this.sleeps.delete(done);
+        resolve(gen === this.gen);
+      };
+      const timer = setTimeout(done, ms);
+      this.sleeps.add(done);
+    });
   }
 
   /** Prefix a history line with the page it happened on. */
@@ -207,7 +234,7 @@ export class SessionController {
     this.history = history;
     this.recipe = recipe;
     for (const fn of this.listeners) fn(this.view);
-    if (["planning", "guiding", "verifying", "confirming"].includes(phase)) void this.plan();
+    if (["planning", "guiding", "verifying", "confirming", "acting"].includes(view.phase)) void this.plan();
   }
 
   // ───────────── user actions ─────────────
@@ -394,6 +421,8 @@ export class SessionController {
     if (this.view.phase === "confirming" && this.view.offer === "search") return this.searchAnswer(yes);
     if (this.view.phase !== "confirming" || !this.step) return;
     const step = this.step;
+    const pending = this.pending ?? "guide";
+    this.pending = null;
     if (!yes) {
       if (pending === "text") {
         // The user doesn't want that text typed: the user types it themselves instead.
@@ -407,6 +436,8 @@ export class SessionController {
       this.set({ phase: "done", line: "Okay, we won't do that. Nothing was sent.", note: "" });
       return;
     }
+    if (pending === "risk-text") return this.askText(step);
+    if (pending === "act" || pending === "text") return this.doAct(step);
     await this.showGuide(step);
   }
 
@@ -644,6 +675,7 @@ export class SessionController {
       return this.block(L.SUSPICIOUS_LINE);
     }
     switch (step.kind) {
+      case "act":
       case "guide": {
         this.deps.events?.log("step_shown", { latencyMs });
         let s = step;
@@ -667,7 +699,9 @@ export class SessionController {
           this.set({ phase: "confirming", line: q, note: detail, risk: s.risk, expect: s.expect });
           return;
         }
-        return this.showGuide(step);
+        if (next === "guide") return this.showGuide(s);
+        if (next === "risk-text") return this.askText(s);
+        return this.doAct(s);
       }
       case "clarify":
         this.deps.events?.log("clarify");
@@ -680,7 +714,7 @@ export class SessionController {
       case "done": {
         this.deps.events?.log("done");
         await this.deps.bridge.clear();
-        const line = step.say || L.DONE_LINE;
+        const line = this.view.actions > 0 ? L.doneActed(this.view.actions, this.view.guidedSteps) : step.say || L.DONE_LINE;
         this.say(line);
         this.set({ phase: "done", line, expect: null, risk: "none" });
         return;
@@ -913,6 +947,9 @@ export class SessionController {
     this.target = null;
     this.replans = 0;
     this.lostCount = 0;
+    this.guideMode = false;
+    this.noChange = 0;
+    this.pending = null;
   }
 }
 

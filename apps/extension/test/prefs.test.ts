@@ -1,20 +1,16 @@
 import { describe, expect, it } from "vitest";
-import { friendlyError, mergePrefs, parseCode, parseDevices, seenAgo, spacedCode, type SyncedPrefs } from "../src/lib/prefs";
+import { friendlyError, mergePrefs, parseCode, parseDevices, parseHandoff, seenAgo, spacedCode, type SyncedPrefs } from "../src/lib/prefs";
 
-const LOCAL: SyncedPrefs = { voice: "browser", rate: 0.9, consent: { notifyOnComplete: false, notifyOnStuck: false } };
+const LOCAL: SyncedPrefs = { voice: "browser", rate: 0.9, consent: { notifyOnComplete: false, notifyOnStuck: false }, showMeInstead: false };
 
 describe("mergePrefs", () => {
   it("takes valid remote fields that differ", () => {
-    expect(mergePrefs(LOCAL, { voice: "cartesia", rate: 1.1, consent: { notifyOnComplete: true, notifyOnStuck: false } })).toEqual({
+    expect(mergePrefs(LOCAL, { voice: "cartesia", rate: 1.1, showMeInstead: true, consent: { notifyOnComplete: true, notifyOnStuck: false } })).toEqual({
       voice: "cartesia",
       rate: 1.1,
+      showMeInstead: true,
       consent: { notifyOnComplete: true, notifyOnStuck: false },
     });
-  });
-
-  it("ignores a remote showMeInstead (guide-only: JustAsk never acts for her)", () => {
-    expect(mergePrefs(LOCAL, { showMeInstead: true })).toEqual({});
-    expect(mergePrefs(LOCAL, { showMeInstead: false, voice: "cartesia" })).toEqual({ voice: "cartesia" });
   });
 
   it("returns nothing when remote matches local", () => {
@@ -25,7 +21,7 @@ describe("mergePrefs", () => {
     expect(mergePrefs(LOCAL, null)).toEqual({});
     expect(mergePrefs(LOCAL, undefined)).toEqual({});
     expect(mergePrefs(LOCAL, [1, 2])).toEqual({});
-    expect(mergePrefs(LOCAL, { voice: "robot", rate: "fast", consent: "all" })).toEqual({});
+    expect(mergePrefs(LOCAL, { voice: "robot", rate: "fast", showMeInstead: "yes", consent: "all" })).toEqual({});
     expect(mergePrefs(LOCAL, { rate: Number.NaN })).toEqual({});
   });
 
@@ -54,19 +50,37 @@ describe("friendlyError", () => {
   });
 });
 
+describe("parseHandoff", () => {
+  it("keeps request, taskId and a valid recipe", () => {
+    expect(parseHandoff({ request: " join my zoom ", taskId: "t1", recipe: { startUrl: "https://zoom.us/j/1", steps: ["Join"] } })).toEqual({
+      request: "join my zoom",
+      taskId: "t1",
+      recipe: { startUrl: "https://zoom.us/j/1", steps: ["Join"] },
+    });
+  });
+  it("drops a bad recipe and empty task id", () => {
+    expect(parseHandoff({ request: "x", taskId: "", recipe: { steps: "nope" } })).toEqual({ request: "x", taskId: null, recipe: null });
+  });
+  it("rejects null and missing requests", () => {
+    expect(parseHandoff(null)).toBeNull();
+    expect(parseHandoff({ request: "  " })).toBeNull();
+    expect(parseHandoff({ taskId: "t1" })).toBeNull();
+  });
+});
+
 describe("parseDevices", () => {
   it("normalises id variants and flags", () => {
     expect(
       parseDevices([
         { _id: "d1", label: "Chrome on Windows", kind: "extension", lastSeenAt: 5, current: true },
-        { id: "d2", kind: "extension" },
+        { id: "d2", kind: "desktop" },
         { deviceId: "d3", label: "Edge on Mac", isCurrent: false },
         { label: "no id" },
         "junk",
       ]),
     ).toEqual([
       { id: "d1", label: "Chrome on Windows", kind: "extension", lastSeenAt: 5, current: true },
-      { id: "d2", label: "A browser", kind: "extension", lastSeenAt: null, current: false },
+      { id: "d2", label: "JustAsk app", kind: "desktop", lastSeenAt: null, current: false },
       { id: "d3", label: "Edge on Mac", kind: "extension", lastSeenAt: null, current: false },
     ]);
   });

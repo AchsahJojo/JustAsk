@@ -25,7 +25,7 @@ export function newToken(): string {
 }
 
 /**
- * Validate a device token. Extension functions take the token, never a caregiver session.
+ * Validate a device token. Extension and desktop functions take the token, never a caregiver session.
  * Revoked devices are rejected with the same "not paired" message as unknown tokens.
  */
 export async function requireDevice(ctx: QueryCtx | MutationCtx, token: string | null | undefined) {
@@ -75,6 +75,11 @@ export async function requireLink(ctx: QueryCtx | MutationCtx, seniorId: Id<"sen
   return { cg, link };
 }
 
+/** Legacy device rows have no kind; they were all extensions. */
+export function kindOf(device: Doc<"devices">): "extension" | "desktop" {
+  return device.kind ?? "extension";
+}
+
 function clip(s: string, max: number, what: string): string {
   const t = s.trim();
   if (t.length === 0 || t.length > max) throw new Error(`${what} must be 1-${max} characters`);
@@ -92,6 +97,7 @@ export function cleanDevice(d: Infer<typeof deviceInfo>) {
     kind: d.kind,
     platform: clip(d.platform, 40, "platform"),
     label: clip(d.label, 80, "label"),
+    ...(d.machineId !== undefined ? { machineId: clip(d.machineId, 128, "machineId") } : {}),
   };
 }
 
@@ -99,7 +105,7 @@ export function cleanDevice(d: Infer<typeof deviceInfo>) {
 export async function insertDevice(
   ctx: MutationCtx,
   seniorId: Id<"seniors">,
-  fields: Partial<Pick<Doc<"devices">, "kind" | "platform" | "label">>,
+  fields: Partial<Pick<Doc<"devices">, "kind" | "platform" | "label" | "machineId">>,
 ): Promise<{ token: string; deviceId: Id<"devices"> }> {
   const token = newToken();
   const now = Date.now();
@@ -180,6 +186,11 @@ export async function mergeSenior(ctx: MutationCtx, from: Id<"seniors">, into: I
     }
   }
   for (const s of await ctx.db.query("sessions").withIndex("by_senior", (q) => q.eq("seniorId", from)).collect()) await ctx.db.patch(s._id, { seniorId: into });
+  for (const toKind of ["extension", "desktop"] as const) {
+    for (const h of await ctx.db.query("handoffs").withIndex("by_senior_and_toKind_and_expiresAt", (q) => q.eq("seniorId", from).eq("toKind", toKind)).collect()) {
+      await ctx.db.patch(h._id, { seniorId: into });
+    }
+  }
   for (const c of await ctx.db.query("pairingCodes").withIndex("by_senior", (q) => q.eq("seniorId", from)).collect()) await ctx.db.delete(c._id);
   for (const a of await ctx.db.query("seniorAliases").withIndex("by_to", (q) => q.eq("to", from)).collect()) await ctx.db.patch(a._id, { to: into });
   await ctx.db.insert("seniorAliases", { from, to: into });

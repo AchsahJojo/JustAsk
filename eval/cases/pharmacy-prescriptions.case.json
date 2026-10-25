@@ -7,6 +7,10 @@
   ],
   "expected": {
     "kind": "guide",
+    "allowKinds": [
+      "guide",
+      "act"
+    ],
     "targetText": "Refill Lisinopril",
     "forbidTargetText": [
       "Not due",

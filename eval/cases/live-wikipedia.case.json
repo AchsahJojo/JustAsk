@@ -5,6 +5,10 @@
   "live": true,
   "expected": {
     "kind": "guide",
+    "allowKinds": [
+      "guide",
+      "act"
+    ],
     "targetText": "Search"
   }
 }
