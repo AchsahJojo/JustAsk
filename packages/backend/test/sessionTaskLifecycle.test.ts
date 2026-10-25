@@ -8,7 +8,7 @@ async function activeTask(t: T) {
   const { caregiverId } = await caregiver(t);
   const seniorId = await t.run(async (ctx) => (await ctx.db.query("seniors").first())!._id);
   // Only a linked helper hears about the user's tasks.
-  await t.run((ctx) => ctx.db.insert("careLinks", { caregiverId, seniorId, relation: "son" }));
+  await t.run((ctx) => ctx.db.insert("careLinks", { caregiverId, seniorId, relation: "child" }));
   const taskId = await t.run((ctx) =>
     ctx.db.insert("tasks", {
       seniorId,
@@ -79,7 +79,7 @@ describe("caregiver impact stats", () => {
     const token = await newAccount(t);
     const { caregiverId, as } = await caregiver(t);
     const seniorId = await t.run(async (ctx) => (await ctx.db.query("seniors").first())!._id);
-    await t.run((ctx) => ctx.db.insert("careLinks", { caregiverId, seniorId, relation: "son" }));
+    await t.run((ctx) => ctx.db.insert("careLinks", { caregiverId, seniorId, relation: "child" }));
     await t.mutation(api.prefs.set, { token, consent: { notifyOnComplete: true, notifyOnStuck: true } });
     const taskId = await t.run((ctx) =>
       ctx.db.insert("tasks", { seniorId, assignedBy: caregiverId, title: "Refill", spokenPrompt: "Refill", status: "active", createdAt: Date.now() }),

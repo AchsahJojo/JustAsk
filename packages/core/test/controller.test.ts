@@ -584,7 +584,7 @@ describe("scam check on the user's request", () => {
   it("asks before doing anything; someone asked -> stops with what to do, nothing planned", async () => {
     const h = harness([guide(1)]);
     const prepare = vi.fn(async () => null);
-    await h.c.start("email the gift card codes to the man from the IRS", { prepare });
+    await h.c.start("email the gift card codes to the agent from the IRS", { prepare });
     expect(h.c.state.phase).toBe("confirming");
     expect(h.c.state.scam).toBe("gift-card");
     expect(h.c.state.line).toBe("Did someone call, text or email asking you to do this?");
@@ -603,7 +603,7 @@ describe("scam check on the user's request", () => {
   it("their own idea -> carries on carefully, and Claude is told", async () => {
     const h = harness([guide(1)]);
     const prepare = vi.fn(async () => null);
-    await h.c.start("wire $3,000 to my grandson, he's in jail", { prepare });
+    await h.c.start("wire $3,000 to my grandkid, they're in jail", { prepare });
     await h.c.scamAnswer(false);
     expect(prepare).toHaveBeenCalledOnce();
     expect(h.c.state.phase).toBe("guiding");
@@ -612,7 +612,7 @@ describe("scam check on the user's request", () => {
 
   it("an ordinary request is not asked", async () => {
     const h = harness([guide(1)]);
-    await h.c.start("buy a gift card for my grandson's birthday");
+    await h.c.start("buy a gift card for my grandkid's birthday");
     expect(h.c.state.scam).toBeNull();
     expect(h.c.state.phase).toBe("guiding");
   });

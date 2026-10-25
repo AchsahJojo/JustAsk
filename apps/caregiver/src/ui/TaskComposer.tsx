@@ -5,9 +5,9 @@ import { isSafeStartUrl, TASK_CHECK_LIMITS, TASK_LIMITS, type TaskCheckTurn, typ
 import { api, errorText, type Id } from "../api";
 
 const IDEAS = [
-  "Refill her blood pressure pills on CVS.com",
-  "Join Sunday's family Zoom call from the link in her email",
-  "Reply to Aunt Ruth's email about Thanksgiving",
+  "Refill their blood pressure pills on CVS.com",
+  "Join Sunday's family Zoom call from the link in their email",
+  "Reply to Ruth's email about Thanksgiving",
 ];
 
 type Phase = "describe" | "asking" | "review";
@@ -113,7 +113,7 @@ export function TaskComposer({ seniorId, displayName, onSent, onCancel }: { seni
           </div>
           <label className="field">
             <span>What should {displayName} do?</span>
-            <SpeakableText value={request} onChange={setRequest} max={TASK_CHECK_LIMITS.request} rows={3} placeholder="Buy the new Kristin Hannah book on Amazon, the paperback" />
+            <SpeakableText value={request} onChange={setRequest} max={TASK_CHECK_LIMITS.request} rows={3} placeholder="Buy The Midnight Library by Matt Haig on Amazon, the paperback" />
             <small>Say what, which one, and where. If anything is missing, JustAsk will ask you before it sends.</small>
           </label>
           {error && (

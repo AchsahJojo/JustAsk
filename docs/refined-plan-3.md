@@ -5,12 +5,12 @@ _Saved 2026-10-24. Replaces refined-plan-2's drive mode and desktop app: guide o
 ## Context
 The planning doc (brief, build plan, repo review, Demo tab) and `docs/STATUS.md` show the product is mostly built: extension, caregiver app, Convex backend, Cartesia voice, scam check, 428 unit + 15 e2e tests. What's missing for judging is mostly not features:
 
-1. **The story and the code disagree.** Merged code has opt-in drive mode (JustAsk clicks/types) and a Windows desktop app. The pitch is "she clicks, JustAsk never does." Scope is extension only. **Decision: guide only, hide drive, ignore desktop.**
+1. **The story and the code disagree.** Merged code has opt-in drive mode (JustAsk clicks/types) and a Windows desktop app. The pitch is "you click, JustAsk never does." Scope is extension only. **Decision: guide only, hide drive, ignore desktop.**
 2. **Nothing is deployed.** Cloud Convex (`aromatic-salamander-969`) has none of the merged code. The caregiver app has no hosting config. Judges can't try it, and teammates can't deploy easily.
 3. **Submission pieces are missing.** README has no Cartesia features, setup or limitations (a Cartesia rule). No metrics slide, senior quote, video or Devpost text yet.
 4. **Small breakages.**
    - The worklet test fails on Windows (CRLF).
-   - The completion note says "finished X on their own", not the brief's "refilled her prescription herself".
+   - The completion note says "finished X on their own", not the brief's "refilled the prescription themselves".
    - `people.ts:121` comment is wrong about the default.
    - Scam stats in STATUS.md (FBI 2023, $3.4B) don't match the brief (IC3 2025, $7.7B).
 
@@ -93,9 +93,9 @@ Write `docs/HOW-IT-WORKS.md` (linked first in README) after everything above lan
 - emoji-free headings that scan
 
 **Sections:**
-1. **JustAsk in 30 seconds:** what it does, for whom, the one rule (she clicks).
+1. **JustAsk in 30 seconds:** what it does, for whom, the one rule (the user clicks).
 2. **The pieces:** one diagram (extension, Convex, Claude, Cartesia, caregiver app) and a one-line job for each.
-3. **One step, start to finish:** a 6-line numbered flow (scan → number elements → Claude picks a number → safety gates → highlight + speak → her click).
+3. **One step, start to finish:** a 6-line numbered flow (scan → number elements → Claude picks a number → safety gates → highlight + speak → their click).
 4. **The senior's flow** and **the caregiver's flow:** a short numbered list each.
 5. **Safety:** a table of rule, how it's enforced, where in code.
 6. **Decisions we made:** a table of decision, why, what we gave up. Include:

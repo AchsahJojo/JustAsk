@@ -389,7 +389,7 @@ const scenarios = {
   async "scam check: a gift-card-codes request asks first; someone asked -> stops before any page step"() {
     await fetch(`${PLANNER}/__reset`, { method: "POST" });
     const s = await openSession("/");
-    await ask(s.panel, "help me email the gift card codes to the man from the IRS");
+    await ask(s.panel, "help me email the gift card codes to the agent from the IRS");
     await phase(s.panel, "confirming");
     await caption(s.panel, /Did someone call, text or email/);
     assert.match(await s.panel.$eval(".stage-text .soft", (e) => e.textContent), /never ask to be paid with gift card numbers/);
@@ -431,7 +431,7 @@ const scenarios = {
     await p.waitForSelector('input[aria-label="Pairing code"]');
     await p.type('input[aria-label="Pairing code"]', process.env.CONVEX_CODE);
     await clickText(p, "Connect");
-    await p.waitForFunction(() => document.body.textContent.includes("Connected as Mom"), { timeout: 8000 });
+    await p.waitForFunction(() => document.body.textContent.includes("Connected as Pat"), { timeout: 8000 });
     // Consent comes from the server profile (the seed turns "tell my helper when I finish" on).
     if (!(await p.$eval(".toggle input", (e) => e.checked))) await p.click(".toggle input");
     await p.waitForFunction(() => document.querySelector(".toggle input")?.checked, { timeout: 3000, polling: 100 });

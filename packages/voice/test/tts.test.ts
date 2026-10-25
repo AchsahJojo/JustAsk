@@ -81,7 +81,7 @@ function setup(token: string | null = "tok_1") {
 }
 
 describe("CartesiaSpeech", () => {
-  it("speaks a line with Sonic over the token URL, at her speed, and reports speaking on and off", async () => {
+  it("speaks a line with Sonic over the token URL, at the user's speed, and reports speaking on and off", async () => {
     const { speech, speaking } = setup();
     speech.rate = 0.75;
     speech.speak("Click the blue button.");
@@ -145,7 +145,7 @@ describe("CartesiaSpeech", () => {
     expect(speaking.at(-1)).toBe(false);
   });
 
-  it("holds lines while the mic is open; says the newest after, or drops it when she spoke", async () => {
+  it("holds lines while the mic is open; says the newest after, or drops it when the user spoke", async () => {
     const { speech } = setup();
     speech.hold(true);
     speech.speak("One.");

@@ -8,7 +8,7 @@ const SITE = process.env.CONVEX_SITE_URL ?? "http://127.0.0.1:3211";
 const c = new ConvexHttpClient(URL);
 
 const { token, displayName } = await c.mutation("devices:redeemCode", { code: process.env.CODE ?? "123456" });
-assert.equal(displayName, "Mom");
+assert.equal(displayName, "Pat");
 assert.equal(token.length, 64);
 assert.equal(await c.mutation("devices:redeemCode", { code: process.env.CODE ?? "123456" }), null);
 console.log("✓ pairing code redeems once");

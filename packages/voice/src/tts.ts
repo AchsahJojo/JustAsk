@@ -11,7 +11,7 @@ export const TTS_MODEL = "sonic-3";
 export const TTS_SAMPLE_RATE = 44_100;
 /** Cartesia's documented example voice. Set VITE_CARTESIA_VOICE_ID to choose another from the voice library. */
 export const DEFAULT_VOICE_ID = "a0e99841-438c-4a64-b679-ae501e7d6091";
-/** JustAsk's "Normal" speech rate. Her Slower / Normal / Faster setting is relative to it. */
+/** JustAsk's "Normal" speech rate. The user's Slower / Normal / Faster setting is relative to it. */
 const NORMAL_RATE = 0.9;
 
 /** Build the TTS WebSocket URL. Token auth only (browser clients never hold the key). */
@@ -98,7 +98,7 @@ interface Line {
 export class CartesiaSpeech implements SpeechOut {
   onSpeaking: (on: boolean) => void = () => {};
   muted = false;
-  /** Her speech rate setting (0.75 / 0.9 / 1.1); sent as Cartesia `generation_config.speed`. */
+  /** The user's speech rate setting (0.75 / 0.9 / 1.1); sent as Cartesia `generation_config.speed`. */
   rate = NORMAL_RATE;
 
   private ws: WebSocket | null = null;
@@ -122,8 +122,8 @@ export class CartesiaSpeech implements SpeechOut {
   }
 
   /**
-   * Hold lines while she is talking; when she stops, say the newest held line. `drop` skips it
-   * (she said something, and JustAsk's answer to that replaces it).
+   * Hold lines while the user is talking; when they stop, say the newest held line. `drop` skips it
+   * (they said something, and JustAsk's answer to that replaces it).
    */
   hold(on: boolean, drop = false) {
     this.holding = on;
@@ -211,7 +211,7 @@ export class CartesiaSpeech implements SpeechOut {
           if (this.line === line) this.line = null;
           this.onSpeaking(false);
           resolve();
-          // Lines queued with `interrupt: false` play next (not while she is talking).
+          // Lines queued with `interrupt: false` play next (not while the user is talking).
           const next = this.line || this.holding ? undefined : this.queue.shift();
           if (next) void this.say(next);
         },

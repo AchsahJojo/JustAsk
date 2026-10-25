@@ -233,10 +233,10 @@ Still open:
 | Pattern | The user's words (example) | On the page |
 |---|---|---|
 | Gift-card payment | "email the gift card codes to the IRS" | a request to pay a bill, fine or person with gift cards; a "read the numbers on the back" form |
-| Money to someone who called | "wire $4,000, my grandson's in jail" | wire, Zelle, Cash App, crypto or money order to a person; "urgent", "today only" |
+| Money to someone who called | "wire $4,000, my grandkid's in jail" | wire, Zelle, Cash App, crypto or money order to a person; "urgent", "today only" |
 | Prize, refund or inheritance with a fee | "pay the fee so I get my winnings" | "you won", "release fee", "overpaid refund" |
 | Tech support and remote access | "install AnyDesk so Microsoft can fix it" | full-screen "virus" warnings with a phone number; remote-access downloads |
-| Sharing codes | "tell the bank man the code they texted me" | a field asking for a texted code outside a sign-in the user started |
+| Sharing codes | "tell the bank caller the code they texted me" | a field asking for a texted code outside a sign-in the user started |
 | Fake or lookalike shop | "buy the cheap iPhone on this site" | the address doesn't match the brand (punycode, misspellings); prices far below normal; only wire, crypto or payment-app checkout; a brand-new domain |
 | Romance and investment | "send money to my boyfriend I met online" | "guaranteed returns", "double your money", crypto ATM instructions |
 
@@ -246,7 +246,7 @@ Still open:
    - The buttons are **Yes, someone asked me** and **No, it's my own idea**. Voice "yes" means someone asked.
    - **Someone asked:** JustAsk stops with "This looks like a scam. Please don't send anything." It says what to do next: hang up, talk to someone you trust, and call the bank right away if they already sent anything.
    - **Their own idea:** JustAsk carries on, and tells Claude to be careful: no codes typed, and every payment asks first.
-   - Ordinary requests pass, like "buy a gift card for my grandson's birthday" or "send money to my daughter on Venmo". Tests cover 14 scam phrasings and 11 everyday requests.
+   - Ordinary requests pass, like "buy a gift card for my grandkid's birthday" or "send money to my kid on Venmo". Tests cover 14 scam phrasings and 11 everyday requests.
 2. **The page, Claude's judgment: built.** The prompt marks these as `suspicious`, which blocks: pay-with-gift-cards, wire, crypto or payment-app demands, fee-for-a-prize, stores that only take those, prices far below normal, and addresses that don't match the brand. Gift card and claim-code fields are `sensitive`, so they are never typed.
 3. **The page, deterministic signals: phase 2.** Code checks that don't depend on Claude:
    - a lookalike or punycode domain, where a top brand in the title or heading doesn't match the hostname
@@ -255,7 +255,7 @@ Still open:
    - downloads of remote-access tools (`downloads.onCreated` in the extension)
 
    Each one raises the same kind of question, or blocks when it's a clear trap.
-4. **The whole conversation: phase 2.** Run `scamCheck` on the user's later answers and "Say something", not only the first request. For example, the user starts with "help me buy gift cards", then says "the man said to send him the numbers".
+4. **The whole conversation: phase 2.** Run `scamCheck` on the user's later answers and "Say something", not only the first request. For example, the user starts with "help me buy gift cards", then says "the caller said to send them the numbers".
 5. **Reputation lookups: phase 3.** These need keys in Convex env, and send only the domain or a hash prefix:
    - Google Safe Browsing / Web Risk, using hash-prefix lookups so the full address isn't sent
    - domain age through RDAP, so a store under 90 days old asks before checkout

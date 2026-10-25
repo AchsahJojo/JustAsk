@@ -129,9 +129,9 @@ describe("link codes", () => {
   test("legacy caregiver pairing still works (redeemCode without device)", async () => {
     const t = setup();
     const { as } = await caregiver(t);
-    const { code } = await as.mutation(api.devices.createSeniorWithCode, { name: "Margaret Hill", displayName: "Mom", relation: "son" });
+    const { code } = await as.mutation(api.devices.createSeniorWithCode, { name: "Margaret Hill", displayName: "Pat", relation: "child" });
     const res = await t.mutation(api.devices.redeemCode, { code });
-    expect(res?.displayName).toBe("Mom");
+    expect(res?.displayName).toBe("Pat");
     const list = await t.query(api.devices.list, { token: res!.token });
     expect(list[0]).toMatchObject({ kind: "extension", platform: "unknown" });
     // Pre-purpose rows (written by older code / devSeed) count as device codes.

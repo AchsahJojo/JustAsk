@@ -20,7 +20,7 @@ test("defaults", async () => {
 test("caregiver-created seniors (no prefs field) get defaults too", async () => {
   const t = setup();
   const { as } = await caregiver(t);
-  const { code } = await as.mutation(api.devices.createSeniorWithCode, { name: "M", displayName: "Mom", relation: "son" });
+  const { code } = await as.mutation(api.devices.createSeniorWithCode, { name: "M", displayName: "Pat", relation: "child" });
   const res = await t.mutation(api.devices.redeemCode, { code });
   expect(await t.query(api.prefs.get, { token: res!.token })).toMatchObject({ voice: "cartesia", rate: 1, showMeInstead: true });
 });

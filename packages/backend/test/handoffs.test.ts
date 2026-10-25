@@ -95,7 +95,7 @@ test("request is clipped, taskId must be theirs, recipe is bounded", async () =>
 
   // A task for another senior.
   const { as, caregiverId } = await caregiver(t);
-  const { seniorId } = await as.mutation(api.devices.createSeniorWithCode, { name: "R", displayName: "Ruth", relation: "son" });
+  const { seniorId } = await as.mutation(api.devices.createSeniorWithCode, { name: "R", displayName: "Ruth", relation: "child" });
   const taskId = await t.run((ctx) =>
     ctx.db.insert("tasks", { seniorId, assignedBy: caregiverId, title: "x", spokenPrompt: "x", status: "pending", createdAt: 0 }),
   );

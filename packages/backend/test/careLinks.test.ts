@@ -13,10 +13,10 @@ test("helper code links a signed-in caregiver once", async () => {
   expect(expiresAt - Date.now()).toBe(15 * 60 * 1000);
 
   const { as, caregiverId } = await caregiver(t, "Sam");
-  const res = await as.mutation(api.careLinks.redeemHelperCode, { code, relation: "son" });
+  const res = await as.mutation(api.careLinks.redeemHelperCode, { code, relation: "child" });
   expect(res?.displayName).toBe("Margaret");
   const links = await t.run((ctx) => ctx.db.query("careLinks").collect());
-  expect(links).toEqual([expect.objectContaining({ caregiverId, seniorId: res!.seniorId, relation: "son" })]);
+  expect(links).toEqual([expect.objectContaining({ caregiverId, seniorId: res!.seniorId, relation: "child" })]);
 
   // Single use.
   expect(await as.mutation(api.careLinks.redeemHelperCode, { code })).toBeNull();

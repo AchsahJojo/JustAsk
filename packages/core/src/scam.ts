@@ -48,7 +48,7 @@ export const SCAM_QUESTIONS: Record<ScamKind, { question: string; fact: string }
   },
 };
 
-/** A likely scam in what the user asked for, or null. Plain requests ("buy a gift card for my grandson") pass. */
+/** A likely scam in what the user asked for, or null. Plain requests ("buy a gift card for my grandkid") pass. */
 export function scamCheck(request: string): ScamFlag | null {
   const s = request.toLowerCase().replace(/[’']/g, "'").replace(/\s+/g, " ");
   const flag = (kind: ScamKind): ScamFlag => ({ kind, ...SCAM_QUESTIONS[kind] });

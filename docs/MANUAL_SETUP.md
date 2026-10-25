@@ -121,7 +121,7 @@ Run these in a real, headed Chrome with the production build (`apps/extension/.o
 
 ### Manual checks for the scam check
 - [ ] Say (out loud) "I need to send the gift card codes to the IRS". JustAsk asks "Did someone call, text or email asking you to do this?" Answer "yes" by voice, and check that it stops with the advice.
-- [ ] "Buy a gift card for my grandson's birthday" goes ahead with no question.
+- [ ] "Buy a gift card for my grandkid's birthday" goes ahead with no question.
 - [ ] With a real key: open a fake "virus warning" page or a gift-card payment page. Claude should block it as a possible trick.
 
 ### Manual checks for starting on an empty tab

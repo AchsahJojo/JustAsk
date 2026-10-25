@@ -60,73 +60,73 @@ await anon.mutation("sessions:logEvent", { token: solo, sessionId: soloSession, 
 ok("standalone senior works with no caregiver (tasks empty, sessions log)");
 
 // --- Caregiver sets up a new senior on a fresh computer ---
-const { seniorId: momId, code } = await sam.c.mutation("devices:createSeniorWithCode", { name: "Joan Hill", displayName: "Mom", relation: "Mother" });
+const { seniorId: patId, code } = await sam.c.mutation("devices:createSeniorWithCode", { name: "Joan Hill", displayName: "Pat", relation: "Parent" });
 assert.match(code, /^\d{6}$/);
-assert.equal((await sam.c.query("devices:activeCode", { seniorId: momId })).code, code);
+assert.equal((await sam.c.query("devices:activeCode", { seniorId: patId })).code, code);
 let list = await sam.c.query("people:list", {});
-assert.equal(list.find((p) => p.id === momId).connected, false);
+assert.equal(list.find((p) => p.id === patId).connected, false);
 await assert.rejects(sam.c.mutation("devices:createSeniorWithCode", { name: "   ", displayName: "", relation: "" }), /Add their name/);
 const bad = await anon.mutation("devices:redeemCode", { code: "000000" });
 assert.equal(bad, null);
 const fresh = await anon.mutation("devices:redeemCode", { code: ` ${code.slice(0, 3)} ${code.slice(3)} ` });
 assert.ok(fresh?.token);
-assert.equal(fresh.displayName, "Mom");
+assert.equal(fresh.displayName, "Pat");
 assert.equal(await anon.mutation("devices:redeemCode", { code }), null, "code works once");
 list = await sam.c.query("people:list", {});
-assert.equal(list.find((p) => p.id === momId).connected, true);
-assert.equal(await sam.c.query("devices:activeCode", { seniorId: momId }), null);
+assert.equal(list.find((p) => p.id === patId).connected, true);
+assert.equal(await sam.c.query("devices:activeCode", { seniorId: patId }), null);
 ok("caregiver-made profile pairs once (spaces tolerated), shows connected");
 
 // --- Tasks: validation, delivery, cancel ---
 // A vague task is held: a question comes back, and nothing can be assigned without a check.
-const vague = await sam.c.action("taskCheck:review", { seniorId: momId, request: "get the book", answers: [] });
+const vague = await sam.c.action("taskCheck:review", { seniorId: patId, request: "get the book", answers: [] });
 assert.equal(vague.status, "question");
-await assert.rejects(send(sam.c, momId, "  "), /task check: question/);
-const messy = await sam.c.action("taskCheck:review", { seniorId: momId, request: "x", answers: [], editedDraft: { title: "X", spokenPrompt: "x", startUrl: "javascript:alert(1)", steps: Array(13).fill("step") } });
+await assert.rejects(send(sam.c, patId, "  "), /task check: question/);
+const messy = await sam.c.action("taskCheck:review", { seniorId: patId, request: "x", answers: [], editedDraft: { title: "X", spokenPrompt: "x", startUrl: "javascript:alert(1)", steps: Array(13).fill("step") } });
 assert.equal(messy.status, "clear");
 assert.equal(messy.draft.startUrl, null, "javascript: start page dropped");
 assert.equal(messy.draft.steps.length, 12, "steps capped at 12");
-const t1 = await send(sam.c, momId, "Refill your prescription", { startUrl: "https://pharmacy.example/", steps: ["Click Refill", " ", "Pick up in store"] });
+const t1 = await send(sam.c, patId, "Refill your prescription", { startUrl: "https://pharmacy.example/", steps: ["Click Refill", " ", "Pick up in store"] });
 const pending = await anon.query("tasks:pendingForDevice", { token: fresh.token });
 assert.equal(pending.length, 1);
 assert.equal(pending[0].from, "Sam");
 assert.equal(pending[0].spokenPrompt, "Refill your prescription", "spoken prompt defaults to the title");
 assert.deepEqual(pending[0].recipe.steps, ["Click Refill", "Pick up in store"], "blank steps dropped");
-const t2 = await send(sam.c, momId, "Join the Zoom call");
+const t2 = await send(sam.c, patId, "Join the Zoom call");
 await sam.c.mutation("tasks:cancel", { taskId: t2 });
 assert.equal((await anon.query("tasks:pendingForDevice", { token: fresh.token })).length, 1);
 ok("task check holds vague tasks; drafts tidied (javascript: dropped, steps capped); delivery, cancel");
 
 // --- Consent gates what the caregiver sees ---
-let mom = await sam.c.query("people:get", { seniorId: momId });
-assert.equal(mom.stats, null, "no stats without consent");
+let pat = await sam.c.query("people:get", { seniorId: patId });
+assert.equal(pat.stats, null, "no stats without consent");
 await anon.mutation("tasks:setStatus", { token: fresh.token, taskId: t1, status: "active" }); // the user pressed Start
 const s1 = await anon.mutation("sessions:start", { token: fresh.token, request: "refill", taskId: t1 });
 await anon.mutation("sessions:logEvent", { token: fresh.token, sessionId: s1, type: "step_shown", latencyMs: 800 });
 await anon.mutation("sessions:logEvent", { token: fresh.token, sessionId: s1, type: "done" });
-mom = await sam.c.query("people:get", { seniorId: momId });
-assert.equal(mom.tasks.find((t) => t.id === t1).status, "sent", "status hidden without consent");
+pat = await sam.c.query("people:get", { seniorId: patId });
+assert.equal(pat.tasks.find((t) => t.id === t1).status, "sent", "status hidden without consent");
 assert.equal((await sam.c.query("activity:feed", {})).length, 0, "no note without consent");
 await anon.mutation("devices:setConsent", { token: fresh.token, notifyOnComplete: true, notifyOnStuck: false });
-mom = await sam.c.query("people:get", { seniorId: momId });
-assert.equal(mom.tasks.find((t) => t.id === t1).status, "done");
-assert.equal(mom.stats.finished, 1);
-assert.equal(mom.stats.stuck, null, "stuck count hidden without stuck consent");
-assert.equal(mom.stats.medianStepMs, 800);
+pat = await sam.c.query("people:get", { seniorId: patId });
+assert.equal(pat.tasks.find((t) => t.id === t1).status, "done");
+assert.equal(pat.stats.finished, 1);
+assert.equal(pat.stats.stuck, null, "stuck count hidden without stuck consent");
+assert.equal(pat.stats.medianStepMs, 800);
 await assert.rejects(sam.c.mutation("tasks:cancel", { taskId: t1 }), /already started/);
 ok("consent off: status 'sent', no note, no stats; consent on: real status + stats");
 
 // --- Isolation between caregivers ---
 const ana = await caregiver("Ana");
-await assert.rejects(ana.c.query("people:get", { seniorId: momId }), /not your senior/);
-await assert.rejects(send(ana.c, momId, "Hi"), /not your senior/);
-await assert.rejects(ana.c.mutation("devices:newCode", { seniorId: momId }), /not your senior/);
+await assert.rejects(ana.c.query("people:get", { seniorId: patId }), /not your senior/);
+await assert.rejects(send(ana.c, patId, "Hi"), /not your senior/);
+await assert.rejects(ana.c.mutation("devices:newCode", { seniorId: patId }), /not your senior/);
 await assert.rejects(ana.c.mutation("tasks:cancel", { taskId: t1 }), /not found/);
 assert.deepEqual(await ana.c.query("people:list", {}), []);
 ok("another caregiver can't see, task, re-code or cancel");
 
 // --- Standalone senior connects to a caregiver later: profiles merge, the user's own is kept ---
-const { seniorId: aliceId, code: aliceCode } = await ana.c.mutation("devices:createSeniorWithCode", { name: "Alice Park", displayName: "Grandma", relation: "Grandmother" });
+const { seniorId: aliceId, code: aliceCode } = await ana.c.mutation("devices:createSeniorWithCode", { name: "Alice Park", displayName: "Alice", relation: "Grandparent" });
 await send(ana.c, aliceId, "Video call Ana");
 const merged = await anon.mutation("devices:redeemCode", { code: aliceCode, token: solo });
 assert.ok(merged);
@@ -146,38 +146,38 @@ await assert.rejects(sam.c.query("people:get", { seniorId: aliceId }), /not your
 ok("standalone senior + caregiver code: one profile, same token, the user's name kept, task carried over");
 
 // --- A second caregiver joins the same senior; a second computer joins an in-use profile ---
-const { code: momCode2 } = await sam.c.mutation("devices:newCode", { seniorId: momId });
-const laptop2 = await anon.mutation("devices:redeemCode", { code: momCode2 });
+const { code: patCode2 } = await sam.c.mutation("devices:newCode", { seniorId: patId });
+const laptop2 = await anon.mutation("devices:redeemCode", { code: patCode2 });
 assert.ok(laptop2);
 assert.notEqual(laptop2.token, fresh.token);
-assert.equal((await sam.c.query("people:get", { seniorId: momId })).devices, 2);
-const { code: c3 } = await sam.c.mutation("devices:newCode", { seniorId: momId });
-const { code: c4 } = await sam.c.mutation("devices:newCode", { seniorId: momId });
+assert.equal((await sam.c.query("people:get", { seniorId: patId })).devices, 2);
+const { code: c3 } = await sam.c.mutation("devices:newCode", { seniorId: patId });
+const { code: c4 } = await sam.c.mutation("devices:newCode", { seniorId: patId });
 assert.equal(await anon.mutation("devices:redeemCode", { code: c3 }), null, "a new code replaces the old one");
 // A standalone install typing the code of an already-connected profile joins that profile.
 const { token: solo2 } = await createSelf("Joe");
 const joined = await anon.mutation("devices:redeemCode", { code: c4, token: solo2 });
 assert.ok(joined);
-assert.equal(joined.displayName, "Mom");
-assert.equal((await sam.c.query("people:get", { seniorId: momId })).devices, 3);
+assert.equal(joined.displayName, "Pat");
+assert.equal((await sam.c.query("people:get", { seniorId: patId })).devices, 3);
 ok("second computer, code replacement, standalone joining an in-use profile");
 
 // --- Re-pair with a stale token is treated as a new install ---
-const { code: c5 } = await sam.c.mutation("devices:newCode", { seniorId: momId });
+const { code: c5 } = await sam.c.mutation("devices:newCode", { seniorId: patId });
 const stale = await anon.mutation("devices:redeemCode", { code: c5, token: "f".repeat(64) });
 assert.ok(stale);
 assert.notEqual(stale.token, "f".repeat(64));
 ok("stale token on redeem gets a fresh device");
 
 // --- Senior disconnects: JustAsk keeps working, helper is told, their waiting tasks go away ---
-await send(sam.c, momId, "Pay the water bill");
+await send(sam.c, patId, "Pay the water bill");
 await anon.mutation("devices:leaveHelpers", { token: fresh.token });
 assert.deepEqual((await anon.query("devices:me", { token: fresh.token })).helpers, []);
 assert.deepEqual(await anon.query("tasks:pendingForDevice", { token: fresh.token }), []);
 await anon.mutation("sessions:start", { token: fresh.token, request: "still works" });
 assert.deepEqual(await sam.c.query("people:list", {}), []);
 assert.match((await sam.c.query("activity:feed", {}))[0].text, /disconnected/);
-await assert.rejects(send(sam.c, momId, "Hi"), /not your senior/);
+await assert.rejects(send(sam.c, patId, "Hi"), /not your senior/);
 ok("senior disconnects: still works alone, helper notified, can't send tasks");
 
 // --- Caregiver removes someone ---
@@ -198,7 +198,7 @@ ok("activity mark-all-read");
 // --- The user's task list persists: started tasks stay open, "I did it" moves them to done ---
 {
   const kim = await caregiver("Kim");
-  const { seniorId, code } = await kim.c.mutation("devices:createSeniorWithCode", { name: "Lee Park", displayName: "Dad", relation: "Father" });
+  const { seniorId, code } = await kim.c.mutation("devices:createSeniorWithCode", { name: "Lee Park", displayName: "Lee", relation: "Parent" });
   const { token: t } = await anon.mutation("devices:redeemCode", { code });
   await anon.mutation("devices:setConsent", { token: t, notifyOnComplete: true, notifyOnStuck: false });
   const a = await send(kim.c, seniorId, "Pay the gas bill");
@@ -212,7 +212,7 @@ ok("activity mark-all-read");
   list = await anon.query("tasks:listForDevice", { token: t });
   assert.deepEqual(list.open, []);
   assert.deepEqual(list.done.map((x) => x.title), ["Pay the gas bill"]);
-  assert.match((await kim.c.query("activity:feed", {}))[0].text, /Dad finished "Pay the gas bill"/);
+  assert.match((await kim.c.query("activity:feed", {}))[0].text, /Lee finished "Pay the gas bill"/);
   await assert.rejects(anon.query("tasks:listForDevice", { token: "nope" }), /not paired/);
   ok("task list: started task stays open after closing; I did it → done + note; removed tasks leave");
 }
@@ -220,7 +220,7 @@ ok("activity mark-all-read");
 // --- Show me instead: on by default (JustAsk guides); the user or a linked caregiver can change it ---
 {
   const jo = await caregiver("Jo");
-  const { seniorId, code } = await jo.c.mutation("devices:createSeniorWithCode", { name: "Ruth Ng", displayName: "Gran", relation: "Grandmother" });
+  const { seniorId, code } = await jo.c.mutation("devices:createSeniorWithCode", { name: "Ruth Ng", displayName: "Ruth", relation: "Grandparent" });
   await jo.c.mutation("people:setShowMe", { seniorId, on: false }); // the caregiver lets JustAsk click, before the user connects
   const { token: solo3 } = await createSelf("Ruth");
   assert.equal((await anon.query("prefs:get", { token: solo3 })).showMeInstead, true, "JustAsk guides by default");

@@ -4,10 +4,8 @@ import { api, errorText } from "../api";
 import { go, href } from "../router";
 
 const RELATIONS: Array<{ label: string; call: string }> = [
-  { label: "Mother", call: "Mom" },
-  { label: "Father", call: "Dad" },
-  { label: "Grandmother", call: "Grandma" },
-  { label: "Grandfather", call: "Grandpa" },
+  { label: "Parent", call: "" },
+  { label: "Grandparent", call: "" },
   { label: "Partner", call: "" },
   { label: "Friend", call: "" },
   { label: "Client", call: "" },
@@ -92,10 +90,10 @@ export function SetupWizard() {
               setCallTouched(true);
               setCall(e.target.value);
             }}
-            placeholder={firstName || "Mom"}
+            placeholder={firstName || "Pat"}
             maxLength={40}
           />
-          <small>JustAsk says it out loud: “Hi {displayName.trim() || firstName || "Mom"}, what would you like to do?”</small>
+          <small>JustAsk says it out loud: “Hi {displayName.trim() || firstName || "Pat"}, what would you like to do?”</small>
         </label>
 
         {error && (
