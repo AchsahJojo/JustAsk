@@ -254,6 +254,11 @@ export class CartesiaListener {
       (token) => ({ token, noAccount: false }),
       (e: unknown) => ({ token: null as string | null, noAccount: (e as Error)?.message === NO_ACCOUNT }),
     );
+    // A cached token or "no account yet" answers within a few ms: no account means no voice,
+    // so say so without asking for the microphone. A real fetch keeps running alongside the mic.
+    const early = await Promise.race([tokenP, new Promise<null>((r) => setTimeout(() => r(null), 30))]);
+    if (ended) return;
+    if (early?.noAccount) return end({ error: STT_MESSAGES.noAccount });
 
     // 2. Microphone and audio straight away: capture starts with the click. Until the socket is
     //    open, blocks wait in `pending`, so the start of a sentence is never lost.

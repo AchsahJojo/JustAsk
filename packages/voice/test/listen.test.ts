@@ -58,13 +58,24 @@ const tick = (ms = 0) => new Promise((r) => setTimeout(r, ms));
 const loudBlock = () => new Float32Array(1600).fill(0.2);
 
 describe("CartesiaListener.listen", () => {
+  it("with no account, says so without asking for the microphone", async () => {
+    install();
+    const getUserMedia = vi.fn(async () => ({ getTracks: () => [] }));
+    vi.stubGlobal("navigator", { mediaDevices: { getUserMedia } });
+    const errors: string[] = [];
+    const listener = new CartesiaListener({ get: async () => Promise.reject(new Error("no-account")) });
+    await listener.listen({ onInterim: () => {}, onFinal: () => {}, onError: (m) => errors.push(m), onEnd: () => {} });
+    expect(errors[0]).toMatch(/once your JustAsk is set up/);
+    expect(getUserMedia).not.toHaveBeenCalled();
+  });
+
   it("records from the press: audio said before Cartesia connects is kept and sent first", async () => {
     install();
     let giveToken!: (t: string) => void;
     const listener = new CartesiaListener({ get: () => new Promise<string>((r) => (giveToken = r)) }, { workletUrl: "worklet.js" });
     const ready = vi.fn();
     void listener.listen({ onReady: ready, onInterim: () => {}, onFinal: () => {}, onError: () => {}, onEnd: () => {} });
-    await tick();
+    await tick(50); // the mic starts after at most a 30 ms check for a cached token
     expect(ready).toHaveBeenCalled(); // mic live before the token arrived
     node!.port.onmessage!({ data: loudBlock() });
     node!.port.onmessage!({ data: loudBlock() });
@@ -83,7 +94,7 @@ describe("CartesiaListener.listen", () => {
     install();
     const listener = new CartesiaListener({ get: async () => "tok" }, { workletUrl: "worklet.js", turn: { startMs: 3000, silenceMs: 100, maxMs: 30_000, threshold: 0.01 } });
     void listener.listen({ onInterim: () => {}, onFinal: () => {}, onError: () => {}, onEnd: () => {} });
-    await tick();
+    await tick(50);
     node!.port.onmessage!({ data: loudBlock() });
     listener.stop(); // the user pressed again before the socket opened
     await tick();
