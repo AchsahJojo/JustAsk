@@ -1,77 +1,75 @@
 <!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>JustAsk: help with the next click</title>
-<meta name="description" content="JustAsk is a Chrome extension that shows an older adult the next step on any task, one step at a time, plus a caregiver site for the people who help.">
-<meta property="og:title" content="JustAsk: help with the next click">
-<meta property="og:description" content="JustAsk is a Chrome extension that shows an older adult the next step on any task, one step at a time, plus a caregiver site for the people who help.">
-<meta name="theme-color" content="#fbf8f2">
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>JustAsk: less “where do I click?”, more “I did it.”</title><meta name="description" content="Say what you need. JustAsk lights up the next step on the website, and says it out loud."><meta property="og:title" content="JustAsk: less “where do I click?”, more “I did it.”"><meta property="og:description" content="Say what you need. JustAsk lights up the next step on the website, and says it out loud.">
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Newsreader:opsz,wght@6..72,400;6..72,500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="/styles.css">
-</head>
-<body>
-<a class="skip" href="#main">Skip to content</a>
-<header class="top"><div class="wrap">
-<a class="brand" href="/"><svg viewBox="0 0 32 32" aria-hidden="true"><rect x="3" y="3" width="26" height="26" rx="9" fill="none" stroke="#f0a032" stroke-width="2.4"/><rect x="9" y="12" width="14" height="8" rx="4" fill="#1b1a17"/></svg>JustAsk</a>
-<nav class="nav" aria-label="Main"><a href="/why">Why</a><a href="/together">Use them together</a><a href="/get">Get JustAsk</a><a class="btn secondary" href="/help">I help someone</a></nav>
-</div></header>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/styles.css"></head>
+<body><a class="skip" href="#main">Skip to content</a>
+<header class="top dark"><div class="wrap"><a class="brand" href="/"><i></i>JustAsk</a><nav class="nav" aria-label="Main"><a class="hide-s" href="/together">How it works</a><a class="hide-s" href="/why">Why</a><a class="hide-s" href="/get">Get JustAsk</a></nav><a class="pill glow" href="/help">I help someone</a></div></header>
 <main id="main">
-
 <section class="hero"><div class="wrap">
-<div>
-<p class="eyebrow">A Chrome extension and a caregiver site</p>
-<h1><em class="k">Seamless</em> access to everyday technology shouldn’t depend on your age.</h1>
-<p class="lede">Or on whether family is in the room. JustAsk is there the moment she needs help, on the website she already has open: no class, no IT desk, no video to watch first.</p>
-<div class="actions">
-<a class="btn primary" href="/get">Get JustAsk <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 10h12M11 5l5 5-5 5"/></svg></a>
-<a class="btn secondary" href="/help">I help someone</a>
+<div><p class="kicker">For older adults, and the people who help them</p>
+<h1>Less <em>“where do I click?”</em><br>More “I did it.”</h1>
+<p class="sub">Say what you need. JustAsk lights up the next step, and says it out loud.</p>
+<div class="cta"><a class="pill glow big" href="/get">Get JustAsk <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 8h10M9 4l4 4-4 4"/></svg></a><a class="pill ghost big" href="/help">I help someone</a></div></div>
+<figure class="demo" style="margin:0" aria-label="Animated example: JustAsk guides a prescription refill in two clicks">
+<div class="bar"><i></i><i></i><i></i><div class="addr">riverside-pharmacy.com</div><div class="status"><b></b><span>Listening</span></div></div>
+<div class="screen">
+ <div class="view on" data-v="a"><div class="site-nav"><strong>Riverside Pharmacy</strong><span>Shop</span><span class="t" id="rxlink">Prescriptions</span><span>Account</span></div><div class="v-h">Care, close to home.</div><div class="v-s">Open 8am to 9pm, every day.</div></div>
+ <div class="view" data-v="b"><div class="site-nav"><strong>Riverside Pharmacy</strong><span>Shop</span><span>Prescriptions</span><span>Account</span></div><div class="v-h" style="font-size:24px;margin-bottom:10px">Your prescriptions</div>
+  <div class="rx"><div>Lisinopril 10 mg<small>2 refills left</small></div><span class="t" id="refill"><span class="btnx">Refill</span></span></div>
+  <div class="rx"><div>Vitamin D 1000 IU<small>Ready for pickup</small></div><span class="btnx soft">View</span></div></div>
+ <div class="view" data-v="c"><div class="site-nav"><strong>Riverside Pharmacy</strong><span>Shop</span><span>Prescriptions</span><span>Account</span></div><div class="okmark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg></div><div class="v-h" style="font-size:26px">Refill requested</div><div class="v-s">Lisinopril 10 mg</div></div>
+ <svg class="cursor" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 2l15 8.5-6.4 1.7L9.3 19z" fill="#14130f" stroke="#fff" stroke-width="1.6" stroke-linejoin="round"/></svg>
 </div>
-</div>
-<figure class="demo" aria-label="Illustration: JustAsk highlights the Sign in button on a patient portal and speaks one line" style="margin:0">
-<div class="chrome"><i></i><i></i><i></i><div class="url">myhealth-portal.example/sign-in</div><div class="orb" title="JustAsk"></div></div>
-<div class="page">
-<div class="h">Patient portal</div>
-<div class="s">Sign in to see your visits and messages.</div>
-<div class="field">Email</div>
-<div class="input">••••••••••••</div>
-<span class="signin">Sign in</span>
-<svg class="cursor" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3l14 8-6 1.6L10 19z" fill="#1b1a17" stroke="#fff" stroke-width="1.5" stroke-linejoin="round"/></svg>
-</div>
-<div class="say"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9v6h4l5 4V5L8 9H4z"/><path d="M16.5 8.5a5 5 0 0 1 0 7"/><path d="M19 6a8.5 8.5 0 0 1 0 12"/></svg><div><b>JustAsk says</b><span>“Click the blue Sign in button.”</span></div></div>
-<div class="surface"><span>Repeat</span><span>Stop</span></div>
+<div class="voice"><span class="who">She says</span><div class="wave"><span></span><span></span><span></span><span></span></div><span class="line">“Help me refill my prescription.”</span></div>
 </figure>
 </div></section>
 
+<section class="mission"><div class="wrap">
+<p class="eyebrow center">Our mission</p>
+<h2><em>Seamless</em> tech help shouldn’t depend on your age, or on family being in the room.</h2>
+</div></section>
+
+<section style="padding-top:0"><div class="wrap">
+<p class="eyebrow">How it works</p><h2>Three moves. That’s it.</h2>
+<div class="how">
+<div class="card"><span class="n">01</span><div class="vis"><div class="mic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></div></div><h3>Ask.</h3><p>Press one button. Say it in plain words.</p></div>
+<div class="card"><span class="n">02</span><div class="vis"><span class="mini">Sign in</span></div><h3>See it. Hear it.</h3><p>The next button glows. One short line is spoken.</p></div>
+<div class="card"><span class="n">03</span><div class="vis"><div class="dual"><span>She clicks</span>or<span>JustAsk does it</span></div></div><h3>Do it.</h3><p>JustAsk only ever takes the safe steps. Then on to the next.</p></div>
+</div></div></section>
+
+<section class="nightsec"><div class="wrap">
+<p class="eyebrow">Why now</p><h2>The hard part is <em>the next click.</em></h2>
+<div class="stats">
+<div class="stat"><div class="num">36%</div><p>of patient-portal help requests were just setting up the account.</p><div class="src">Women 65+ asking for patient-portal help. <a href="https://pmc.ncbi.nlm.nih.gov/articles/PMC9277451/">PMC9277451</a></div></div>
+<div class="stat"><div class="num">$7.7<small>B</small></div><p>reported lost to fraud by people 60+ in 2025.</p><div class="src">People 60+, all elder-fraud complaints ($7.748B). FBI IC3, 2025.</div></div>
+<div class="stat"><div class="num">3 <small>in</small> 5</div><p>say tech isn’t designed with their age in mind.</p><div class="src">U.S. adults 50+. AARP, 2026.</div></div>
+</div></div></section>
+
 <section><div class="wrap">
-<p class="eyebrow">How it helps</p>
-<h2>One step at a time, on the page in front of her.</h2>
-<div class="steps">
-<div class="step"><div class="n">1 · Ask</div><h3>She says what she needs.</h3><p>One button, then plain words: “Help me refill my prescription.”</p></div>
-<div class="step"><div class="n">2 · See and hear</div><h3>The next step lights up.</h3><p>A glowing box marks the next control, and JustAsk speaks one short line.</p></div>
-<div class="step"><div class="n">3 · Do</div><h3>She clicks, or JustAsk does the safe step.</h3><p>A safe step is a click, a search, or a field that isn’t sensitive. Then it checks that the page changed and plans the next one.</p></div>
+<p class="eyebrow">Safe by design</p><h2>Helpful. <em>Never pushy.</em></h2>
+<div class="safe">
+<div><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="15" r="4"/><path d="m11 12 9-9M17 6l3 3"/></svg><b>Hands off secrets</b><span>Never types passwords, codes or card numbers.</span></div>
+<div><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .8-1 1.5V14M12 17.2v.1"/></svg><b>Asks first</b><span>Before anything about money, accounts or personal info.</span></div>
+<div><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 4 6v6c0 4.5 3.4 8 8 9 4.6-1 8-4.5 8-9V6z"/><path d="m9.5 9.5 5 5M14.5 9.5l-5 5"/></svg><b>Blocks scam pages</b><span>If a page looks like a scam, it stops.</span></div>
+<div><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="5" width="14" height="14" rx="3"/></svg><b>Stop anytime</b><span>Repeat and Stop, always on screen.</span></div>
+</div></div></section>
+
+<section style="padding-top:0"><div class="wrap helper">
+<div><p class="eyebrow">For helpers</p><h2>Far away. <em>Still there.</em></h2><p class="lead">Send a task from anywhere. Watch it go from Connected to Done, live.</p><div class="cta"><a class="pill ink big" href="/help">I help someone <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 8h10M9 4l4 4-4 4"/></svg></a></div></div>
+<div class="panel">
+<div class="prow"><div class="av">M</div><div class="g"><b>Mom</b><small>Refill a prescription</small></div><span class="tag c">Connected</span></div>
+<div class="prow"><div class="av">M</div><div class="g"><b>Mom</b><small>Join the video visit</small></div><span class="tag d">Done</span></div>
+<div class="prow"><div class="av">D</div><div class="g"><b>Dad</b><small>Sign in to the portal</small></div><span class="tag d">Done</span></div>
 </div>
 </div></section>
 
-<section><div class="wrap">
-<p class="eyebrow">Why it matters</p>
-<h2 class="measure">The hard part isn’t the goal. It’s the next click.</h2>
-<div class="stats"><div class="stat"><div class="big">36%<small> · 32%</small></div><p class="what">asked for help setting up a patient portal account (36%) and signing in (32%), the two most requested kinds of help.</p><p class="src">Women 65+ asking for help with a patient portal. <a href="https://pmc.ncbi.nlm.nih.gov/articles/PMC9277451/">PMC9277451</a></p></div><div class="stat"><div class="big">$7.748B</div><p class="what">reported lost by people 60+ in 2025, across all elder-fraud complaints.</p><p class="src">People 60+, all elder-fraud complaints reported to the FBI. FBI IC3, 2025 Elder Fraud Report.</p></div><div class="stat"><div class="big">3 in 5</div><p class="what">say technology is not designed with their age in mind.</p><p class="src">U.S. adults 50+. AARP, 2026.</p></div></div>
-<p class="actions"><a class="btn secondary" href="/why">Read why we built it <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 10h12M11 5l5 5-5 5"/></svg></a></p>
+<section class="final"><div class="wrap">
+<h2>Help, <em>the moment</em> it’s needed.</h2>
+<div class="cta"><a class="pill glow big" href="/get">Get JustAsk <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 8h10M9 4l4 4-4 4"/></svg></a><a class="pill ghost big" href="/together">See how it works</a></div>
 </div></section>
-
 </main>
-<footer><div class="wrap">
-<p class="tag">Less <span class="q">“where do I click?”</span><br>More “I did it.”</p>
-<div class="foot">
-<span>JustAsk is a Chrome extension and a caregiver site.</span>
-<a href="https://github.com/AchsahJojo/JustAsk">Source on GitHub</a>
-<span>This teaching site was built and deployed with Mana.</span>
-</div>
-</div></footer>
-</body>
-</html>
+<footer><div class="wrap"><a class="brand" href="/"><i></i>JustAsk</a><span class="tagline">Less “where do I click?” More “I did it.”</span><a href="/together">How it works</a><a href="/get">Get JustAsk</a><a href="https://github.com/AchsahJojo/JustAsk">GitHub</a><span>Built with Mana</span></div></footer>
+<script src="/site.js" defer></script></body></html>
