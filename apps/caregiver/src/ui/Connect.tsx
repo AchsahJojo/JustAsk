@@ -87,7 +87,7 @@ export function ConnectPanel({ seniorId, displayName, connected, another }: { se
               <span className="muted">Turn on JustAsk and the microphone. It opens by itself after installing.</span>
             </li>
             <li>
-              <strong>Under “Connect to a helper”, type this code:</strong>
+              <strong>Under “I have a code”, type this code:</strong>
               {active === undefined ? (
                 <span className="code-box skeleton" />
               ) : live ? (

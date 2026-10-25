@@ -4,6 +4,12 @@ import { PlanRequest, QueryRequest, type PlanResponse, type QueryResponse } from
 import { makeClient, planStep } from "../lib/planStep";
 import { searchQuery } from "../lib/searchQuery";
 
+/** ConvexError data ("not paired") or a plain error's message ("rate limited"). */
+function errorText(e: unknown): string {
+  const data = (e as { data?: unknown } | null)?.data;
+  return typeof data === "string" ? data : String((e as Error | null)?.message);
+}
+
 /**
  * Runs one Claude step for the `/plan` HTTP action. Called in-process, never through
  * `runAction`, so the snapshot (page text, element text, URL) is never a function argument
@@ -21,7 +27,7 @@ export async function runPlan(ctx: ActionCtx, body: string): Promise<PlanRespons
   try {
     await ctx.runMutation(internal.devices.consumeStep, { token: parsed.data.deviceToken ?? "" });
   } catch (e) {
-    const m = String((e as Error).message);
+    const m = errorText(e);
     return { ok: false, error: /not paired/.test(m) ? "not paired" : /rate limited/.test(m) ? "rate limited" : "error", retryable: false };
   }
   const key = process.env.ANTHROPIC_API_KEY;
@@ -46,7 +52,7 @@ export async function runQuery(ctx: ActionCtx, body: string): Promise<QueryRespo
   try {
     await ctx.runMutation(internal.devices.consumeStep, { token: parsed.data.deviceToken ?? "" });
   } catch (e) {
-    const m = String((e as Error).message);
+    const m = errorText(e);
     return { ok: false, error: /not paired/.test(m) ? "not paired" : /rate limited/.test(m) ? "rate limited" : "error" };
   }
   const key = process.env.ANTHROPIC_API_KEY;

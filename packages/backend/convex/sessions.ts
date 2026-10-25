@@ -30,7 +30,7 @@ export const logEvent = mutation({
         // finish it or return it to pending after being stopped/blocked.
         const wasActive = task.status === "active";
         if (wasActive && type === "done") {
-          await ctx.db.patch(task._id, { status: "done" });
+          await ctx.db.patch(task._id, { status: "done", doneAt: Date.now() });
         } else if (wasActive && (type === "abandoned" || type === "blocked")) {
           await ctx.db.patch(task._id, { status: "pending" });
         }

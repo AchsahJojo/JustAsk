@@ -3,12 +3,12 @@ import { browser } from "wxt/browser";
 import type { SessionView } from "@justask/core";
 import { SessionHost } from "../lib/session";
 import { newListener, onVoiceStatus, voiceTokens } from "../lib/speech";
-import { backend, type PendingTask, type Task, type TaskList } from "../lib/backend";
+import { backend, NOT_PAIRED, type PendingTask, type Task, type TaskList } from "../lib/backend";
 import { getSettings } from "../lib/config";
 import { pullPrefs } from "../lib/prefsSync";
 import { buildCapture, captureFileName } from "../lib/capture";
 import { Orb, type OrbMode } from "./Orb";
-import { useTaskList } from "./useTaskList";
+import { useNotPaired, useTaskList } from "./useTaskList";
 import { focusCaptionUnlessAsking } from "./focusCaption";
 
 const ALL_SITES = { origins: ["<all_urls>"] };
@@ -33,7 +33,8 @@ export function Panel({ pinnedTabId }: { pinnedTabId: number | null }) {
   const [answer, setAnswer] = useState("");
   const [name, setName] = useState("");
   const [tasks, setTasks] = useTaskList();
-  const [resume, setResume] = useState<{ request: string; taskId: string | null } | null>(null);
+  const notPaired = useNotPaired();
+  const [resume, setResume] = useState<{ request: string; taskId: string | null; recipe?: PendingTask["recipe"] } | null>(null);
   const [access, setAccess] = useState(true);
   const [voiceUp, setVoiceUp] = useState(true);
   useEffect(() => onVoiceStatus(setVoiceUp), []);
@@ -64,7 +65,7 @@ export function Panel({ pinnedTabId }: { pinnedTabId: number | null }) {
     void voiceTokens.get().catch(() => {});
     void pullPrefs();
     void browser.storage.local.get("resume").then((r) => {
-      const res = (r as { resume?: { request: string; taskId: string | null } }).resume;
+      const res = (r as { resume?: { request: string; taskId: string | null; recipe?: PendingTask["recipe"] } }).resume;
       if (res && host.controller.state.phase === "idle") setResume(res);
     });
     return off;
@@ -182,13 +183,18 @@ export function Panel({ pinnedTabId }: { pinnedTabId: number | null }) {
             <h1 className="hello">{name ? `Hi ${name}.` : "Hi there."}</h1>
             {view.line && <p className="soft">{view.line}</p>}
 
+            {notPaired && (
+              <p className="note" role="status">
+                {NOT_PAIRED}
+              </p>
+            )}
             <Tasks list={tasks} onStart={startTask} onFinish={finishTask} />
 
             {resume && (
               <section className="card">
                 <p className="task-title">Want to keep going with “{resume.request}”?</p>
                 <div className="row">
-                  <button className="btn primary" onClick={() => start(resume.request, { taskId: resume.taskId })}>
+                  <button className="btn primary" onClick={() => start(resume.request, { taskId: resume.taskId, recipe: resume.recipe ?? null })}>
                     Yes
                   </button>
                   <button

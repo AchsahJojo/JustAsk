@@ -36,7 +36,7 @@ export const redeemHelperCode = mutation({
     const cg = await requireCaregiver(ctx);
     const code = normalizeCode(args.code);
     if (!code) return null;
-    const relation = (args.relation ?? "helper").trim().slice(0, 40) || "helper";
+    const relation = (args.relation ?? "").trim().slice(0, 40);
     const mine = await rateLimiter.check(ctx, "helperFailCaregiver", { key: cg._id });
     if (!mine.ok) throw new ConvexError(TOO_MANY_TRIES);
     await assertCodeAttemptAllowed(ctx, code);

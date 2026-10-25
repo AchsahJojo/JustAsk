@@ -19,10 +19,11 @@ function authError(e: unknown, flow: Flow): string {
   if (/Failed to fetch|NetworkError|network/i.test(msg)) return "Can't reach JustAsk. Check your connection.";
   const m = msg.match(/Uncaught (?:Convex)?Error: (.+?)(?:\n|$)/);
   if (m && !/^Server Error/.test(m[1])) return m[1];
-  // Anything else is on our side (a server error), never something they typed. Say so plainly.
+  // Production Convex redacts Convex Auth's plain Errors to "Server Error", so a wrong password or an
+  // existing account lands here. Name the likely cause for the flow they were in.
   return flow === "signUp"
-    ? "JustAsk couldn't create your account because of a problem on our side, not anything you typed. Try again in a minute."
-    : "JustAsk couldn't sign you in because of a problem on our side. Try again in a minute.";
+    ? "We couldn't create that account. If you already have one with this email, sign in instead."
+    : "That email and password don't match. Check them, or create an account.";
 }
 
 export function SignIn() {

@@ -1,4 +1,4 @@
-import { v } from "convex/values";
+import { ConvexError, v } from "convex/values";
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { mutation, query } from "./_generated/server";
 import { clean, currentCaregiver, requireCaregiver } from "./lib";
@@ -36,7 +36,7 @@ export const rename = mutation({
   handler: async (ctx, { name }) => {
     const cg = await requireCaregiver(ctx);
     const n = clean(name, 60);
-    if (!n) throw new Error("Add your name.");
+    if (!n) throw new ConvexError("Add your name.");
     await ctx.db.patch(cg._id, { name: n });
   },
 });

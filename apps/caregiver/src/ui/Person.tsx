@@ -162,7 +162,11 @@ function TaskList({ tasks, consent, displayName }: { tasks: TaskRow[]; consent: 
   return (
     <section className="card">
       <h2>Tasks you sent</h2>
-      {!consent && <p className="muted small">{displayName} hasn't chosen to share results, so tasks show as Sent.</p>}
+      {!consent && (
+        <p className="muted small">
+          {displayName} hasn't chosen to share results yet, so tasks show as Sent. They can turn this on in JustAsk's setup page: “Tell my helper when I finish a task they sent.”
+        </p>
+      )}
       {error && (
         <p className="error" role="alert">
           {error}
@@ -180,7 +184,7 @@ function TaskList({ tasks, consent, displayName }: { tasks: TaskRow[]; consent: 
             </div>
             <span className="task-side">
               <span className={`pill ${STATUS[t.status].cls}`}>{STATUS[t.status].label}</span>
-              {t.canCancel && (
+              {t.canCancel && t.status !== "dismissed" && (
                 <button
                   className="linkbtn small"
                   onClick={async () => {
@@ -228,7 +232,7 @@ function Sharing({
           <strong>{consent.notifyOnStuck ? "On" : "Off"}</strong>
         </li>
       </ul>
-      <p className="muted small">Only {displayName} can change this, on their computer. You never see their screen, what they type, or what they ask JustAsk themselves.</p>
+      <p className="muted small">Only {displayName} can change this, in JustAsk's setup page on their computer. You never see their screen, what they type, or what they ask JustAsk themselves.</p>
       {stats && (
         <dl className="stats">
           <div>

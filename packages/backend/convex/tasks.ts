@@ -1,4 +1,4 @@
-import { v } from "convex/values";
+import { ConvexError, v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { TASK_LIMITS, isSafeStartUrl } from "@justask/shared";
 import { clean, requireCaregiver, requireDevice, requireLink } from "./lib";
@@ -12,23 +12,23 @@ export const assign = mutation({
   handler: async (ctx, { seniorId, checkId }) => {
     const { cg } = await requireLink(ctx, seniorId);
     const check = await ctx.db.get(checkId);
-    if (!check || check.caregiverId !== cg._id || check.seniorId !== seniorId) throw new Error("Check the task again before sending it.");
-    if (check.expiresAt <= Date.now()) throw new Error("That check is out of date. Check the task again before sending it.");
+    if (!check || check.caregiverId !== cg._id || check.seniorId !== seniorId) throw new ConvexError("Check the task again before sending it.");
+    if (check.expiresAt <= Date.now()) throw new ConvexError("That check is out of date. Check the task again before sending it.");
     const title = clean(check.title, TASK_LIMITS.title);
     const spokenPrompt = clean(check.spokenPrompt, TASK_LIMITS.spokenPrompt) || title;
     let r: { startUrl?: string; steps: string[] } | undefined;
     if (check.recipe) {
       const steps = check.recipe.steps.map((s) => clean(s, TASK_LIMITS.step)).filter(Boolean).slice(0, TASK_LIMITS.steps);
       const startUrl = check.recipe.startUrl?.trim();
-      if (startUrl && (startUrl.length > TASK_LIMITS.startUrl || !isSafeStartUrl(startUrl))) throw new Error("The start page must be a web address that begins with https://");
+      if (startUrl && (startUrl.length > TASK_LIMITS.startUrl || !isSafeStartUrl(startUrl))) throw new ConvexError("The start page must be a web address that begins with https://");
       if (steps.length || startUrl) r = { ...(startUrl ? { startUrl } : {}), steps };
     }
-    if (!title) throw new Error("Give the task a short name.");
+    if (!title) throw new ConvexError("Give the task a short name.");
     const pending = await ctx.db
       .query("tasks")
       .withIndex("by_senior_status", (q) => q.eq("seniorId", seniorId).eq("status", "pending"))
       .collect();
-    if (pending.length >= 10) throw new Error("They already have 10 tasks waiting. Cancel one first.");
+    if (pending.length >= 10) throw new ConvexError("They already have 10 tasks waiting. Cancel one first.");
     await ctx.db.delete(checkId);
     return ctx.db.insert("tasks", { seniorId, title, spokenPrompt, ...(r ? { recipe: r } : {}), assignedBy: cg._id, status: "pending", createdAt: Date.now() });
   },
@@ -40,8 +40,8 @@ export const cancel = mutation({
   handler: async (ctx, { taskId }) => {
     const cg = await requireCaregiver(ctx);
     const task = await ctx.db.get(taskId);
-    if (!task || task.assignedBy !== cg._id) throw new Error("not found");
-    if (task.status !== "pending") throw new Error("They already started this task.");
+    if (!task || task.assignedBy !== cg._id) throw new ConvexError("not found");
+    if (task.status !== "pending") throw new ConvexError("They already started this task.");
     await ctx.db.delete(taskId);
   },
 });
@@ -86,7 +86,13 @@ export const listForDevice = query({
     const since = Date.now() - 14 * 86_400_000;
     return {
       open: await Promise.all([...active, ...pending].sort((a, b) => a.createdAt - b.createdAt).map(row)),
-      done: await Promise.all(done.filter((t) => t.createdAt > since).sort((a, b) => b.createdAt - a.createdAt).slice(0, 10).map(row)),
+      done: await Promise.all(
+        done
+          .filter((t) => (t.doneAt ?? t.createdAt) > since)
+          .sort((a, b) => (b.doneAt ?? b.createdAt) - (a.doneAt ?? a.createdAt))
+          .slice(0, 10)
+          .map(row),
+      ),
     };
   },
 });
@@ -97,9 +103,11 @@ export const setStatus = mutation({
     const device = await requireDevice(ctx, token);
     const task = await ctx.db.get(taskId);
     if (!task || task.seniorId !== device.seniorId) throw new Error("not found");
-    await ctx.db.patch(taskId, { status });
+    // Done and dismissed are final: a late or repeated call changes nothing and sends nothing.
+    if (task.status === "done" || task.status === "dismissed") return null;
+    await ctx.db.patch(taskId, status === "done" ? { status, doneAt: Date.now() } : { status });
     // "I did it" from the user's task list: the same consent-gated note as finishing with JustAsk.
-    if (status === "done" && task.status !== "done") {
+    if (status === "done") {
       const senior = await ctx.db.get(device.seniorId);
       const linked = (await ctx.db.query("careLinks").withIndex("by_senior", (q) => q.eq("seniorId", device.seniorId)).collect()).some((l) => l.caregiverId === task.assignedBy);
       if (senior?.consent.notifyOnComplete && linked) {
@@ -107,5 +115,6 @@ export const setStatus = mutation({
         await ctx.db.insert("notifications", { toCaregiverId: task.assignedBy, seniorId: senior._id, text: `${who} finished "${task.title}".`, at: Date.now(), read: false });
       }
     }
+    return null;
   },
 });

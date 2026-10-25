@@ -71,6 +71,8 @@ export default defineSchema({
     recipe: v.optional(recipeValidator),
     status: v.union(v.literal("pending"), v.literal("active"), v.literal("done"), v.literal("dismissed")),
     createdAt: v.number(),
+    // When it became done. Older rows have none; readers fall back to createdAt.
+    doneAt: v.optional(v.number()),
   })
     .index("by_senior_status", ["seniorId", "status"])
     .index("by_assigner", ["assignedBy"]),

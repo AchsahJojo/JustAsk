@@ -53,9 +53,10 @@ export class SessionHost {
       searchWeb: async (request, announce) => (this.sessionTabId === null ? null : this.searchHere(this.sessionTabId, request, announce)),
       store: {
         save: (view, extra) => {
-          void browser.storage.session.set({ session: { view, ...extra, tabId: this.sessionTabId } }).catch(() => {});
+          // `extra` carries history and recipe; the session id keeps events logging after a panel reload.
+          void browser.storage.session.set({ session: { view, ...extra, tabId: this.sessionTabId, sessionId: this.sessionId } }).catch(() => {});
           if (view.phase === "idle" || view.phase === "done") void browser.storage.local.remove("resume");
-          else void browser.storage.local.set({ resume: { request: view.request, taskId: view.taskId, stepNo: view.stepNo } });
+          else void browser.storage.local.set({ resume: { request: view.request, taskId: view.taskId, stepNo: view.stepNo, recipe: this.recipe } });
         },
       },
       events: { log: (type: EventType, extra) => this.onEvent(type, extra?.latencyMs) },
@@ -80,7 +81,7 @@ export class SessionHost {
     this.watchTabs();
     // Rehydrate after the panel reloads (storage.session survives panel restarts, not browser restarts).
     const saved = (await browser.storage.session.get("session").catch(() => ({}))) as {
-      session?: { view: SessionView; history: string[]; recipe: Recipe | null; tabId: number | null };
+      session?: { view: SessionView; history: string[]; recipe: Recipe | null; tabId: number | null; sessionId?: string | null };
     };
     const prev = saved.session;
     const live = prev && !["idle", "done", "blocked"].includes(prev.view.phase) && prev.tabId !== null;
@@ -88,6 +89,7 @@ export class SessionHost {
     if (prev && live && sameTab) {
       this.sessionTabId = prev.tabId;
       this.recipe = prev.recipe;
+      this.sessionId = prev.sessionId ?? null;
       this.controller.restore(prev.view, prev.history, prev.recipe);
     }
   }

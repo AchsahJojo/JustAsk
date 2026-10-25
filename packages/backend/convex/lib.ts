@@ -1,5 +1,5 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
-import type { Infer } from "convex/values";
+import { ConvexError, type Infer } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import type { QueryCtx, MutationCtx } from "./_generated/server";
 import type { deviceInfo } from "./validators";
@@ -29,13 +29,13 @@ export function newToken(): string {
  * Revoked devices are rejected with the same "not paired" message as unknown tokens.
  */
 export async function requireDevice(ctx: QueryCtx | MutationCtx, token: string | null | undefined) {
-  if (!token) throw new Error("not paired");
+  if (!token) throw new ConvexError("not paired");
   const tokenHash = await sha256(token);
   const device = await ctx.db
     .query("devices")
     .withIndex("by_token", (q) => q.eq("tokenHash", tokenHash))
     .unique();
-  if (!device || device.revokedAt !== undefined) throw new Error("not paired");
+  if (!device || device.revokedAt !== undefined) throw new ConvexError("not paired");
   return device;
 }
 
@@ -71,7 +71,7 @@ export async function findLink(ctx: QueryCtx | MutationCtx, caregiverId: Id<"car
 export async function requireLink(ctx: QueryCtx | MutationCtx, seniorId: Id<"seniors">) {
   const cg = await requireCaregiver(ctx);
   const link = await findLink(ctx, cg._id, seniorId);
-  if (!link) throw new Error("not your senior");
+  if (!link) throw new ConvexError("not your senior");
   return { cg, link };
 }
 
@@ -82,7 +82,7 @@ export function kindOf(device: Doc<"devices">): "extension" | "desktop" {
 
 function clip(s: string, max: number, what: string): string {
   const t = s.trim();
-  if (t.length === 0 || t.length > max) throw new Error(`${what} must be 1-${max} characters`);
+  if (t.length === 0 || t.length > max) throw new ConvexError(`${what} must be 1-${max} characters`);
   return t;
 }
 
@@ -123,7 +123,7 @@ export async function newCode(ctx: MutationCtx): Promise<string> {
       .first();
     if (!clash) return code;
   }
-  throw new Error("Couldn't make a code. Try again.");
+  throw new ConvexError("Couldn't make a code. Try again.");
 }
 
 /** The live (unexpired) code row with this purpose. A missing purpose counts as "device". */

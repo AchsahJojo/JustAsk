@@ -1,6 +1,6 @@
 import { useEffect, useState, type Dispatch, type SetStateAction } from "react";
 import { browser } from "wxt/browser";
-import { backend, type TaskList } from "../lib/backend";
+import { backend, isNotPaired, type TaskList } from "../lib/backend";
 import { getSettings } from "../lib/config";
 import { watchAccount } from "../lib/live";
 import { applyPrefs, pullPrefs } from "../lib/prefsSync";
@@ -37,9 +37,13 @@ export function useTaskList(): [TaskList, Dispatch<SetStateAction<TaskList>>] {
       if (list) setTasks(list);
     };
     const stop = watchAccount(account.url, account.token, {
-      onTasks: setTasks,
+      onTasks: (list) => {
+        backend.setNotPaired(false);
+        setTasks(list);
+      },
       onPrefs: (prefs) => void applyPrefs(prefs),
-    }, () => {
+    }, (e) => {
+      if (isNotPaired(e)) backend.setNotPaired(true);
       void poll();
       iv = setInterval(poll, POLL_MS);
     });
@@ -50,4 +54,19 @@ export function useTaskList(): [TaskList, Dispatch<SetStateAction<TaskList>>] {
   }, [account]);
 
   return [tasks, setTasks];
+}
+
+/**
+ * True when the server said this browser's token no longer works (revoked or missing). Pass the
+ * current token to check it now (devices:me); otherwise this follows what other calls found.
+ */
+export function useNotPaired(checkToken?: string | null): boolean {
+  const [notPaired, setNotPaired] = useState(backend.notPaired);
+  useEffect(() => {
+    const off = backend.onNotPaired(setNotPaired);
+    setNotPaired(backend.notPaired);
+    if (checkToken) void backend.me();
+    return off;
+  }, [checkToken]);
+  return notPaired;
 }

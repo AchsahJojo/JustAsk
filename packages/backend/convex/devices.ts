@@ -1,4 +1,4 @@
-import { v } from "convex/values";
+import { ConvexError, v } from "convex/values";
 import { internalMutation, mutation, query } from "./_generated/server";
 import type { Doc } from "./_generated/dataModel";
 import {
@@ -31,9 +31,9 @@ export const createSeniorWithCode = mutation({
     const cg = await requireCaregiver(ctx);
     const name = clean(args.name, 60);
     const displayName = clean(args.displayName, 40) || name.split(" ")[0];
-    if (!name) throw new Error("Add their name.");
+    if (!name) throw new ConvexError("Add their name.");
     const links = await ctx.db.query("careLinks").withIndex("by_caregiver", (q) => q.eq("caregiverId", cg._id)).take(MAX_SENIORS_PER_CAREGIVER);
-    if (links.length >= MAX_SENIORS_PER_CAREGIVER) throw new Error(`You can help up to ${MAX_SENIORS_PER_CAREGIVER} people.`);
+    if (links.length >= MAX_SENIORS_PER_CAREGIVER) throw new ConvexError(`You can help up to ${MAX_SENIORS_PER_CAREGIVER} people.`);
     const seniorId = await ctx.db.insert("seniors", {
       name,
       displayName,
@@ -253,8 +253,10 @@ export const leaveHelpers = mutation({
     for (const l of links) {
       if (caregiverId && l.caregiverId !== caregiverId) continue;
       await ctx.db.delete(l._id);
-      for (const t of await ctx.db.query("tasks").withIndex("by_senior_status", (q) => q.eq("seniorId", device.seniorId).eq("status", "pending")).take(100)) {
-        if (t.assignedBy === l.caregiverId) await ctx.db.patch(t._id, { status: "dismissed" });
+      for (const status of ["pending", "active"] as const) {
+        for (const t of await ctx.db.query("tasks").withIndex("by_senior_status", (q) => q.eq("seniorId", device.seniorId).eq("status", status)).take(100)) {
+          if (t.assignedBy === l.caregiverId) await ctx.db.patch(t._id, { status: "dismissed" });
+        }
       }
       await ctx.db.insert("notifications", {
         toCaregiverId: l.caregiverId,

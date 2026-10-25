@@ -1,4 +1,4 @@
-import { v } from "convex/values";
+import { ConvexError, v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
@@ -9,8 +9,12 @@ async function deviceCount(ctx: QueryCtx | MutationCtx, seniorId: Id<"seniors">)
   return (await ctx.db.query("devices").withIndex("by_senior", (q) => q.eq("seniorId", seniorId)).collect()).filter((d) => d.revokedAt === undefined).length;
 }
 
-/** Without the user's consent to share results, a caregiver only sees that a task was sent. */
+/**
+ * Without the user's consent to share results, a caregiver only sees that a task was sent, or that the
+ * user removed it (the extension tells the user the helper will see that).
+ */
 function statusFor(task: Doc<"tasks">, senior: Doc<"seniors">): CaregiverTaskStatus {
+  if (task.status === "dismissed") return "dismissed";
   if (!senior.consent.notifyOnComplete) return "sent";
   return task.status === "pending" ? "sent" : task.status === "active" ? "started" : task.status;
 }
@@ -34,7 +38,8 @@ export const list = query({
           displayName: s.displayName,
           relation: l.relation,
           connected: devices > 0,
-          waiting: mine.filter((t) => t.status === "pending").length,
+          // Without consent, started tasks count as waiting so a start can't be read off the count.
+          waiting: mine.filter((t) => t.status === "pending" || (!s.consent.notifyOnComplete && t.status === "active")).length,
           finished: s.consent.notifyOnComplete ? mine.filter((t) => t.status === "done").length : null,
           linkedAt: l.linkedAt ?? l._creationTime,
         };
@@ -59,8 +64,10 @@ export const get = query({
     if (!s) throw new Error("not your senior");
     const devices = await deviceCount(ctx, seniorId);
     const otherHelpers = (await ctx.db.query("careLinks").withIndex("by_senior", (q) => q.eq("seniorId", seniorId)).collect()).length - 1;
+    // Removed tasks stay visible for two weeks so the helper knows. There is no dismissedAt; createdAt is close enough.
+    const dismissedSince = Date.now() - 14 * 86_400_000;
     const tasks = (await ctx.db.query("tasks").withIndex("by_assigner", (q) => q.eq("assignedBy", cg._id)).collect())
-      .filter((t) => t.seniorId === seniorId && t.status !== "dismissed")
+      .filter((t) => t.seniorId === seniorId && (t.status !== "dismissed" || t.createdAt > dismissedSince))
       .sort((a, b) => b.createdAt - a.createdAt)
       .slice(0, 50);
 
@@ -128,7 +135,7 @@ export const update = mutation({
   handler: async (ctx, args) => {
     const { link } = await requireLink(ctx, args.seniorId);
     const name = clean(args.name, 60);
-    if (!name) throw new Error("Add their name.");
+    if (!name) throw new ConvexError("Add their name.");
     const connected = (await deviceCount(ctx, args.seniorId)) > 0;
     await ctx.db.patch(args.seniorId, { name, ...(connected ? {} : { displayName: clean(args.displayName, 40) || name.split(" ")[0] }) });
     await ctx.db.patch(link._id, { relation: clean(args.relation, 40) });

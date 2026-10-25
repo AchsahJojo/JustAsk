@@ -1,14 +1,14 @@
 import { useEffect, useState } from "react";
 import { saveSettings, type Settings } from "../lib/config";
-import { backend } from "../lib/backend";
+import { backend, NOT_PAIRED } from "../lib/backend";
 import { friendlyError } from "../lib/prefs";
 import { pullPrefs, pushPrefs } from "../lib/prefsSync";
 import { currentDevice } from "../platform/device";
+import { useNotPaired } from "./useTaskList";
 
 const WRONG_CODE = "That code didn't work. Ask for a new one.";
 const NO_SERVER = "Accounts aren't set up on this copy of JustAsk yet. JustAsk still works on this computer without one.";
 const digits = (v: string) => v.replace(/\D/g, "");
-
 /**
  * Setup step 3: join the user's account. "I'm new" creates it (accounts:createSelf); "I have a code"
  * redeems a 6-digit code (devices:redeemCode). A `?link=` code from the link page asks first.
@@ -56,11 +56,21 @@ export function AccountStep({ s, onChange, linkCode, onLinkDone }: { s: Settings
   };
 
   const consent = async (patch: Partial<Settings["consent"]>) => onChange(await pushPrefs({ consent: { ...s.consent, ...patch } }));
+  // A token the server no longer knows (revoked or removed). It stays saved; the user picks a way back in.
+  const notPaired = useNotPaired(s.deviceToken);
 
   return (
-    <li className={`step ${s.deviceToken ? "ok" : ""}`}>
+    <li className={`step ${s.deviceToken && !notPaired ? "ok" : ""}`}>
       <h2>3. Your JustAsk</h2>
-      {s.deviceToken ? (
+      {s.deviceToken && notPaired ? (
+        <>
+          <p role="status">{NOT_PAIRED}</p>
+          <div className="choice-grid">
+            <NewAccount busy={busy} onCreate={create} />
+            <HaveCode busy={busy} onRedeem={redeem} />
+          </div>
+        </>
+      ) : s.deviceToken ? (
         <>
           <p className="done">✓ Connected{s.displayName ? ` as ${s.displayName}` : ""}</p>
           {linkCode && <p className="soft">This browser is already linked{s.displayName ? ` to ${s.displayName}'s JustAsk` : ""}.</p>}

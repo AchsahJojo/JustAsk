@@ -1,7 +1,7 @@
 import { ConvexHttpClient } from "convex/browser";
 import type { EventType, Recipe } from "@justask/shared";
 import { NO_ACCOUNT } from "@justask/voice";
-import { getSettings } from "./config";
+import { getSettings, saveSettings } from "./config";
 import type { DeviceInfo } from "../platform/device";
 import { parseCode, parseDevices, parseHandoff, type DeviceRow, type Handoff, type SyncedPrefs } from "./prefs";
 
@@ -30,9 +30,22 @@ export interface Helper {
 }
 
 const NOT_CONNECTED = "JustAsk isn't connected to an account on this browser yet.";
+/** Shown when this browser's token was revoked or removed on the server. */
+export const NOT_PAIRED = "This browser isn't connected anymore. Ask your helper for a new code, or choose I'm new.";
 
 /** True when Convex rejected an argument we sent (an older backend without that field). */
 const isArgError = (e: unknown) => e instanceof Error && /validator|extra field|unexpected field|ArgumentValidationError/i.test(e.message);
+
+/**
+ * True when the server says this browser's device token is missing or revoked: `ConvexError("not paired")`
+ * (`e.data`), or an older server whose message says "not paired".
+ */
+export function isNotPaired(e: unknown): boolean {
+  if (typeof e !== "object" || e === null) return false;
+  if ((e as { data?: unknown }).data === "not paired") return true;
+  const m = (e as { message?: unknown }).message;
+  return typeof m === "string" && /not paired/i.test(m);
+}
 
 /**
  * Thin Convex client for the device side. Every call takes the device token; no keys.
@@ -43,6 +56,37 @@ const isArgError = (e: unknown) => e instanceof Error && /validator|extra field|
 export class Backend {
   private client: ConvexHttpClient | null = null;
   private url = "";
+  private notPairedNow = false;
+  private notPairedListeners = new Set<(v: boolean) => void>();
+
+  /** True after the server said this browser's token no longer works. Cleared by any successful call. */
+  get notPaired(): boolean {
+    return this.notPairedNow;
+  }
+
+  /** Called whenever the not-paired state changes. Returns the unsubscribe. */
+  onNotPaired(fn: (v: boolean) => void): () => void {
+    this.notPairedListeners.add(fn);
+    return () => this.notPairedListeners.delete(fn);
+  }
+
+  setNotPaired(v: boolean) {
+    if (v === this.notPairedNow) return;
+    this.notPairedNow = v;
+    for (const fn of this.notPairedListeners) fn(v);
+  }
+
+  /** A device query: success shows the token works; a not-paired failure is remembered (being offline isn't). */
+  private async deviceQuery<T>(client: ConvexHttpClient, name: string, args: Record<string, unknown>): Promise<T> {
+    try {
+      const r = await this.query<T>(client, name, args);
+      this.setNotPaired(false);
+      return r;
+    } catch (e) {
+      if (isNotPaired(e)) this.setNotPaired(true);
+      throw e;
+    }
+  }
 
   private async c(): Promise<{ client: ConvexHttpClient; token: string } | null> {
     const s = await getSettings();
@@ -73,6 +117,7 @@ export class Backend {
     const client = new ConvexHttpClient(convexUrl, { skipConvexDeploymentUrlCheck: true });
     const r = await this.mutation<{ token?: unknown } | null>(client, "accounts:createSelf", { displayName, device });
     if (!r || typeof r.token !== "string") throw new Error("createSelf returned no token");
+    this.setNotPaired(false);
     return { token: r.token };
   }
 
@@ -87,6 +132,7 @@ export class Backend {
       r = await this.mutation(client, "devices:redeemCode", { code });
     }
     if (!r || typeof r.token !== "string") return null;
+    this.setNotPaired(false);
     return { token: r.token, displayName: typeof r.displayName === "string" ? r.displayName : "" };
   }
 
@@ -109,6 +155,9 @@ export class Backend {
     const c = await this.must();
     const r = await this.mutation<{ token?: unknown; displayName?: unknown } | null>(c.client, "devices:redeemCode", { code, token: c.token });
     if (!r || typeof r.token !== "string") return null;
+    // The server treats a stale token as a new install and hands back a fresh one: keep it.
+    if (r.token !== c.token) await saveSettings({ deviceToken: r.token });
+    this.setNotPaired(false);
     return { displayName: typeof r.displayName === "string" ? r.displayName : "" };
   }
 
@@ -117,7 +166,7 @@ export class Backend {
     const c = await this.c();
     if (!c) return null;
     try {
-      return await this.query(c.client, "devices:me", { token: c.token });
+      return await this.deviceQuery(c.client, "devices:me", { token: c.token });
     } catch {
       return null;
     }
@@ -220,7 +269,7 @@ export class Backend {
     const c = await this.c();
     if (!c) return [];
     try {
-      return await this.query<PendingTask[]>(c.client, "tasks:pendingForDevice", { token: c.token });
+      return await this.deviceQuery<PendingTask[]>(c.client, "tasks:pendingForDevice", { token: c.token });
     } catch {
       return [];
     }
@@ -231,7 +280,7 @@ export class Backend {
     const c = await this.c();
     if (!c) return { open: [], done: [] };
     try {
-      return await this.query<TaskList>(c.client, "tasks:listForDevice", { token: c.token });
+      return await this.deviceQuery<TaskList>(c.client, "tasks:listForDevice", { token: c.token });
     } catch {
       return null;
     }

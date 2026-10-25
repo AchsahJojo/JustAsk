@@ -28,6 +28,8 @@ export function TaskComposer({ seniorId, displayName, onSent, onCancel }: { seni
   const [draft, setDraft] = useState<TaskDraft | null>(null);
   const [checkId, setCheckId] = useState<Id<"taskChecks"> | null>(null);
   const [edited, setEdited] = useState(false);
+  /** The hand-edited draft a follow-up question was asked about, so answering keeps those edits. */
+  const [editedBase, setEditedBase] = useState<TaskDraft | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
@@ -39,6 +41,7 @@ export function TaskComposer({ seniorId, displayName, onSent, onCancel }: { seni
     setDraft(null);
     setCheckId(null);
     setEdited(false);
+    setEditedBase(null);
     setError("");
   };
 
@@ -48,9 +51,11 @@ export function TaskComposer({ seniorId, displayName, onSent, onCancel }: { seni
     setError("");
     try {
       const r = await review({ seniorId, request: request.trim(), answers: nextTurns, ...(editedDraft ? { editedDraft } : {}) });
-      setTurns(nextTurns);
       if (r.status === "error") return setError(r.message);
+      setTurns(nextTurns);
       if (r.status === "question") {
+        // Keep their hand edits so the next round checks the edited task, not the old draft.
+        if (editedDraft) setEditedBase(editedDraft);
         setQuestion(r.question);
         setAnswer("");
         setCheckId(null);
@@ -60,6 +65,7 @@ export function TaskComposer({ seniorId, displayName, onSent, onCancel }: { seni
       setDraft(r.draft);
       setCheckId(r.checkId);
       setEdited(false);
+      setEditedBase(null);
       setPhase("review");
     } catch (e) {
       setError(errorText(e));
@@ -77,6 +83,9 @@ export function TaskComposer({ seniorId, displayName, onSent, onCancel }: { seni
       onSent(draft.title);
     } catch (e) {
       setError(errorText(e));
+      // That check can't be used again. Show "Check again" so the task gets a fresh check.
+      setCheckId(null);
+      setEdited(true);
     } finally {
       setBusy(false);
     }
@@ -138,7 +147,7 @@ export function TaskComposer({ seniorId, displayName, onSent, onCancel }: { seni
           onSubmit={(e) => {
             e.preventDefault();
             if (!answer.trim()) return setError("Type or say your answer.");
-            void check([...turns, { question, answer: answer.trim() }]);
+            void check([...turns, { question, answer: answer.trim() }], editedBase ?? undefined);
           }}
           noValidate
         >
@@ -216,7 +225,7 @@ export function TaskComposer({ seniorId, displayName, onSent, onCancel }: { seni
               )}
             </div>
           </div>
-          {edited && <p className="note">You changed the task. JustAsk checks it again before it can be sent.</p>}
+          {edited && !error && <p className="note">You changed the task. JustAsk checks it again before it can be sent.</p>}
           {error && (
             <p className="error" role="alert">
               {error}
