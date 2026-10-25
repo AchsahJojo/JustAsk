@@ -2,7 +2,7 @@
 
 This is the list of things a person has to do by hand. Everything else has an automated test (see "What is already tested" at the end).
 
-Status: the Chrome extension, the step loop, the page agent, the Convex backend, the fixtures and the caregiver web app are built. The desktop app is not built yet.
+Status: the Chrome extension, the step loop, the page agent, the Convex backend, the fixtures and the caregiver web app are built. Final scope: guide only, Chrome extension only (the desktop app was dropped in `refined-plan-3.md`). Deploying: `docs/DEPLOY.md`.
 
 ## 1. Keys and accounts you need
 
@@ -11,7 +11,7 @@ Status: the Chrome extension, the step loop, the page agent, the Convex backend,
 | **Anthropic API key** | Convex env: `npx convex env set ANTHROPIC_API_KEY sk-ant-…` (run in `packages/backend`) | One person | Never put it in the extension, `.env` files for the extension, or the caregiver app. For local dev only, you can `export ANTHROPIC_API_KEY=…` before `npm run planner:dev`. |
 | **Convex account + project** | `cd packages/backend && npx convex dev` (log in when asked) | One person | This creates the project and writes `packages/backend/.env.local`. The repo was tested against an anonymous *local* Convex deployment only. |
 | **Extension env** | `apps/extension/.env` (copy `.env.example`) | Everyone who builds | `VITE_PLANNER_URL` = the Convex **HTTP actions** URL (`https://<name>.convex.site`). `VITE_CONVEX_URL` = the Convex **client** URL (`https://<name>.convex.cloud`). Both are public, not secrets. |
-| **Cartesia API key** | Convex env: `CARTESIA_API_KEY` | A | Required for any voice. JustAsk speaks (Sonic) and listens (`ink-whisper`) only through Cartesia, in the extension and the desktop app. Already set on Xander's dev deployment; a local Convex needs `npx convex env set CARTESIA_API_KEY …`. Optional: `VITE_CARTESIA_VOICE_ID` in `apps/extension/.env` / `apps/desktop/.env` to pick a voice. |
+| **Cartesia API key** | Convex env: `CARTESIA_API_KEY` | A | Required for any voice. JustAsk speaks (Sonic) and listens (`ink-whisper`) only through Cartesia, in the extension and (listening only) the caregiver app's task composer. Already set on Xander's dev deployment; a local Convex needs `npx convex env set CARTESIA_API_KEY …`. Optional: `VITE_CARTESIA_VOICE_ID` in `apps/extension/.env` to pick a voice. |
 | **Convex Auth keys** | Convex env: `JWT_PRIVATE_KEY`, `JWKS`, `SITE_URL` (run in `packages/backend`) | One person, once per deployment | Caregiver sign-in (email + password). Easiest: `npx @convex-dev/auth` and follow the prompts. `SITE_URL` is the caregiver app's URL (`http://localhost:5176` locally). Already set on the local anonymous deployment. |
 | **Task check stand-in (tests only)** | Convex env: `JUSTASK_TASKCHECK_MOCK=1` on the **local** deployment | Whoever runs `test:accounts` / `test:caregiver` | Lets the caregiver task check run without Claude. Never set it on production: there the check calls Claude with `ANTHROPIC_API_KEY`. |
 | **Caregiver app env** | `apps/caregiver/.env.local` (copy `.env.example`) | Everyone who runs it | `VITE_CONVEX_URL` = the Convex **client** URL. `VITE_EXTENSION_URL` = the Chrome Web Store link once published. Public, not secrets. |
@@ -97,26 +97,25 @@ Run these in a real, headed Chrome with the production build (`apps/extension/.o
 ## 5. Not built yet
 
 - **Caregiver password reset.** There is no email provider, so "forgot password" isn't offered. Add `reset` to the `Password` provider in `convex/auth.ts` with Resend (needs `AUTH_RESEND_KEY`).
-- **Caregiver app deploy** (Vercel). `npm run build -w @justask/caregiver` writes `apps/caregiver/dist`. Set `SITE_URL` in Convex to the deployed URL.
+- **Caregiver app deploy** (Vercel): `npm run deploy -- --vercel` (`docs/DEPLOY.md`). Set `SITE_URL` in Convex to the deployed URL.
 - **Dock mode** (Phase 1): the in-page panel for Opera, Safari and popup windows. The panel already accepts `?tabId=` and `sidepanel.html` is web-accessible.
 - **Firefox and Safari** builds compile (`wxt build -b firefox`) but are not tested.
 - `matchOriginAsFallback` for `about:blank` / `srcdoc` frames: `executeScript` doesn't support it. A registered content script would.
-- Desktop companion app (Phase 4).
-- Muting recognition while JustAsk speaks. Using `storage.local` to resume after a browser restart is built but not e2e-tested.
+- Using `storage.local` to resume after a browser restart is built but not e2e-tested.
 
 ## 5b. Accounts (how they work)
 
 - **Seniors never get a password.** In setup, "I'm new: create my JustAsk" makes the user's account (`accounts:createSelf`) and the install keeps a device token. Everything works with no caregiver. More installs join with "Add another device" codes (`devices:createLinkCode`).
 - **Caregivers** sign in with email + password (Convex Auth). A `caregivers` row is made on first sign-in (`caregivers:ensureProfile`).
 - **Connecting** works two ways (6-digit codes, 15 minutes, one use):
-  - The caregiver makes the user's profile in the web app, and the user types the caregiver's code in setup ("I have a code"). On an install that already has its own account, the user types it under "I have a code" in settings: the two profiles merge, and the user's own name, settings and history are kept (the caregiver's page follows via `seniorAliases`). The same box takes a code from the JustAsk desktop app or another browser.
+  - The caregiver makes the user's profile in the web app, and the user types the caregiver's code in setup ("I have a code"). On an install that already has its own account, the user types it under "I have a code" in settings: the two profiles merge, and the user's own name, settings and history are kept (the caregiver's page follows via `seniorAliases`). The same box takes a code from another browser.
   - The user presses "Share with my helper" in settings and the caregiver types that code under "Do they already use JustAsk?" in the web app (`careLinks:redeemHelperCode`).
 - **Leaving.** The senior can stop working with any helper in setup (`devices:leaveHelpers`). A caregiver can **Stop helping** (`people:remove`). Either way the senior's JustAsk keeps working.
 - **Privacy.** Caregivers see task status and stats only if the senior turned on "Tell my helper when I finish". They never see sessions the senior started on their own.
 - **Abuse caps.** `@convex-dev/rate-limiter` (`convex/rateLimits.ts`): account creation, and failed codes per code prefix, globally and per caregiver. Wrong codes return `null` so the failure count commits. Per-IP limits need an HTTP action in front; not done.
 - **Migration.** Old seed rows had `caregivers.tokenIdentifier`. Run `npx convex run migrations:caregiversToAuth` once per deployment, then the field can be removed from the schema.
 
-- **Drive mode or Show me instead.** JustAsk clicks and types for the user by default (never sensitive fields; it asks first before money or account changes). "Show me instead" in the user's settings makes it guide them instead. A linked caregiver can change it under **How JustAsk helps** (`people:setShowMe`); the user's settings say when a helper set it.
+- **Guide only.** JustAsk shows each step and the user does every click and keystroke; there is no setting to let it click. (The `showMeInstead` pref and `people:setShowMe` remain in the backend but have no effect.)
 - **Task list.** Tasks stay in the user's panel until they finish or remove them (`tasks:listForDevice`). Started tasks show **Keep going**; **I did it** marks one done and sends the consent-gated note.
 
 ### Manual checks for the scam check
@@ -133,7 +132,7 @@ Run these in a real, headed Chrome with the production build (`apps/extension/.o
 - [ ] Real Chrome: install fresh, skip step 4, and use JustAsk with no caregiver against the Convex `/plan` (needs the API key).
 - [ ] Caregiver app on a phone (layout was checked at 390 px in Puppeteer, not on a device).
 - [ ] Two caregivers connected to one senior: both get the completion note for their own tasks only.
-- [ ] Drive mode on real sites with a real key: it types searches, never a password or card box, and asks before checkout. Then turn on Show me instead from the caregiver app and check the panel only guides.
+- [ ] Guide only on real sites with a real key: JustAsk never clicks or types; it highlights a password or card box and says it can't see it, and asks before checkout.
 - [ ] Email verification and password reset need Resend: whoever owns the Convex project sets `AUTH_RESEND_KEY` and verifies a sending domain.
 
 ## 6. What is already tested (and how to rerun)

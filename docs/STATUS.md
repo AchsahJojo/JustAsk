@@ -43,7 +43,7 @@ A caregiver is optional. When there is one, the caregiver can set JustAsk up for
 - **Setup page:**
   - host access and microphone
   - **"I'm new: create my JustAsk"** or **"I have a code"**
-  - synced settings: Show me instead and speech speed
+  - synced settings: speech speed and consent
   - **Your devices** (add or remove)
   - **Your helpers** (Stop per helper)
   - **Share with my helper** (makes a helper code)
@@ -52,8 +52,7 @@ A caregiver is optional. When there is one, the caregiver can set JustAsk up for
   - The first task is a card with Start (or Keep going) and I did it. The rest go under "Also on your list", plus a Done / Manage list.
   - The list updates live over a `ConvexClient` subscription, with a polling fallback.
   - The toolbar badge counts open tasks.
-- **Handoffs and links:**
-  - `#justask-link=<code>` asks "Link to Alex's JustAsk?" before linking
+- **Link codes in a URL:** `#justask-link=<code>` opens setup and asks "Link to Alex's JustAsk?" before linking.
 - **Resilience:** survives rerenders (fingerprint rebinding), open and closed shadow roots, same- and cross-origin iframes, new tabs, `<dialog>` modals, late-loading editors (watches until the page settles), and resume after the panel reloads.
 - **Starting from nothing:**
   - On an empty New Tab page, JustAsk asks "Do you want me to search the web for that?" Yes searches in that tab with their default search engine, using words Claude rewrote from the request ("I want to buy a pink owala on Amazon" becomes "pink owala water bottle amazon"), and carries on from the results. No waits until the user opens a site, then carries on.
@@ -64,8 +63,13 @@ A caregiver is optional. When there is one, the caregiver can set JustAsk up for
   - JustAsk waits for a page to finish loading (quiet DOM, nothing `aria-busy`) before reading it.
   - Page text includes any visible text, so answers shown in cards (a forecast, prices) can be read out directly.
   - The prompt says: answer from the screen when the answer is there; never pick something just because it shares a word; prefer search or sort over category menus.
-- **Plain wording:** "Ask for something else" (not "Start again"), "Say something" (not "Talk to me"). The done screen says "I did 3 steps for you, and you did 2", and never "0 clicks".
-- **Voice:** JustAsk holds its own spoken lines while the mic is open, so recognition never hears it say "stop" or "again".
+  - Entries a site turns into chips (an email's To box) count as filled, so JustAsk moves on; their text never leaves the page.
+  - When a site swaps the highlighted element (Gmail's compose box on focus), the ring hides instead of jumping to the corner and follows the replacement.
+- **Plain wording:** "Ask for something else" (not "Start again"), "Say something" (not "Talk to me"). The done screen says "You did 4 steps yourself", and never "0 clicks".
+- **Voice:**
+  - JustAsk holds its own spoken lines while the mic is open, so recognition never hears it say "stop" or "again".
+  - Recording starts on the press (audio is buffered until Cartesia connects), and the button says "I'm listening…" only once the mic is live.
+  - A turn ends after 2 s of quiet; the user gets 3 s to start.
 - **Dev only:** "Save snapshot" exports a request for the eval harness.
 
 ### Caregiver web app (`apps/caregiver`, Vite + React + Clayzo)
@@ -83,7 +87,7 @@ A caregiver is optional. When there is one, the caregiver can set JustAsk up for
 - **Layout:** works at phone width and in dark mode, with a not-found page and redirects after profiles merge.
 
 ### Backend (`packages/backend`, Convex)
-- **Planner:** the `/plan` HTTP action calls Claude with structured output, prompt caching and model fallbacks, with a per-device hourly step budget. A local planner runs on :8787 (Claude if `ANTHROPIC_API_KEY` is set, otherwise a scripted mock).
+- **Planner:** the `/plan` HTTP action calls Claude with structured output, prompt caching and model fallbacks, with a per-device hourly step budget. `/search-query` rewrites an empty-tab request into web search words (only the user's words). A local planner runs on :8787 with Claude; without a key it fails every step instead of guessing, and `JUSTASK_MOCK=1` runs the scripted test planner.
 - **The user's account:** `accounts:createSelf`, device tokens (only the hash is stored), revoke, heartbeat, and 6-digit link codes with `peekCode`.
 - **Caregivers:** Convex Auth (Password provider), the `caregivers` profile, care links in both directions (caregiver code → senior, helper code → caregiver), and profile merge with `seniorAliases` redirects.
 - **Tasks:**
@@ -91,7 +95,7 @@ A caregiver is optional. When there is one, the caregiver can set JustAsk up for
   - the user's list (`tasks:listForDevice`)
   - stopped or blocked tasks go back to pending
   - "I did it" sends a consent-gated note
-- **Prefs:** voice, speed, Show me instead and consent, synced across installs. `showMeSetBy` records whether the user or a caregiver set it.
+- **Prefs:** voice, speed and consent, synced across installs. (`showMeInstead` and `showMeSetBy` remain in the data but have no effect while JustAsk is guide only.)
 - **Handoffs** (desktop to browser): the code is still there but unused since the desktop app was removed.
 - **Platform features:**
   - `@convex-dev/rate-limiter`: code attempts per prefix, globally and per caregiver, plus account creation
@@ -161,10 +165,9 @@ A caregiver is optional. When there is one, the caregiver can set JustAsk up for
 ## 4. What's missing
 
 ### Deployment (blocking a shared demo)
-- [ ] **The cloud dev Convex (`aromatic-salamander-969`) has none of the merged code.** Someone with access runs `npx convex dev` (or deploys), then `npx @convex-dev/auth` to set `JWT_PRIVATE_KEY`, `JWKS` and `SITE_URL`. Until then, everything runs against the local anonymous Convex.
-- [ ] `ANTHROPIC_API_KEY` in the cloud Convex env, so `/plan` uses Claude (local currently answers "server not configured").
+- [ ] **Production Convex:** confirm it runs the latest `main` and has `ANTHROPIC_API_KEY`, `CARTESIA_API_KEY` and the Convex Auth keys (`docs/DEPLOY.md`, one-time setup). The caregiver app and fixtures are on Vercel (`justask-caregiver.vercel.app`, `justask-fixtures.vercel.app`).
 - [ ] **Email verification and password reset** for caregivers: Resend (`AUTH_RESEND_KEY` plus a verified domain) in the Convex project, then wire `Password({ verify, reset })`.
-- [ ] Hosting the caregiver app and fixtures: `npm run deploy -- --vercel` (see `docs/DEPLOY.md`).
+- [ ] Every release: `npm run deploy -- --vercel` (see `docs/DEPLOY.md`), then run both flows by hand in a fresh Chrome profile.
 
 ### Planned in refined-plan-2 but not done
 - [ ] **Wave 2 e2e scenarios:**
