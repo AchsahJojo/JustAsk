@@ -1,6 +1,6 @@
 # JustAsk
 
-**ChatGPT explains the steps. JustAsk walks beside you while you do them.**
+**Chatbots explain the steps. JustAsk walks beside you while you do them.** Built on Claude.
 
 JustAsk is a Chrome extension for older adults. She presses one big button and says what she wants: "help me refill my prescription." JustAsk reads the page, puts a glowing box around the one thing to use next, and says one short line in a calm voice: "Click the big blue Refill button." She clicks. JustAsk sees it and gives the next step, until "All done, you did it!"
 
