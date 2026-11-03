@@ -9,6 +9,7 @@ import { SetupWizard } from "./ui/SetupWizard";
 import { Person } from "./ui/Person";
 import { Account } from "./ui/Account";
 import { Brand, Spinner } from "./ui/bits";
+import { serverHost } from "./serverHost";
 
 export function App() {
   return (
@@ -107,6 +108,9 @@ function Shell({ name }: { name: string }) {
         {route.name === "new" && <SetupWizard />}
         {route.name === "person" && <Person id={route.id} />}
         {route.name === "account" && <Account />}
+        {serverHost(import.meta.env.VITE_CONVEX_URL) && (
+          <p className="muted small center">This helper site talks to {serverHost(import.meta.env.VITE_CONVEX_URL)}. Codes only work with a JustAsk browser on that same server.</p>
+        )}
       </main>
     </div>
   );

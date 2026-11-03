@@ -5,6 +5,7 @@ import { pullPrefs } from "../lib/prefsSync";
 import { AccountStep } from "./SetupAccount";
 import { SettingsStep } from "./SetupSettings";
 import { Orb } from "./Orb";
+import { serverHost } from "../lib/serverHost";
 
 const ALL_SITES = { origins: ["<all_urls>"] };
 
@@ -71,6 +72,9 @@ export function Setup() {
         <div>
           <h1>Set up JustAsk</h1>
           <p className="soft">A few quick steps. You can do this with your helper.</p>
+          {serverHost(s.convexUrl) && (
+            <p className="soft">This browser talks to {serverHost(s.convexUrl)}. A code only works when the helper site uses that same server.</p>
+          )}
         </div>
       </header>
 
