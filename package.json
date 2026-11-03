@@ -22,6 +22,7 @@
     "caregiver": "npm run dev -w @justask/caregiver",
     "eval": "tsx eval/run.ts",
     "eval:capture": "node eval/capture.mjs",
+    "eval:conversations": "tsx eval/conversations.ts",
     "test:voice": "node --import tsx packages/voice/test/cartesia.int.ts",
     "deploy": "node scripts/deploy.mjs"
   },
