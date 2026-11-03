@@ -101,6 +101,8 @@ export class SessionHost {
   }
 
   async start(request: string, opts: { recipe?: Recipe | null; taskId?: string | null } = {}) {
+    // "Thank you" after a task is not a new task: no session, no search, no Claude call.
+    if (!opts.taskId && this.controller.farewell(request)) return;
     this.sessionTabId = await this.activeTabId();
     const recipe = opts.recipe ?? null;
     this.recipe = recipe;

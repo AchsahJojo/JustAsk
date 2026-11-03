@@ -20,6 +20,17 @@ export const STUCK_LINE = "That's okay. Let me look again.";
 export const TYPING_NOT_DETECTED = "I can't see anything in that box yet. Please type your answer, then tell me when you're done.";
 export const STOPPED_LINE = "Okay, I stopped. Press the big button any time.";
 export const NO_CHANGE_NOTE = "the page did not change after that";
+export const WELCOME_LINE = "You're welcome. Press the big button any time you need me.";
+/**
+ * Said instead of showing the same step again when the user keeps not doing it (they don't have
+ * the code, don't want to yet, or it isn't working). The user decides what happens next.
+ */
+export const LOOP_LINE = "We can stop here for now. Press the big button when you're ready, or ask me something else.";
+/** History note for Claude: what JustAsk said last, so an answer like "no" or "I don't have one" has its question. */
+export const saidNote = (line: string) => `JustAsk said: ${JSON.stringify(line.slice(0, 200))}`;
+/** History note when the user speaks again after a finished task: the new words build on it. */
+export const followUpNote = (request: string, line: string) =>
+  `Before this, the user asked ${JSON.stringify(request.slice(0, 200))} and JustAsk finished with: ${JSON.stringify(line.slice(0, 200))}`;
 
 /** Before a risk question: exactly what JustAsk would press next, and where. */
 export const riskDetail = (what: string, place: string, guide: boolean) =>

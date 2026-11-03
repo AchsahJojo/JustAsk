@@ -12,6 +12,9 @@ vi.mock("@justask/core", () => ({
     async start() {
       mocks.events.push("controller.start");
     }
+    farewell(text: string) {
+      return text === "thank you";
+    }
   },
 }));
 
@@ -51,5 +54,13 @@ describe("SessionHost.start", () => {
     await host.start("help me find a page");
 
     expect(mocks.events).toEqual(["session.start", "controller.start"]);
+  });
+
+  it("closing words after a task start no session", async () => {
+    const host = new SessionHost({ pinnedTabId: 42 });
+
+    await host.start("thank you");
+
+    expect(mocks.events).toEqual([]);
   });
 });
