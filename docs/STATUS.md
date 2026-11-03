@@ -217,7 +217,7 @@ Fixed in this pass (2026-10-24):
 Still open:
 - [ ] `about:blank` / `srcdoc` iframes aren't injected (`executeScript` can't target them; it would need a registered content script with `matchOriginAsFallback` on every page).
 - [ ] Dock mode (Opera, Safari, popup windows) and Firefox/Safari builds aren't tested.
-- [ ] The scam check runs on the user's first request only, not on later answers or "Say something" (section 5, phase 2).
+- [x] The scam check runs on later answers, "Say something" and the waiting answer box too, once per kind per session (section 5, phase 2, #19).
 
 ### Caregiver app refinements
 - [ ] The person page has no list of the person's devices and can't revoke one (the user's own settings can).
@@ -264,7 +264,7 @@ Still open:
    - downloads of remote-access tools (`downloads.onCreated` in the extension)
 
    Each one raises the same kind of question, or blocks when it's a clear trap.
-4. **The whole conversation: phase 2.** Run `scamCheck` on the user's later answers and "Say something", not only the first request. For example, the user starts with "help me buy gift cards", then says "the caller said to send them the numbers".
+4. **The whole conversation: phase 2 (done, #19).** Run `scamCheck` on the user's later answers and "Say something", not only the first request. For example, the user starts with "help me buy gift cards", then says "the caller said to send them the numbers".
 5. **Reputation lookups: phase 3.** These need keys in Convex env, and send only the domain or a hash prefix:
    - Google Safe Browsing / Web Risk, using hash-prefix lookups so the full address isn't sent
    - domain age through RDAP, so a store under 90 days old asks before checkout
