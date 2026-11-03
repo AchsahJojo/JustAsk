@@ -64,11 +64,14 @@ export const activeCode = query({
   handler: async (ctx, { seniorId }) => {
     // Null rather than an error if the profile just merged away; the page follows `people:get`.
     if (!(await requireLink(ctx, seniorId).catch(() => null))) return null;
+    // Device link codes and the caregiver code share this index. Taking the first rows
+    // can hide the caregiver code once someone has added many other computers.
+    const now = Date.now();
     const rows = await ctx.db
       .query("pairingCodes")
       .withIndex("by_senior", (q) => q.eq("seniorId", seniorId))
-      .take(20);
-    const row = rows.find((r) => isCaregiverCode(r) && r.expiresAt > Date.now());
+      .collect();
+    const row = rows.filter((r) => isCaregiverCode(r) && r.expiresAt > now).sort((a, b) => b.expiresAt - a.expiresAt)[0];
     return row ? { code: row.code, expiresAt: row.expiresAt } : null;
   },
 });
