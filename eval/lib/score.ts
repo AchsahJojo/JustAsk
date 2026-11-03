@@ -1,4 +1,4 @@
-import { checkStep, type PageSnapshot, type Recipe, type StepResponse } from "../../packages/shared/src/index";
+import { checkStep, fixStep, sayWords, type CheckCode, type PageSnapshot, type Recipe, type StepResponse } from "../../packages/shared/src/index";
 
 /** One eval case: eval/cases/<id>.case.json. */
 export interface EvalCase {
@@ -31,6 +31,11 @@ export interface Score {
   targetOk: boolean;
   checkOk: boolean;
   checkReason: string | null;
+  /** The failure code after `fixStep`: a failed check costs the user a second Claude call (a re-plan). */
+  checkCode: CheckCode | null;
+  sayWords: number;
+  /** `fixStep` cut a long `say` at a sentence end, so no re-plan was needed. */
+  trimmed: boolean;
   /** Text + label of the chosen element, for the report. */
   targetDesc: string | null;
   pass: boolean;
@@ -52,13 +57,18 @@ export function scoreStep(c: EvalCase, step: StepResponse, snapshot: PageSnapsho
   else if (TARGETING.has(step.kind) && wanted.length) targetOk = !!el && wanted.some((w) => hay.includes(w.toLowerCase()));
   else targetOk = true;
 
-  const check = checkStep(step, snapshot);
+  // The same as the extension: a long line is trimmed first, and only what still fails is re-planned.
+  const fixed = fixStep(step, snapshot);
+  const check = checkStep(fixed, snapshot);
   const checkOk = check.ok;
   return {
     kindOk,
     targetOk,
     checkOk,
     checkReason: check.ok ? null : check.reason,
+    checkCode: check.ok ? null : check.code,
+    sayWords: sayWords(step.say),
+    trimmed: fixed !== step,
     targetDesc: el ? [el.text, el.label].filter(Boolean).join(" / ") : step.target === null ? null : `#${step.target} (not in list)`,
     pass: kindOk && targetOk && checkOk,
   };

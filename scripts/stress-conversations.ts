@@ -69,6 +69,7 @@ const SCENARIOS: Scenario[] = [
 
 const client = makeClient(process.env.ANTHROPIC_API_KEY!, 30_000);
 const only = process.argv[2];
+const totals = { calls: 0, replans: 0, trimmed: 0 };
 
 async function run(sc: Scenario) {
   let cur = sc.start;
@@ -81,7 +82,17 @@ async function run(sc: Scenario) {
   };
   const c = new SessionController({
     bridge,
-    planner: { plan: async (req) => { calls++; const r = await planStep(client, req); if (r.ok) out.push(`    [claude] ${JSON.stringify(r.step)}`); else out.push(`    [claude error] ${r.error}`); return r; } },
+    planner: {
+      plan: async (req) => {
+        calls++;
+        // A retryNote means the last reply failed checkStep: this call is a re-plan the user waits for.
+        if (req.retryNote) totals.replans++;
+        const r = await planStep(client, req, (l) => (l.trimmed ? totals.trimmed++ : 0));
+        if (r.ok) out.push(`    [claude] ${JSON.stringify(r.step)}`);
+        else out.push(`    [claude error] ${r.error}`);
+        return r;
+      },
+    },
     speech: { speak: (t) => out.push(`  SAY: ${t}`), stop: () => {} },
     timing: { stepTimeoutMs: 30_000, slowNoteMs: 60_000, waitRecheckMs: 600_000 },
   });
@@ -94,8 +105,11 @@ async function run(sc: Scenario) {
     else if ("click" in a) { out.push(`USER: [clicks -> ${a.click}]`); cur = a.click; await c.onContent({ type: "ja:step-done", how: "click" } as never, 0); }
     snap();
   }
+  totals.calls += calls;
   out.push(`  history: ${JSON.stringify(c.currentHistory)}`, `  claude calls: ${calls}`);
   console.log(out.join("\n"));
 }
 
 for (const sc of SCENARIOS) if (!only || sc.name === only) await run(sc).catch((e) => console.log(sc.name, "CRASH", e));
+const pct = totals.calls ? ((100 * totals.replans) / totals.calls).toFixed(1) : "0";
+console.log(`\nclaude calls ${totals.calls}, re-plans ${totals.replans} (${pct}%), trimmed instead ${totals.trimmed}`);

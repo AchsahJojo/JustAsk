@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { checkStep, stepJsonSchema, StepResponse, type PageSnapshot } from "../src";
+import { checkStep, fixStep, sayWords, stepJsonSchema, StepResponse, type PageSnapshot } from "../src";
 
 const snap: PageSnapshot = {
   snapshotId: "s1",
@@ -95,4 +95,44 @@ describe("checkStep: act (drive mode)", () => {
     expect(checkStep({ ...base, target: 4, expect: "type" }, s2).ok).toBe(true); // guiding the user is fine
   });
   it("can't hover or pick files", () => expect(checkStep({ ...act, expect: "file" }, s2).ok).toBe(false));
+});
+
+describe("fixStep: a say a little over the limit", () => {
+  const words = (n: number, w = "word") => Array(n).fill(w).join(" ");
+
+  it("trims a 22-word reply with a sentence break at 15 words, so it isn't re-planned", () => {
+    const say = `Click the blue Go button ${words(10)}. ${words(6)} after.`;
+    expect(sayWords(say)).toBe(22);
+    expect(checkStep({ ...base, say }, snap)).toMatchObject({ ok: false, code: "say_long" });
+    const fixed = fixStep({ ...base, say }, snap);
+    expect(fixed.say).toBe(`Click the blue Go button ${words(10)}.`);
+    expect(sayWords(fixed.say)).toBe(15);
+    expect(checkStep(fixed, snap)).toEqual({ ok: true });
+  });
+  it("keeps the question of a clarify", () => {
+    const say = "Do you want to start your own new call, or join someone else's? If joining, ask them to send you the link.";
+    expect(sayWords(say)).toBeGreaterThan(20);
+    const fixed = fixStep({ ...base, kind: "clarify", target: null, expect: null, say }, snap);
+    expect(fixed.say).toBe("Do you want to start your own new call, or join someone else's?");
+  });
+  it("doesn't cut a clarify's question off", () => {
+    const say = `Okay, ${words(12)} for you. Do you want to start a new call, or join one?`;
+    const step = { ...base, kind: "clarify" as const, target: null, expect: null, say };
+    expect(fixStep(step, snap)).toBe(step);
+  });
+  it("doesn't drop the target's name or the action verb", () => {
+    const lostName = { ...base, say: `Click the button ${words(12)} below. It is the big blue Go one at the top.` };
+    expect(sayWords(lostName.say)).toBeLessThanOrEqual(28);
+    expect(fixStep(lostName, snap)).toBe(lostName);
+    const lostVerb = { ...base, say: `This is the page ${words(12)} you want. Press Go to carry on with your refill.` };
+    expect(fixStep(lostVerb, snap)).toBe(lostVerb);
+  });
+  it("leaves lines with no sentence break, and lines far over the limit, for a re-plan", () => {
+    const flat = { ...base, say: `Click Go ${words(20)}` };
+    expect(fixStep(flat, snap)).toBe(flat);
+    const long = { ...base, say: `Click Go ${words(10)}. ${words(20)}.` };
+    expect(sayWords(long.say)).toBeGreaterThan(28);
+    expect(fixStep(long, snap)).toBe(long);
+  });
+  it("leaves lines within the limit alone", () => expect(fixStep(base, snap)).toBe(base));
 });

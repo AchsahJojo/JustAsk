@@ -1,6 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { buildTurn, SYSTEM_PROMPT } from "@justask/core";
-import { StepResponse, stepJsonSchema, type PlanRequest, type PlanResponse } from "@justask/shared";
+import { checkStep, fixStep, sayWords, StepResponse, stepJsonSchema, type CheckCode, type PageSnapshot, type PlanRequest, type PlanResponse } from "@justask/shared";
 
 export const MODEL = "claude-opus-5-5";
 export const EFFORT = "low";
@@ -16,6 +16,19 @@ export interface PlanLog {
   refusalCategory?: string | null;
   outputTokens?: number;
   cacheReadTokens?: number;
+  /** Words in the reply's `say`, before any trim. A number only: the line itself is never logged. */
+  sayWords?: number;
+  /** True when `fixStep` cut a long `say` at a sentence end instead of a re-plan. */
+  trimmed?: boolean;
+  /** The `checkStep` failure code the extension will re-plan on (after `fixStep`), or null when it passes. */
+  checkFail?: CheckCode | null;
+}
+
+/** What `checkStep` will make of this reply in the extension, as numbers and codes for `PlanLog`. */
+export function checkLog(step: StepResponse, snapshot: PageSnapshot): Pick<PlanLog, "sayWords" | "trimmed" | "checkFail"> {
+  const fixed = fixStep(step, snapshot);
+  const check = checkStep(fixed, snapshot);
+  return { sayWords: sayWords(step.say), trimmed: fixed !== step, checkFail: check.ok ? null : check.code };
 }
 
 /** Overrides for the prompt eval (docs/ARCHITECTURE.md §12). Defaults: `claude-opus-5-5`, effort `low`. */
@@ -62,13 +75,14 @@ export async function planStep(
       throw err;
     }
 
-    log({
+    const entry: PlanLog = {
       stopReason: res.stop_reason,
       refusalCategory: res.stop_reason === "refusal" ? (res.stop_details?.category ?? null) : undefined,
       outputTokens: res.usage.output_tokens,
       cacheReadTokens: res.usage.cache_read_input_tokens ?? 0,
-    });
+    };
 
+    if (res.stop_reason === "refusal" || res.stop_reason === "max_tokens") log(entry);
     if (res.stop_reason === "refusal") {
       // Final: the fallback model also refused, or the category is never retried. Discard partial output.
       return {
@@ -81,12 +95,15 @@ export async function planStep(
     if (res.stop_reason === "max_tokens") continue; // retry once, then blocked
 
     const text = res.content.flatMap((b) => (b.type === "text" ? [b.text] : [])).join("");
+    let step: StepResponse;
     try {
-      const step = StepResponse.parse(JSON.parse(text));
-      return { ok: true, snapshotId: req.snapshot.snapshotId, step, latencyMs: Date.now() - started };
+      step = StepResponse.parse(JSON.parse(text));
     } catch {
+      log(entry);
       return { ok: false, error: "unparseable reply", retryable: true };
     }
+    log({ ...entry, ...checkLog(step, req.snapshot) });
+    return { ok: true, snapshotId: req.snapshot.snapshotId, step, latencyMs: Date.now() - started };
   }
   return {
     ok: true,

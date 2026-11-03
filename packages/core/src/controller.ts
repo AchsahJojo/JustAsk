@@ -1,4 +1,4 @@
-import { checkStep, type ActResult, type ActSpec, type EventType, type FrameScan, type FromContent, type HighlightSpec, type PageSnapshot, type PlanRequest, type PlanResponse, type Recipe, type SnapshotElement, type StepResponse } from "@justask/shared";
+import { checkStep, fixStep, type ActResult, type ActSpec, type EventType, type FrameScan, type FromContent, type HighlightSpec, type PageSnapshot, type PlanRequest, type PlanResponse, type Recipe, type SnapshotElement, type StepResponse } from "@justask/shared";
 import { mergeScans, type TargetRef } from "./merge";
 import * as L from "./lines";
 import { isDecline, parseCommand } from "./commands";
@@ -746,12 +746,14 @@ export class SessionController {
       // A mismatched reply cannot safely be applied to the current numbered targets.
       return this.block(L.TROUBLE_LINE);
     }
-    const check = checkStep(res.step, snapshot);
+    // A line a few words over the limit is cut at a sentence end rather than costing a second Claude call.
+    const step = fixStep(res.step, snapshot);
+    const check = checkStep(step, snapshot);
     if (!check.ok) {
       if (this.replans++ < 1) return this.requestStep(gen, check.reason);
       return this.block(L.TROUBLE_LINE, false);
     }
-    await this.handleStep(res.step, res.latencyMs);
+    await this.handleStep(step, res.latencyMs);
   }
 
   /** 10 s per attempt, "Still looking…" at 3 s, one retry. Returns null when superseded. */
