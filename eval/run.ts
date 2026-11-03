@@ -1,8 +1,10 @@
 // Prompt eval runner: send each captured snapshot to Claude exactly the way planStep does,
 // score the reply, and print + save a report. See docs/eval.md.
 //
-//   npm run eval -- [--model claude-opus-5-5] [--effort low] [--repeat 1] [--only <id>] [--dry] [--concurrency 3]
+//   npm run eval -- [--provider anthropic|deepseek] [--model claude-opus-5-5] [--effort low] [--repeat 1] [--only <id>] [--dry] [--concurrency 3]
 //
+// --provider deepseek (issue #18) sends the same snapshots through packages/backend/lib/providers/deepseek.ts
+// and needs DEEPSEEK_API_KEY. Fixture snapshots only: live-site snapshots stay off DeepSeek until the privacy review.
 // Needs ANTHROPIC_API_KEY. Without it, it runs in --dry mode (a fixed stub step) and exits 0.
 // Nothing is sent to Convex. Reports stay in eval/reports/ (gitignored).
 import Anthropic from "@anthropic-ai/sdk";
@@ -11,19 +13,25 @@ import { fileURLToPath } from "node:url";
 import { buildTurn, SYSTEM_PROMPT } from "../packages/core/src/prompt";
 import { MAX_SAY_WORDS, StepResponse, stepJsonSchema, type PageSnapshot } from "../packages/shared/src/index";
 import { percentile, scoreStep, type EvalCase, type Score } from "./lib/score";
+import { deepseekPlanStep } from "../packages/backend/lib/providers/deepseek";
 
 const EVAL = fileURLToPath(new URL(".", import.meta.url));
 
 // ───────────── flags ─────────────
 const argv = process.argv.slice(2);
 const flag = (name: string, def: string | null = null) => (argv.includes(name) ? (argv[argv.indexOf(name) + 1] ?? def) : def);
-const model = flag("--model", "claude-opus-5-5")!;
+const provider = flag("--provider", "anthropic") === "deepseek" ? "deepseek" : "anthropic";
+const model = flag("--model", provider === "deepseek" ? "deepseek-chat" : "claude-opus-5-5")!;
 const effort = flag("--effort", "low")! as "low" | "medium" | "high";
 const repeat = Math.max(1, Number(flag("--repeat", "1")));
 const only = flag("--only");
 const concurrency = Math.min(3, Math.max(1, Number(flag("--concurrency", "3")))); // cost guard: never above 3
-const apiKey = process.env.ANTHROPIC_API_KEY;
+const apiKey = provider === "deepseek" ? process.env.DEEPSEEK_API_KEY : process.env.ANTHROPIC_API_KEY;
 let dry = argv.includes("--dry");
+if (!apiKey && !dry && provider === "deepseek") {
+  console.log("DEEPSEEK_API_KEY is not set, so this is a dry run with a stub step.\n");
+  dry = true;
+}
 if (!apiKey && !dry) {
   console.log(
     [
@@ -42,7 +50,9 @@ const cases: EvalCase[] = readdirSync(`${EVAL}cases`)
   .filter((f) => f.endsWith(".case.json"))
   .sort()
   .map((f) => JSON.parse(readFileSync(`${EVAL}cases/${f}`, "utf8")))
-  .filter((c: EvalCase) => !only || c.id === only);
+  .filter((c: EvalCase) => !only || c.id === only)
+  // Real sites' snapshots never go to DeepSeek before the privacy review.
+  .filter((c: EvalCase) => provider !== "deepseek" || !c.live);
 const ready: Array<{ c: EvalCase; snapshot: PageSnapshot }> = [];
 const notCaptured: string[] = [];
 for (const c of cases) {
@@ -69,12 +79,13 @@ interface CallResult {
 
 const STEP_JSON_SCHEMA = stepJsonSchema();
 // Longer timeout than planStep's 10 s so medium/high effort isn't cut off in the eval.
-const client = dry ? null : new Anthropic({ apiKey, timeout: 60_000, maxRetries: 1 });
+const client = dry || provider !== "anthropic" ? null : new Anthropic({ apiKey, timeout: 60_000, maxRetries: 1 });
 const BLOCKED = (say: string): StepResponse => ({ kind: "blocked", say, target: null, expect: null, option: null, text: null, risk: "none" });
 const DRY_STEP: StepResponse = { kind: "guide", say: "Click the first thing on the page.", target: 1, expect: "click", option: null, text: null, risk: "none" };
 
 async function callClaude(c: EvalCase, snapshot: PageSnapshot): Promise<CallResult> {
   const r: CallResult = { step: null, error: null, latencyMs: 0, outputTokens: 0, inputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, servedBy: dry ? "dry-stub" : model };
+  if (!dry && provider === "deepseek") return callDeepSeek(c, snapshot, r);
   if (!client) {
     r.step = DRY_STEP;
     return r;
@@ -124,6 +135,20 @@ async function callClaude(c: EvalCase, snapshot: PageSnapshot): Promise<CallResu
   return r;
 }
 
+/** The DeepSeek provider exactly as `/plan` runs it (Zod parse, checkStep, one retry, then blocked). */
+async function callDeepSeek(c: EvalCase, snapshot: PageSnapshot, r: CallResult): Promise<CallResult> {
+  const started = Date.now();
+  const req = { deviceToken: null, sessionId: null, request: c.request, history: c.history ?? [], recipe: c.recipe ?? null, snapshot, retryNote: null };
+  const res = await deepseekPlanStep(apiKey!, req, (l) => {
+    r.outputTokens += l.outputTokens ?? 0;
+    r.cacheReadTokens += l.cacheReadTokens ?? 0;
+  }, { model, timeoutMs: 60_000 });
+  r.latencyMs = Date.now() - started;
+  if (res.ok) r.step = res.step;
+  else r.error = res.error;
+  return r;
+}
+
 // ───────────── run (pool of ≤3; first job alone so it writes the cache) ─────────────
 interface Row extends CallResult {
   id: string;
@@ -150,7 +175,7 @@ async function runJob(i: number) {
   console.log(`${mark} ${c.id}${repeat > 1 ? ` #${attempt}` : ""}  ${res.step?.kind ?? "-"} ${score?.targetDesc ? `→ ${score.targetDesc}` : ""}${res.error ? `  [${res.error}]` : ""}  ${res.latencyMs} ms`);
 }
 
-console.log(`eval: ${jobs.length} run(s) over ${ready.length} case(s) — model ${model}, effort ${effort}${dry ? ", DRY" : ""}\n`);
+console.log(`eval: ${jobs.length} run(s) over ${ready.length} case(s) — ${provider} model ${model}${provider === "anthropic" ? `, effort ${effort}` : ""}${dry ? ", DRY" : ""}\n`);
 if (jobs.length) await runJob(0);
 let next = 1;
 await Promise.all(
@@ -167,6 +192,7 @@ const passed = rate((r) => !!r.score?.pass);
 const lat = rows.filter((r) => !r.error || r.error === "refusal").map((r) => r.latencyMs);
 const avg = (xs: number[]) => (xs.length ? Math.round(xs.reduce((a, b) => a + b, 0) / xs.length) : 0);
 const summary = {
+  provider,
   model,
   effort,
   repeat,

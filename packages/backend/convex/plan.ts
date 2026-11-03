@@ -1,8 +1,7 @@
 import type { ActionCtx } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { PlanRequest, QueryRequest, type PlanResponse, type QueryResponse } from "@justask/shared";
-import { makeClient, planStep } from "../lib/planStep";
-import { searchQuery } from "../lib/searchQuery";
+import { pickProvider } from "../lib/providers";
 
 /** ConvexError data ("not paired") or a plain error's message ("rate limited"). */
 function errorText(e: unknown): string {
@@ -30,10 +29,14 @@ export async function runPlan(ctx: ActionCtx, body: string): Promise<PlanRespons
     const m = errorText(e);
     return { ok: false, error: /not paired/.test(m) ? "not paired" : /rate limited/.test(m) ? "rate limited" : "error", retryable: false };
   }
-  const key = process.env.ANTHROPIC_API_KEY;
-  if (!key) return { ok: false, error: "server not configured", retryable: false };
+  // PLANNER_PROVIDER (Convex env): anthropic by default; keys come from Convex env only.
+  const picked = pickProvider(process.env);
+  if (!picked.ok) return { ok: false, error: picked.error, retryable: false };
+  if (picked.warning) console.warn("plan", picked.warning);
   // Log numbers only (stop reason, tokens), never the page.
-  return planStep(makeClient(key), parsed.data, (l) => console.log("plan", JSON.stringify(l)));
+  // The anthropic log line is unchanged; other providers say which one answered.
+  const tag = picked.provider.name === "anthropic" ? {} : { provider: picked.provider.name };
+  return picked.provider.planStep(parsed.data, (l) => console.log("plan", JSON.stringify({ ...tag, ...l })));
 }
 
 /**
@@ -55,7 +58,8 @@ export async function runQuery(ctx: ActionCtx, body: string): Promise<QueryRespo
     const m = errorText(e);
     return { ok: false, error: /not paired/.test(m) ? "not paired" : /rate limited/.test(m) ? "rate limited" : "error" };
   }
-  const key = process.env.ANTHROPIC_API_KEY;
-  if (!key) return { ok: false, error: "server not configured" };
-  return searchQuery(makeClient(key), parsed.data.request);
+  const picked = pickProvider(process.env);
+  if (!picked.ok) return { ok: false, error: picked.error };
+  if (picked.warning) console.warn("searchQuery", picked.warning);
+  return picked.provider.searchQuery(parsed.data.request);
 }

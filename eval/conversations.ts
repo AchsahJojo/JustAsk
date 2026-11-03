@@ -2,12 +2,14 @@
 // pages and scripted user replies. Each scenario runs N times (Claude isn't deterministic) and has
 // assertions, not only a transcript. See docs/eval.md.
 //
-//   npm run eval:conversations -- [--repeat 3] [--only <name>] [--verbose] [--model claude-opus-5-5] [--effort low]
+//   npm run eval:conversations -- [--repeat 3] [--only <name>] [--verbose] [--model claude-opus-5-5] [--effort low] [--provider deepseek]
 //
+// --provider deepseek (issue #18) runs the same scenarios on DeepSeek with DEEPSEEK_API_KEY.
 // Needs ANTHROPIC_API_KEY (about 150 Claude calls at --repeat 3). Not run in CI. Reports stay in eval/reports/.
 import { mkdirSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { makeClient, planStep, type PlanOptions } from "../packages/backend/lib/planStep";
+import { deepseekPlanStep } from "../packages/backend/lib/providers/deepseek";
 import { checkAssertions, needed, runScenario } from "./lib/conversation";
 import { PAGES, SCENARIOS } from "./conversations/scenarios";
 
@@ -17,11 +19,13 @@ const flag = (name: string, def: string | null = null) => (argv.includes(name) ?
 const repeat = Math.max(1, Number(flag("--repeat", "3")));
 const only = flag("--only");
 const verbose = argv.includes("--verbose");
-const model = flag("--model", "claude-opus-5-5")!;
+const provider = flag("--provider", "anthropic") === "deepseek" ? "deepseek" : "anthropic";
+const model = flag("--model", provider === "deepseek" ? "deepseek-chat" : "claude-opus-5-5")!;
 const effort = flag("--effort", "low")! as NonNullable<PlanOptions["effort"]>;
-const apiKey = process.env.ANTHROPIC_API_KEY;
+const keyName = provider === "deepseek" ? "DEEPSEEK_API_KEY" : "ANTHROPIC_API_KEY";
+const apiKey = process.env[keyName];
 if (!apiKey) {
-  console.log("ANTHROPIC_API_KEY is not set. This eval talks to Claude; set the key and run again (docs/eval.md).");
+  console.log(`${keyName} is not set. This eval talks to ${provider}; set the key and run again (docs/eval.md).`);
   process.exit(1);
 }
 const scenarios = SCENARIOS.filter((s) => !only || s.name === only);
@@ -30,8 +34,11 @@ if (!scenarios.length) {
   process.exit(1);
 }
 
-const client = makeClient(apiKey, 30_000);
-const planner = { plan: (req: Parameters<typeof planStep>[1]) => planStep(client, req, { model, effort }) };
+const client = provider === "anthropic" ? makeClient(apiKey, 30_000) : null;
+const planner = {
+  plan: (req: Parameters<typeof planStep>[1]) =>
+    client ? planStep(client, req, { model, effort }) : deepseekPlanStep(apiKey, req, () => {}, { model, timeoutMs: 30_000 }),
+};
 
 interface Result {
   name: string;
