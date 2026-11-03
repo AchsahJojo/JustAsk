@@ -179,6 +179,11 @@ A caregiver is optional. When there is one, the caregiver can set JustAsk up for
 
 ### Product decisions still open
 - [x] Guide or drive? **Decided: guide only** (refined-plan-3). The user always does the clicking.
+- [x] **Follow-ups after a finished task** (#8). **Decided:**
+  - Words within 10 minutes of `done` (`followUpMs`) start a new session whose history begins with the first request of the chain and JustAsk's last line. Later words start fresh. **Ask for something else** clears the chain.
+  - "Thank you", "that's all" and the like get a kind reply: no session, no scan, no Claude call.
+  - **Caregiver tasks are not re-attached.** A follow-up after a caregiver task's `done` is the user's own session, with no `taskId`. The task already told the caregiver "finished", and re-opening it would change an outcome they already heard about. It also keeps the caregiver from seeing what the user asked for next without asking. A caregiver task that starts after a finished task is its own errand, so it never gets the follow-up note either.
+  - "I'm stuck" or "that didn't work" right after `done` is tracked in #13.
 - [ ] Per-IP abuse limits on unauthenticated endpoints. This needs an HTTP action in front; today the limits are global and per code prefix.
 
 ### Known bugs and gaps

@@ -104,6 +104,11 @@ export const DEFAULT_TIMING = {
   waitMaxReplans: 4,
   /** …within this window; then it asks "Do you see it now?" and stops polling. */
   waitWindowMs: 20_000,
+  /**
+   * Words within this long of a finished task are a follow-up to it ("I don't have a code"). Later,
+   * they're a fresh task, so tomorrow's "check my email" isn't framed as part of today's Meet.
+   */
+  followUpMs: 10 * 60_000,
 };
 
 /** Consecutive click/submit actions that changed nothing before the session switches to guide mode. */
@@ -179,6 +184,8 @@ export class SessionController {
   private repeat_ = { key: "", sig: "", count: 0 };
   /** The first request in a chain of follow-ups after finished tasks ("go to google meet", then "I don't have a code"). */
   private origin: string | null = null;
+  /** When the session last reached `done`, to expire the follow-up chain. */
+  private doneAt = 0;
 
   constructor(private deps: ControllerDeps) {
     this.t = { ...DEFAULT_TIMING, ...deps.timing };
@@ -204,6 +211,7 @@ export class SessionController {
 
   private set(patch: Partial<SessionView>) {
     if (patch.phase !== undefined && patch.phase !== "waiting") this.leaveWaiting();
+    if (patch.phase === "done" && this.view.phase !== "done") this.doneAt = Date.now();
     this.view = { ...this.view, ...patch };
     this.deps.store?.save(this.view, { history: this.history, recipe: this.recipe });
     for (const fn of this.listeners) fn(this.view);
@@ -271,7 +279,9 @@ export class SessionController {
     const text = request.trim();
     if (!text) return;
     // Words right after a finished task usually build on it ("I don't have a code"), so Claude sees what came before.
-    const origin = this.view.phase === "done" && this.view.request ? (this.origin ?? this.view.request) : null;
+    // A caregiver task is its own errand, and words long after are a fresh task (docs/STATUS.md, "Follow-ups").
+    const recent = Date.now() - this.doneAt <= this.t.followUpMs;
+    const origin = this.view.phase === "done" && this.view.request && recent && !opts.taskId ? (this.origin ?? this.view.request) : null;
     const before = origin ? L.followUpNote(origin, this.view.line) : null;
     this.reset();
     this.origin = origin;
@@ -428,11 +438,13 @@ export class SessionController {
 
   async stop() {
     const wasActive = this.view.phase !== "idle" && this.view.phase !== "done";
+    // A blocked session already logged its outcome (`blocked` or `scam_stopped`): don't add `abandoned`.
+    const logged = this.view.phase === "blocked";
     this.bump();
     this.abort?.abort();
     this.deps.speech.stop();
     await this.deps.bridge.clear();
-    if (wasActive) this.deps.events?.log("abandoned");
+    if (wasActive && !logged) this.deps.events?.log("abandoned");
     this.reset();
     this.set({ ...INITIAL, line: wasActive ? L.STOPPED_LINE : "" });
   }
