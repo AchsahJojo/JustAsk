@@ -1,5 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
-import { buildTurn, SYSTEM_PROMPT } from "@justask/core";
+import { buildTurn, SYSTEM_PROMPT, userText } from "@justask/core";
 import { checkStep, fixStep, sayWords, StepResponse, stepJsonSchema, type CheckCode, type PageSnapshot, type PlanRequest, type PlanResponse } from "@justask/shared";
 
 export const MODEL = "claude-opus-5-5";
@@ -25,9 +25,9 @@ export interface PlanLog {
 }
 
 /** What `checkStep` will make of this reply in the extension, as numbers and codes for `PlanLog`. */
-export function checkLog(step: StepResponse, snapshot: PageSnapshot): Pick<PlanLog, "sayWords" | "trimmed" | "checkFail"> {
+export function checkLog(step: StepResponse, snapshot: PageSnapshot, said = ""): Pick<PlanLog, "sayWords" | "trimmed" | "checkFail"> {
   const fixed = fixStep(step, snapshot);
-  const check = checkStep(fixed, snapshot);
+  const check = checkStep(fixed, snapshot, said);
   return { sayWords: sayWords(step.say), trimmed: fixed !== step, checkFail: check.ok ? null : check.code };
 }
 
@@ -102,7 +102,7 @@ export async function planStep(
       log(entry);
       return { ok: false, error: "unparseable reply", retryable: true };
     }
-    log({ ...entry, ...checkLog(step, req.snapshot) });
+    log({ ...entry, ...checkLog(step, req.snapshot, userText(req.request, req.history, req.recipe)) });
     return { ok: true, snapshotId: req.snapshot.snapshotId, step, latencyMs: Date.now() - started };
   }
   return {

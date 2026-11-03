@@ -19,6 +19,15 @@ export function sameStem(a: string, b: string): boolean {
 
 /** The user's own words: the request, the user "The user answered" history entries, and the caregiver recipe steps. */
 export function userWords(request: string, history: string[], recipe: Recipe | null): string[] {
+  return [...new Set(userParts(request, history, recipe).flatMap(words))];
+}
+
+/** The same words as whole lines, for `checkStep`'s clarify choices ("pick up" stays in order). */
+export function userText(request: string, history: string[], recipe: Recipe | null): string {
+  return userParts(request, history, recipe).join("\n");
+}
+
+function userParts(request: string, history: string[], recipe: Recipe | null): string[] {
   const parts = [request, ...(recipe?.steps ?? [])];
   for (const h of history) {
     const m = /^The user answered: (.*)$/.exec(h);
@@ -29,7 +38,7 @@ export function userWords(request: string, history: string[], recipe: Recipe | n
       parts.push(m[1]);
     }
   }
-  return [...new Set(parts.flatMap(words))];
+  return parts;
 }
 
 /** Words of `text` that the user never said (allowing simple stems). Empty means the text is built from the user's words. */

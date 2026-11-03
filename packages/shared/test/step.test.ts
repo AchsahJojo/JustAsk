@@ -35,7 +35,8 @@ describe("StepResponse JSON Schema", () => {
     const s = stepJsonSchema() as any;
     expect(s.type).toBe("object");
     expect(s.additionalProperties).toBe(false);
-    expect([...s.required].sort()).toEqual(["expect", "kind", "option", "risk", "say", "target", "text"]);
+    expect([...s.required].sort()).toEqual(["choices", "expect", "kind", "option", "risk", "say", "target", "text"]);
+    expect(JSON.stringify(s.properties.choices)).toContain('"null"');
     expect(JSON.stringify(s.properties.target)).toContain('"null"');
     expect(JSON.stringify(s)).not.toMatch(/minimum|maximum|minLength|maxLength/);
   });
@@ -76,6 +77,33 @@ describe("checkStep", () => {
   it("done must not have a target", () => {
     expect(checkStep({ ...base, kind: "done", target: 1, expect: null }, snap).ok).toBe(false);
     expect(checkStep({ ...base, kind: "done", target: null, expect: null }, snap).ok).toBe(true);
+  });
+});
+
+describe("checkStep: clarify choices (#15)", () => {
+  const page: PageSnapshot = { ...snap, pageText: "Pick up in store or Mail to my home" };
+  const ask = (choices: string[] | null, kind: StepResponse["kind"] = "clarify"): StepResponse => ({ kind, say: "Pick up, or mailed?", target: null, expect: null, option: null, text: null, risk: "none", choices });
+  it("accepts choices copied from the page, element text, options or the user's words", () => {
+    expect(checkStep(ask(["Pick up in store", "mail to my home"]), page).ok).toBe(true);
+    expect(checkStep(ask(["Go", "Arizona"]), page).ok).toBe(true);
+    expect(checkStep(ask(["Lisinopril"]), page, "refill my Lisinopril please").ok).toBe(true);
+    expect(checkStep(ask(null), page).ok).toBe(true);
+    expect(checkStep(ask([]), page).ok).toBe(true);
+  });
+  it("rejects a choice that isn't on the page or in the user's words", () => {
+    const r = checkStep(ask(["Pick up in store", "Express shipping"]), page);
+    expect(r).toMatchObject({ ok: false, code: "bad_choice" });
+    // Whole words only: "Pick" is not "Picky".
+    expect(checkStep(ask(["Picky"]), page).ok).toBe(false);
+  });
+  it("rejects more than 4, a choice over 5 words, and choices on other kinds", () => {
+    expect(checkStep(ask(["Go", "Go", "Go", "Go", "Go"]), page)).toMatchObject({ ok: false, code: "extra_choices" });
+    expect(checkStep(ask(["Pick up in store or Mail"]), page)).toMatchObject({ ok: false, code: "bad_choice" });
+    expect(checkStep(ask(["Go"], "done"), page)).toMatchObject({ ok: false, code: "extra_choices" });
+  });
+  it("parses with or without choices", () => {
+    expect(StepResponse.parse(ask(["Go"])).choices).toEqual(["Go"]);
+    expect(StepResponse.parse(base).choices).toBeUndefined();
   });
 });
 

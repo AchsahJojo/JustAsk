@@ -11,8 +11,9 @@ export const Expect = z.enum(["click", "type", "choose", "hover", "file", "scrol
 export const Risk = z.enum(["none", "money", "personal_info", "account_change", "suspicious"]);
 
 /**
- * The single source for the planStep contract. Every field is required; nullable fields
- * become `anyOf: [..., {type: "null"}]` in the JSON Schema sent to Claude.
+ * The single source for the planStep contract. Every field is required in the JSON Schema sent to
+ * Claude; nullable fields become `anyOf: [..., {type: "null"}]`. `choices` is optional in TypeScript
+ * only, so steps built in code (lines, tests, the mock planner) can leave it out.
  */
 export const StepResponse = z
   .object({
@@ -24,6 +25,11 @@ export const StepResponse = z
     /** What JustAsk types for an `act` + `type` step. Built from the user's words; null otherwise. */
     text: z.string().nullable(),
     risk: Risk,
+    /**
+     * `clarify` only: up to 4 short answers the user can tap ("Pick up in store"). Each must be on the
+     * page or in the user's words (`checkStep`), so Claude can't invent options. Null otherwise.
+     */
+    choices: z.array(z.string()).nullable().optional(),
   })
   .strict();
 export type StepResponse = z.infer<typeof StepResponse>;
@@ -34,10 +40,12 @@ export type Risk = z.infer<typeof Risk>;
 export function stepJsonSchema(): Record<string, unknown> {
   const raw = z.toJSONSchema(StepResponse, { target: "draft-2020-12" }) as Record<string, unknown>;
   delete raw.$schema;
+  // Claude always sends every field, `choices` included (null when there are none).
+  raw.required = Object.keys(raw.properties as Record<string, unknown>);
   return stripUnsupported(raw) as Record<string, unknown>;
 }
 
-const UNSUPPORTED = new Set(["minimum", "maximum", "exclusiveMinimum", "exclusiveMaximum", "minLength", "maxLength"]);
+const UNSUPPORTED = new Set(["minimum", "maximum", "exclusiveMinimum", "exclusiveMaximum", "minLength", "maxLength", "minItems", "maxItems"]);
 function stripUnsupported(node: unknown): unknown {
   if (Array.isArray(node)) return node.map(stripUnsupported);
   if (node && typeof node === "object") {
@@ -54,6 +62,9 @@ function stripUnsupported(node: unknown): unknown {
 export const MAX_SAY_WORDS = 20;
 /** `fixStep` trims a `say` up to this long. Longer lines are re-planned. */
 export const MAX_TRIM_WORDS = 28;
+/** A clarify offers at most this many tap-able choices, each this many words or fewer. */
+export const MAX_CHOICES = 4;
+export const MAX_CHOICE_WORDS = 5;
 
 /** Why a step failed `checkStep`, as a fixed code: safe to log (no page data). */
 export type CheckCode =
@@ -68,7 +79,9 @@ export type CheckCode =
   | "no_select"
   | "no_option"
   | "bad_option"
-  | "extra_target";
+  | "extra_target"
+  | "extra_choices"
+  | "bad_choice";
 
 export type StepCheck = { ok: true } | { ok: false; reason: string; code: CheckCode };
 
@@ -76,8 +89,20 @@ const fail = (code: CheckCode, reason: string): StepCheck => ({ ok: false, reaso
 
 export const sayWords = (say: string) => say.trim().split(/\s+/).filter(Boolean).length;
 
-/** Rules the JSON Schema cannot express (plan §4.1). A failed check gets one re-plan, then `blocked`. */
-export function checkStep(step: StepResponse, snapshot: PageSnapshot): StepCheck {
+/** Lowercase words joined by single spaces, padded, so `includes` matches whole words only. */
+const plain = (s: string) => ` ${s.toLowerCase().split(/[^\p{L}\p{N}]+/u).filter(Boolean).join(" ")} `;
+
+/** Everything a choice may be copied from: what's on the page, plus the user's own words. */
+function choiceSource(snapshot: PageSnapshot, said: string): string {
+  const els = snapshot.elements.flatMap((e) => [e.text, e.label ?? "", e.nearby ?? "", ...(e.field?.options ?? [])]);
+  return plain([snapshot.title, snapshot.heading, snapshot.pageText, ...els, said].join("\n"));
+}
+
+/**
+ * Rules the JSON Schema cannot express (plan §4.1). A failed check gets one re-plan, then `blocked`.
+ * `said` is the user's own words (request, answers, recipe): a clarify choice may come from there too.
+ */
+export function checkStep(step: StepResponse, snapshot: PageSnapshot, said = ""): StepCheck {
   const words = sayWords(step.say);
   if (words === 0) return fail("say_empty", "say is empty");
   if (words > MAX_SAY_WORDS) return fail("say_long", `say has ${words} words; the limit is ${MAX_SAY_WORDS}`);
@@ -110,6 +135,17 @@ export function checkStep(step: StepResponse, snapshot: PageSnapshot): StepCheck
   }
   if (step.kind !== "guide" && step.kind !== "act" && step.target !== null && step.kind !== "clarify") {
     return fail("extra_target", `${step.kind} must not have a target`);
+  }
+  if (step.choices?.length) {
+    if (step.kind !== "clarify") return fail("extra_choices", `${step.kind} must not have choices`);
+    if (step.choices.length > MAX_CHOICES) return fail("extra_choices", `${step.choices.length} choices; the limit is ${MAX_CHOICES}`);
+    const source = choiceSource(snapshot, said);
+    for (const c of step.choices) {
+      const n = sayWords(c);
+      if (n === 0 || n > MAX_CHOICE_WORDS) return fail("bad_choice", `choice "${c}" must be 1 to ${MAX_CHOICE_WORDS} words`);
+      // Deterministic: the choice must already be on the page or in the user's words, so Claude can't invent one.
+      if (!source.includes(plain(c))) return fail("bad_choice", `choice "${c}" is not on the page or in the user's words`);
+    }
   }
   return { ok: true };
 }
