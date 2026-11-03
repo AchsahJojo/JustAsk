@@ -71,7 +71,7 @@ export const get = query({
       .sort((a, b) => b.createdAt - a.createdAt)
       .slice(0, 50);
 
-    let stats: { finished: number; stuck: number | null; medianStepMs: number | null; stepsPerTask: number | null; repeats: number } | null = null;
+    let stats: { finished: number; stuck: number | null; loops: number | null; medianStepMs: number | null; stepsPerTask: number | null; repeats: number } | null = null;
     if (s.consent.notifyOnComplete) {
       // Sessions for tasks this caregiver sent. Sessions the user started themselves stay private.
       const myTaskIds = new Set(tasks.map((t) => t._id));
@@ -80,6 +80,7 @@ export const get = query({
       );
       const latencies: number[] = [];
       let stuck = 0;
+      let loops = 0;
       let repeats = 0;
       // Steps per finished task: step_shown events in sessions that ended done.
       let doneSessions = 0;
@@ -89,6 +90,7 @@ export const get = query({
         let done = false;
         for (const e of await ctx.db.query("events").withIndex("by_session", (q) => q.eq("sessionId", x._id)).collect()) {
           if (e.type === "stuck") stuck++;
+          if (e.type === "loop") loops++;
           if (e.type === "repeat") repeats++;
           if (e.type === "done") done = true;
           if (e.type === "step_shown") {
@@ -105,6 +107,8 @@ export const get = query({
       stats = {
         finished: tasks.filter((t) => t.status === "done").length,
         stuck: s.consent.notifyOnStuck ? stuck : null,
+        // A loop (the same step kept coming back) is a stuck signal too, so it shares that consent.
+        loops: s.consent.notifyOnStuck ? loops : null,
         medianStepMs: latencies.length ? latencies[Math.floor(latencies.length / 2)] : null,
         stepsPerTask: doneSessions ? Math.round((doneSteps / doneSessions) * 10) / 10 : null,
         repeats,

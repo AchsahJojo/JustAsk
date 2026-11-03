@@ -236,13 +236,65 @@ describe("SessionController", () => {
     expect(h.c.state.phase).toBe("guiding");
   });
 
-  it("the same question asked over and over ends the loop", async () => {
+  it("the same question asked twice ends the loop", async () => {
     const q = step("clarify", "Start a call or join one?");
-    const h = harness([q, q, q, q]);
+    const h = harness([q, step("clarify", "Start a call, or join one?"), q]);
     await h.c.start("google meet");
     await h.c.input("I don't know");
-    await h.c.input("I don't have one");
     expect(h.c.state.phase).toBe("blocked");
+    expect(h.events).toEqual(["clarify", "loop"]);
+  });
+
+  it("three different questions in a row don't trip the loop; a fourth does", async () => {
+    const h = harness([step("clarify", "Which book?"), step("clarify", "Paperback or ebook?"), step("clarify", "Which store?"), step("clarify", "New or used?")]);
+    await h.c.start("get the new book");
+    await h.c.input("the new one by Ann Patchett");
+    await h.c.input("paperback");
+    expect(h.c.state.phase).toBe("asking");
+    expect(h.c.state.line).toBe("Which store?");
+    await h.c.input("the closest one");
+    expect(h.c.state.phase).toBe("blocked");
+  });
+
+  it("the loop limits can be tuned through timing", async () => {
+    const q = step("clarify", "Start a call or join one?");
+    const h = harness([q, q, q], undefined, { timing: { sameQuestionLimit: 3 } });
+    await h.c.start("google meet");
+    await h.c.input("I don't know");
+    expect(h.c.state.phase).toBe("asking");
+    await h.c.input("hmm");
+    expect(h.c.state.phase).toBe("blocked");
+  });
+
+  it("a loop after a decline says we can stop for now, and doesn't log stuck", async () => {
+    const q = step("clarify", "Start a call or join one?");
+    const h = harness([q, q]);
+    await h.c.start("google meet");
+    await h.c.input("not yet");
+    expect(h.c.state.line).toMatch(/stop here for now/);
+    expect(h.events).not.toContain("stuck");
+  });
+
+  it("a loop after the user says it isn't working asks for the helper and logs stuck", async () => {
+    const g = guide(1, "Click Join.");
+    const h = harness([g, g, g]);
+    await h.c.start("join my call");
+    await h.c.input("which one?");
+    await h.c.input("I can't find the button");
+    expect(h.c.state.phase).toBe("blocked");
+    expect(h.c.state.line).toBe("This isn't working. Let's stop and ask your helper.");
+    expect(h.events.slice(-2)).toEqual(["stuck", "loop"]);
+  });
+
+  it("a loop after I'm stuck presses asks for the helper without logging stuck twice", async () => {
+    const g = guide(1, "Click Join.");
+    const h = harness([g, g, g]);
+    await h.c.start("join my call");
+    await h.c.stuck();
+    await h.c.stuck();
+    expect(h.c.state.line).toMatch(/ask your helper/);
+    expect(h.events.filter((e) => e === "stuck")).toHaveLength(2);
+    expect(h.events.at(-1)).toBe("loop");
   });
 
   it("a step the user finished doesn't count toward the loop", async () => {
@@ -310,10 +362,9 @@ describe("SessionController", () => {
     const h = harness([q, q, q, q]);
     await h.c.start("google meet");
     await h.c.input("I don't know");
-    await h.c.input("I don't have one");
     expect(h.c.state.phase).toBe("blocked");
     await h.c.stop();
-    expect(h.events).toContain("blocked");
+    expect(h.events).toContain("loop");
     expect(h.events).not.toContain("abandoned");
   });
 

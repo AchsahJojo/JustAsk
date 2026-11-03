@@ -28,6 +28,8 @@ export const WELCOME_LINE = "You're welcome. Press the big button any time you n
 /** "Not now" while waiting for something from outside the page (a code from family): end kindly, no re-plan. */
 export const NOT_NOW_LINE = "Okay. Press the big button when you're ready.";
 export const LOOP_LINE = "We can stop here for now. Press the big button when you're ready, or ask me something else.";
+/** The loop line when the user said they're stuck or can't find it: this isn't a "later", it needs a person. */
+export const STUCK_LOOP_LINE = "This isn't working. Let's stop and ask your helper.";
 /** History note for Claude: what JustAsk said last, so an answer like "no" or "I don't have one" has its question. */
 export const saidNote = (line: string) => `JustAsk said: ${JSON.stringify(line.slice(0, 200))}`;
 /** History note when the user speaks again after a finished task: the new words build on it. */

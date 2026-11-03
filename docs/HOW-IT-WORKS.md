@@ -80,7 +80,7 @@ This repeats until Claude says the task is done: "All done, you did it!"
 3. Describe a task by typing or speaking ("Get the new book"). If it's vague, JustAsk asks one question at a time ("Which book?", "Where: Amazon or the library?") until it knows what, which one and where.
 4. Review the finished task (title, what JustAsk will say, start page, steps), edit it if needed, and send. **A task can't be sent until the check says it's clear.** Edits get checked again.
 5. Watch the activity feed: "finished" or "got stuck", only if they agreed.
-6. The person page shows counts: finished, steps per task, "Say that again", "I'm stuck", typical step time.
+6. The person page shows counts: finished, steps per task, "Say that again", "I'm stuck", "Went in circles" (JustAsk stopped because the same step kept coming back), typical step time.
 
 ---
 

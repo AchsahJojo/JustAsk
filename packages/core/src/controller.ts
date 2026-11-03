@@ -109,16 +109,16 @@ export const DEFAULT_TIMING = {
    * they're a fresh task, so tomorrow's "check my email" isn't framed as part of today's Meet.
    */
   followUpMs: 10 * 60_000,
+  /** Loop guard: the same guide, act or wait step this many times in a row on an unchanged page ends the session. */
+  repeatLimit: 3,
+  /** …the same question (by its first 8 words) this many times in a row on an unchanged page. */
+  sameQuestionLimit: 2,
+  /** …any questions in a row, even different ones ("Which book?", "Paperback or ebook?", "Which store?", …). */
+  questionsInARow: 4,
 };
 
 /** Consecutive click/submit actions that changed nothing before the session switches to guide mode. */
 const NO_CHANGE_LIMIT = 3;
-
-/**
- * How many times in a row the same step may come back on an unchanged page before JustAsk stops
- * offering it (the user said they don't have the code, or not yet, and Claude asks again).
- */
-const REPEAT_LIMIT: Partial<Record<StepResponse["kind"], number>> = { guide: 3, act: 3, clarify: 3, wait: 3 };
 
 const INITIAL: SessionView = {
   phase: "idle",
@@ -187,6 +187,13 @@ export class SessionController {
   private sleeps = new Set<() => void>();
   /** The last step shown and the page it was shown on, to catch the same step coming back. */
   private repeat_ = { key: "", sig: "", count: 0 };
+  /** Clarify questions in a row, any wording. */
+  private questions = 0;
+  /**
+   * The user's last words, for the loop line: a decline ("not yet"), stuck in their own words ("I can't find
+   * it"), or a press of I'm stuck (already logged as `stuck`).
+   */
+  private lastReply: "decline" | "stuck" | "pressed-stuck" | null = null;
   /** The first request in a chain of follow-ups after finished tasks ("go to google meet", then "I don't have a code"). */
   private origin: string | null = null;
   /** When the session last reached `done`, to expire the follow-up chain. */
@@ -481,6 +488,7 @@ export class SessionController {
   async stuck() {
     if (this.view.phase === "idle") return;
     this.deps.events?.log("stuck");
+    this.lastReply = "pressed-stuck";
     this.noteLine();
     this.history.push("The user said they are stuck or can't find it");
     this.say(L.STUCK_LINE);
@@ -491,6 +499,7 @@ export class SessionController {
 
   async answer(text: string) {
     this.noteDecline(text);
+    this.lastReply = isDecline(text) ? "decline" : STUCK_WORDS.test(text) ? "stuck" : null;
     this.noteLine();
     this.history.push(`The user answered: ${JSON.stringify(text.slice(0, 200))}`);
     this.set({ phase: "planning", line: L.FILLER_LINE });
@@ -786,13 +795,11 @@ export class SessionController {
     }
     if (this.repeating(step)) {
       // The same step keeps coming back and the user keeps not doing it: stop asking. The user decides what's next.
-      this.deps.events?.log("blocked");
-      return this.block(L.LOOP_LINE);
+      return this.loop();
     }
     if ((step.kind === "guide" || step.kind === "act") && step.expect === "type" && this.declined.has(boxKey(this.element(step.target)) ?? "")) {
       // The user already said they can't fill this box: don't ask for it again.
-      this.deps.events?.log("blocked");
-      return this.block(L.LOOP_LINE);
+      return this.loop();
     }
     switch (step.kind) {
       case "act":
@@ -845,18 +852,34 @@ export class SessionController {
     }
   }
 
-  /** True when this step is the same one shown the last few times, on a page that hasn't changed. */
+  /**
+   * True when this step is the same one shown the last few times, on a page that hasn't changed, or the
+   * questions keep coming. A question counts as the same by its words, so different useful ones don't trip it.
+   */
   private repeating(step: StepResponse): boolean {
-    const limit = REPEAT_LIMIT[step.kind];
-    if (!limit) {
+    this.questions = step.kind === "clarify" ? this.questions + 1 : 0;
+    if (step.kind !== "guide" && step.kind !== "act" && step.kind !== "clarify" && step.kind !== "wait") {
       this.repeat_ = { key: "", sig: "", count: 0 };
       return false;
     }
-    const key = step.kind === "guide" || step.kind === "act" ? `target|${step.target}|${step.expect}` : step.kind;
+    const key =
+      step.kind === "guide" || step.kind === "act" ? `target|${step.target}|${step.expect}` : step.kind === "clarify" ? `clarify|${questionKey(step.say)}` : step.kind;
     const sig = this.snapshot ? snapshotSignature(this.snapshot) : "";
     const r = this.repeat_;
     this.repeat_ = r.key === key && r.sig === sig ? { key, sig, count: r.count + 1 } : { key, sig, count: 1 };
-    return this.repeat_.count >= limit;
+    const limit = step.kind === "clarify" ? this.t.sameQuestionLimit : this.t.repeatLimit;
+    return this.repeat_.count >= limit || this.questions >= this.t.questionsInARow;
+  }
+
+  /**
+   * End a loop with a line that fits why: a decline gets the gentle "stop here for now"; stuck gets "ask your
+   * helper" and logs `stuck` (so the caregiver hears, with consent) unless an I'm stuck press already did.
+   */
+  private loop() {
+    const stuck = this.lastReply === "stuck" || this.lastReply === "pressed-stuck";
+    if (this.lastReply === "stuck") this.deps.events?.log("stuck");
+    this.deps.events?.log("loop");
+    return this.block(stuck ? L.STUCK_LOOP_LINE : L.LOOP_LINE);
   }
 
   // ───────────── drive mode (docs/ARCHITECTURE.md §11) ─────────────
@@ -1096,9 +1119,25 @@ export class SessionController {
     this.noChange = 0;
     this.pending = null;
     this.repeat_ = { key: "", sig: "", count: 0 };
+    this.questions = 0;
+    this.lastReply = null;
     this.origin = null;
     this.declined = new Set();
   }
+}
+
+/** Words that mean the guidance isn't working for the user, as opposed to a decline. */
+const STUCK_WORDS = /\b(?:stuck|can'?t find|cannot find|can'?t see|don'?t see|isn'?t working|not working|doesn'?t work|won'?t work|nothing happen(?:s|ed)?|i'?m lost)\b/i;
+
+/** A question by its words: lowercase, no punctuation, the first 8 words. */
+function questionKey(say: string): string {
+  return say
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}\s]/gu, "")
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 8)
+    .join(" ");
 }
 
 /** The same box across snapshots (numbers change between scans): its role and what it says. */

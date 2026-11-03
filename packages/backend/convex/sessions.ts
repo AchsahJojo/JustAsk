@@ -20,10 +20,12 @@ export const logEvent = mutation({
     const session = await ctx.db.get(sessionId);
     if (!session || session.seniorId !== device.seniorId) throw new Error("not found");
     await ctx.db.insert("events", { sessionId, type, at: Date.now(), latencyMs });
-    const ending = ["done", "abandoned", "blocked"].includes(type);
+    // `loop`: JustAsk stopped because the same step or question kept coming back. A stuck-type loop
+    // also sends `stuck` first, which is what tells the caregiver; a "not yet" loop doesn't.
+    const ending = ["done", "abandoned", "blocked", "loop"].includes(type);
     if (ending && !session.endedAt) await ctx.db.patch(sessionId, { endedAt: Date.now(), outcome: type });
 
-    if (session.taskId && (type === "done" || type === "stuck" || type === "abandoned" || type === "blocked")) {
+    if (session.taskId && (type === "done" || type === "stuck" || type === "abandoned" || type === "blocked" || type === "loop")) {
       const task = await ctx.db.get(session.taskId);
       if (task) {
         // A completed or explicitly dismissed task is terminal. Only an active run can
@@ -31,11 +33,13 @@ export const logEvent = mutation({
         const wasActive = task.status === "active";
         if (wasActive && type === "done") {
           await ctx.db.patch(task._id, { status: "done", doneAt: Date.now() });
-        } else if (wasActive && (type === "abandoned" || type === "blocked")) {
+        } else if (wasActive && (type === "abandoned" || type === "blocked" || type === "loop")) {
           await ctx.db.patch(task._id, { status: "pending" });
         }
 
-        if (wasActive && (type === "done" || type === "stuck" || type === "blocked")) {
+        // Stuck still counts on a task a loop just returned to pending, in case `loop` arrived first.
+        const open = wasActive || (type === "stuck" && task.status === "pending");
+        if (open && (type === "done" || type === "stuck" || type === "blocked")) {
           const senior = await ctx.db.get(session.seniorId);
           if (senior) {
             const allowed = type === "done" ? senior.consent.notifyOnComplete : senior.consent.notifyOnStuck;

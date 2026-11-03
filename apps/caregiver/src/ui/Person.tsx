@@ -215,7 +215,7 @@ function Sharing({
 }: {
   displayName: string;
   consent: { notifyOnComplete: boolean; notifyOnStuck: boolean };
-  stats: { finished: number; stuck: number | null; medianStepMs: number | null; stepsPerTask: number | null; repeats: number } | null;
+  stats: { finished: number; stuck: number | null; loops?: number | null; medianStepMs: number | null; stepsPerTask: number | null; repeats: number } | null;
 }) {
   return (
     <section className="card">
@@ -243,6 +243,12 @@ function Sharing({
             <div>
               <dt>“I'm stuck”</dt>
               <dd>{stats.stuck}</dd>
+            </div>
+          )}
+          {stats.loops != null && (
+            <div>
+              <dt>Went in circles</dt>
+              <dd>{stats.loops}</dd>
             </div>
           )}
           {stats.stepsPerTask !== null && (
