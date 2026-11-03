@@ -316,9 +316,14 @@ export function Panel({ pinnedTabId }: { pinnedTabId: number | null }) {
             )}
 
             {phase === "waiting" && (
-              <button className="btn primary huge" onClick={() => host.controller.resume("The user said they are ready")}>
-                I'm ready
-              </button>
+              <div className="choices">
+                <button className="btn primary huge" onClick={() => host.controller.resume("The user said they are ready")}>
+                  I'm ready
+                </button>
+                <button className="btn outline huge" onClick={() => void host.controller.notNow()}>
+                  Not now
+                </button>
+              </div>
             )}
 
             {phase === "paused" && view.pauseReason === "other-tab" && (

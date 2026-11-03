@@ -121,7 +121,7 @@ idle ─start→ planning ─act────────→ acting ─acted→ v
                │ ├─guide──────→ guiding ─step-done→ verifying
                │ ├─act/guide+risk→ confirming ─yes→ acting/guiding │ ─no→ done
                │ ├─clarify→ asking ─answer→ planning
-               │ ├─wait→ waiting ─(page change | "I'm ready" | voice)→ planning
+               │ ├─wait→ waiting ─(page change | "I'm ready" | voice)→ planning │ ─"Not now" / "not yet"→ done
                │ ├─done→ done          └─blocked→ blocked
 any active ─(other tab | can't see | tab closed)→ paused ─resume→ planning
 any ─Stop→ idle
@@ -304,7 +304,8 @@ These come from testing the v1 extension on real sites.
   - Claude then correctly says "still loading", and Cause 1 strands it.
 - **Fix (no contract change):**
   - While the session is waiting, the page agent reports settled changes, and the controller rescans every ~1.5 s.
-  - It re-plans only when the signature of the interactive elements changes. At most 4 re-plans in 20 s, then it asks "Do you see it now?"
+  - It re-plans only when the signature of the interactive elements changes. At most 4 re-plans in 20 s, then it stops polling. It asks "Do you see it now?" only when the wait was for the page (it said loading, or its list changed); an off-screen wait (a code from family) stays quiet.
+  - **Not now** (button, or "no" / "not yet" / "later") ends a wait kindly with no Claude call. It logs `abandoned`, so a caregiver task goes back to pending.
   - It doesn't repeat itself if the new step is the same as the last one.
   - Also add `[contenteditable=plaintext-only]` and `role=searchbox` to the scanner's selector.
 

@@ -25,6 +25,8 @@ export const WELCOME_LINE = "You're welcome. Press the big button any time you n
  * Said instead of showing the same step again when the user keeps not doing it (they don't have
  * the code, don't want to yet, or it isn't working). The user decides what happens next.
  */
+/** "Not now" while waiting for something from outside the page (a code from family): end kindly, no re-plan. */
+export const NOT_NOW_LINE = "Okay. Press the big button when you're ready.";
 export const LOOP_LINE = "We can stop here for now. Press the big button when you're ready, or ask me something else.";
 /** History note for Claude: what JustAsk said last, so an answer like "no" or "I don't have one" has its question. */
 export const saidNote = (line: string) => `JustAsk said: ${JSON.stringify(line.slice(0, 200))}`;

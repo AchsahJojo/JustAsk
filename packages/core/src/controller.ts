@@ -102,7 +102,7 @@ export const DEFAULT_TIMING = {
   waitRecheckMs: 1_500,
   /** Waiting phase: at most this many automatic re-plans per wait… */
   waitMaxReplans: 4,
-  /** …within this window; then it asks "Do you see it now?" and stops polling. */
+  /** …within this window; then it stops polling (and asks "Do you see it now?" if the page itself was moving). */
   waitWindowMs: 20_000,
   /**
    * Words within this long of a finished task are a follow-up to it ("I don't have a code"). Later,
@@ -151,7 +151,12 @@ interface WaitState {
   busy: boolean;
   again: boolean;
   gaveUp: boolean;
+  /** The wait was for the page (it said loading, or its list changed), not for something off-screen. */
+  page: boolean;
 }
+
+/** Page words that mean the page itself is still coming, so a wait is for the screen. */
+const LOADING_RE = /\b(?:loading|please wait|one moment|processing|connecting)\b/i;
 
 /**
  * The session state machine and step loop. No browser APIs: everything goes through
@@ -305,13 +310,15 @@ export class SessionController {
   }
 
   /**
-   * Closing words ("thank you", "that's all") when no task is running: answer kindly instead of
-   * starting a new task. Returns true when it handled them.
+   * Closing words ("thank you", "that's all") or "not now" / "later" when no task is running: answer
+   * kindly instead of starting a new task. Returns true when it handled them.
    */
   farewell(text: string): boolean {
-    if (!["idle", "done", "blocked"].includes(this.view.phase) || parseCommand(text).kind !== "thanks") return false;
-    this.say(L.WELCOME_LINE);
-    this.set({ line: L.WELCOME_LINE, note: "" });
+    const kind = parseCommand(text).kind;
+    if (!["idle", "done", "blocked"].includes(this.view.phase) || (kind !== "thanks" && kind !== "no")) return false;
+    const line = kind === "thanks" ? L.WELCOME_LINE : L.NOT_NOW_LINE;
+    this.say(line);
+    this.set({ line, note: "" });
     return true;
   }
 
@@ -411,6 +418,9 @@ export class SessionController {
         break;
       case "no":
         if (this.view.phase === "confirming") return this.confirm(false);
+        // "Not yet" / "later" while waiting: the thing they need isn't here. End kindly, no re-plan.
+        if (this.view.phase === "waiting") return this.notNow();
+        if (this.farewell(raw)) return;
         break;
       case "done-typing":
         if (this.view.phase === "guiding" && this.step?.expect === "type") return this.doneTyping();
@@ -447,6 +457,21 @@ export class SessionController {
     if (wasActive && !logged) this.deps.events?.log("abandoned");
     this.reset();
     this.set({ ...INITIAL, line: wasActive ? L.STOPPED_LINE : "" });
+  }
+
+  /**
+   * "Not now" while waiting (the code hasn't come, they'll do it later). Ends the session without
+   * asking Claude again. Logged as abandoned, so a caregiver task goes back to waiting, not finished.
+   */
+  async notNow() {
+    if (this.view.phase !== "waiting") return;
+    this.bump();
+    this.abort?.abort();
+    this.history.push("The user said not now");
+    await this.deps.bridge.clear();
+    this.deps.events?.log("abandoned");
+    this.say(L.NOT_NOW_LINE);
+    this.set({ phase: "done", line: L.NOT_NOW_LINE, expect: null, risk: "none", note: "" });
   }
 
   async stuck() {
@@ -915,7 +940,8 @@ export class SessionController {
     this.say(step.say);
     this.set({ phase: "waiting", line: step.say, expect: null, risk: "none" });
     this.deps.bridge.watch(true);
-    this.waiting = { key, sig: this.snapshot ? snapshotSignature(this.snapshot) : "", replans: 0, since: Date.now(), timer: null, busy: false, again: false, gaveUp: false };
+    const loading = !!this.snapshot && LOADING_RE.test(`${this.snapshot.heading ?? ""} ${this.snapshot.pageText.slice(0, 1000)}`);
+    this.waiting = { key, sig: this.snapshot ? snapshotSignature(this.snapshot) : "", replans: 0, since: Date.now(), timer: null, busy: false, again: false, gaveUp: false, page: loading };
     this.scheduleRecheck();
   }
 
@@ -954,6 +980,7 @@ export class SessionController {
         if (sig !== w.sig) {
           w.sig = sig;
           w.replans++;
+          w.page = true;
           this.replans = 0;
           await this.requestStep(gen, null);
           if (gen !== this.gen || this.waiting !== w) return;
@@ -974,6 +1001,9 @@ export class SessionController {
     if (w.timer) clearTimeout(w.timer);
     w.timer = null;
     this.deps.bridge.watch(false);
+    // Off-screen waits (a text from family) stay quiet: "Do you see it now?" makes no sense there.
+    // The I'm ready / Not now buttons stay.
+    if (!w.page) return;
     this.say(L.SEE_IT_NOW);
     this.set({ line: L.SEE_IT_NOW });
   }
