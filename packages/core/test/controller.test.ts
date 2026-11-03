@@ -591,6 +591,68 @@ describe("waiting (P1)", () => {
     expect(h.plans.length).toBe(4);
   });
 
+  it("\"not yet\" / \"later\" while waiting ends kindly without asking Claude again", async () => {
+    for (const words of ["not yet", "later", "no", "I'll do it later"]) {
+      const h = harness([step("wait", "Wait for the code from your daughter.")]);
+      await h.c.start("help me join a meeting");
+      expect(h.c.state.phase).toBe("waiting");
+      await h.c.input(words);
+      expect(h.plans.length).toBe(1);
+      expect(h.c.state.phase).toBe("done");
+      expect(h.c.state.line).toBe("Okay. Press the big button when you're ready.");
+      expect(h.events).toContain("abandoned");
+      expect(h.events).not.toContain("done");
+      expect(h.bridge.watch).toHaveBeenLastCalledWith(false);
+    }
+  });
+
+  it("the Not now button ends the wait the same way", async () => {
+    const h = harness([wait]);
+    await h.c.start("post");
+    await h.c.notNow();
+    expect(h.plans.length).toBe(1);
+    expect(h.c.state.phase).toBe("done");
+  });
+
+  it("an off-screen wait stops polling quietly, without Do you see it now?", async () => {
+    const h = harness([step("wait", "Wait for the text with the code.")], [A], { timing: { waitWindowMs: 0 } });
+    await h.c.start("join my zoom call");
+    await h.c.onContent({ type: "ja:page-changed", reason: "mutation" }, 0);
+    expect(h.c.state.phase).toBe("waiting");
+    expect(h.c.state.line).toBe("Wait for the text with the code.");
+    expect(h.spoken).not.toContain("Do you see it now?");
+    expect(h.bridge.watch).toHaveBeenLastCalledWith(false);
+  });
+
+  it("a wait on a page that says loading still asks Do you see it now?", async () => {
+    const loading = [frame(0, ["A"])];
+    loading[0].snapshot.pageText = "Loading your messages…";
+    const h = harness([wait], [loading], { timing: { waitWindowMs: 0 } });
+    await h.c.start("post");
+    await h.c.onContent({ type: "ja:page-changed", reason: "mutation" }, 0);
+    expect(h.c.state.line).toBe("Do you see it now?");
+  });
+
+  it("stress meet-not-now and zoom-later never end in waiting, even if Claude keeps answering wait", async () => {
+    const meet = harness([step("wait", "Wait for your daughter to send the code.")]);
+    await meet.c.start("help me join a meeting on google meet");
+    await meet.c.input("my daughter hasn't sent it yet");
+    await meet.c.input("no");
+    expect(meet.c.state.phase).toBe("done");
+    // "I'll do it later" after that is not a new task.
+    await meet.c.input("I'll do it later");
+    expect(meet.c.state.phase).toBe("done");
+    expect(meet.plans.length).toBe(2);
+
+    const zoom = harness([step("wait", "Wait until you have the meeting ID.")]);
+    await zoom.c.start("join my zoom call");
+    await zoom.c.input("I don't know the meeting ID");
+    await zoom.c.input("I don't know");
+    // The third identical wait on an unchanged page ends in the loop guard, not another wait.
+    expect(zoom.c.state.phase).toBe("blocked");
+    expect(zoom.c.state.line).toMatch(/stop here for now/);
+  });
+
   it("re-scans on a timer while waiting", async () => {
     const h = harness([wait, act(2)], [A, AB], { timing: { waitRecheckMs: 5 } });
     await h.c.start("post");
