@@ -51,7 +51,7 @@ export class PageAgent {
     this.mo = new MutationObserver((muts) => {
       let real = false;
       for (const m of muts) {
-        if (isOurs(m.target) || onlyOurNodes(m)) continue;
+        if (isOurs(m.target) || onlyOurNodes(m) || isStyleNoise(m)) continue;
         real = true;
         m.addedNodes.forEach((n) => this.added.add(n));
       }
@@ -395,6 +395,16 @@ function isOurs(n: Node): boolean {
     else cur = (cur as Element).parentNode;
   }
   return false;
+}
+
+/**
+ * Class, style and most attribute edits never mean the page gained a control.
+ * aria-busy, hidden and disabled still count: they change what the user can do.
+ */
+function isStyleNoise(m: MutationRecord): boolean {
+  if (m.type !== "attributes") return false;
+  const name = m.attributeName ?? "";
+  return name !== "aria-busy" && name !== "hidden" && name !== "disabled" && name !== "aria-disabled" && name !== "aria-hidden";
 }
 
 /** A childList mutation that only adds/removes our overlay host (e.g. on body). */

@@ -2,6 +2,7 @@ import { browser } from "wxt/browser";
 import type { PageBridge, TargetRef } from "@justask/core";
 import type { ActResult, ActSpec, FrameScan, HighlightSpec, ScanReply, ToContent } from "@justask/shared";
 import { isInjectable } from "../platform";
+import { shouldInjectContentScript } from "./inject";
 
 const CONTENT_FILE = "/content-scripts/content.js";
 
@@ -50,6 +51,9 @@ export class ExtensionBridge implements PageBridge {
   async ensureInjected(): Promise<boolean> {
     const t = await this.settled();
     if (!t || !isInjectable(t.url)) return false;
+    // A page with many frames pays a lot to parse this script again on every step.
+    const topAlive = await this.send<boolean>({ type: "ja:ping" }, 0, 250, false);
+    if (!shouldInjectContentScript(topAlive)) return true;
     try {
       await browser.scripting.executeScript({ target: { tabId: t.id!, allFrames: true }, files: [CONTENT_FILE] });
       return true;

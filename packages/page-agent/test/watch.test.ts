@@ -92,6 +92,18 @@ describe("settle (wait for a page to finish before reading it)", () => {
     agent.destroy();
   });
 
+  it("class and style changes do not keep the page from settling", async () => {
+    const agent = new PageAgent({ frameId: 0, isTop: true, send: () => {} });
+    await sleep(250);
+    const btn = document.querySelector("button")!;
+    const t0 = Date.now();
+    const timer = setInterval(() => btn.classList.toggle("busy"), 40);
+    await agent.settle(200, 1500);
+    clearInterval(timer);
+    expect(Date.now() - t0).toBeLessThan(500);
+    agent.destroy();
+  });
+
   it("is quick when the page has been quiet", async () => {
     const agent = new PageAgent({ frameId: 0, isTop: true, send: () => {} });
     await sleep(250);
