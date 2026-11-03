@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import Anthropic from "@anthropic-ai/sdk";
-import { planStep } from "../lib/planStep";
+import { planStep, type PlanLog } from "../lib/planStep";
 import { mockPlan, type MockRule } from "../lib/mockPlanner";
 import type { PageSnapshot, PlanRequest, SnapshotElement } from "@justask/shared";
 
@@ -110,6 +110,19 @@ describe("planStep request shape (plan §4.2)", () => {
     expect(logs.length).toBe(1);
     await planStep(client([message("end_turn", good)], seen), req);
     expect(seen[2].body.output_config.effort).toBe("low");
+  });
+
+  it("logs the say length and checkStep outcome as numbers and codes, never the line", async () => {
+    const logs: PlanLog[] = [];
+    await planStep(client([message("end_turn", good)], []), req, (l) => logs.push(l));
+    expect(logs[0]).toMatchObject({ stopReason: "end_turn", sayWords: 5, trimmed: false, checkFail: null });
+    const long = "Click the blue Refill button near the top of the page, under your name. It has a little pill drawn on it.";
+    await planStep(client([message("end_turn", JSON.stringify({ ...JSON.parse(good), say: long }))], []), req, (l) => logs.push(l));
+    expect(logs[1]).toMatchObject({ sayWords: 22, trimmed: true, checkFail: null });
+    const lost = JSON.stringify({ ...JSON.parse(good), target: 9 });
+    await planStep(client([message("end_turn", lost)], []), req, (l) => logs.push(l));
+    expect(logs[2]).toMatchObject({ checkFail: "unknown_target" });
+    expect(JSON.stringify(logs)).not.toContain("Refill button");
   });
 
   it("keeps the system prompt byte-stable across calls (cache prefix)", async () => {

@@ -271,6 +271,15 @@ describe("SessionController", () => {
     expect(h.plans[2].history.join("\n")).toContain('the user asked "go to google meet" and JustAsk finished with: "Okay, later."');
   });
 
+  it("a line a few words too long is trimmed, not re-planned", async () => {
+    const long = "Click the A button at the top of the page, just under your name and photo. It is the first one there.";
+    const h = harness([guide(1, long), guide(1, "Click A.")]);
+    await h.c.start("x");
+    expect(h.plans).toHaveLength(1);
+    expect(h.c.state.phase).toBe("guiding");
+    expect(h.c.state.line).toBe("Click the A button at the top of the page, just under your name and photo.");
+  });
+
   it("Ask for something else clears the chain", async () => {
     const h = harness([step("done", "Meet is open."), step("done", "Okay.")]);
     await h.c.start("go to google meet");

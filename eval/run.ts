@@ -9,7 +9,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { buildTurn, SYSTEM_PROMPT } from "../packages/core/src/prompt";
-import { StepResponse, stepJsonSchema, type PageSnapshot } from "../packages/shared/src/index";
+import { MAX_SAY_WORDS, StepResponse, stepJsonSchema, type PageSnapshot } from "../packages/shared/src/index";
 import { percentile, scoreStep, type EvalCase, type Score } from "./lib/score";
 
 const EVAL = fileURLToPath(new URL(".", import.meta.url));
@@ -176,6 +176,14 @@ const summary = {
   kindOk: rate((r) => !!r.score?.kindOk),
   targetOk: rate((r) => !!r.score?.targetOk),
   checkOk: rate((r) => !!r.score?.checkOk),
+  /** Replies that fail checkStep after the trim: each one costs the user a second Claude call. */
+  replans: rate((r) => !!r.score && !r.score.checkOk),
+  trimmed: rate((r) => !!r.score?.trimmed),
+  overLimit: rate((r) => (r.score?.sayWords ?? 0) > MAX_SAY_WORDS),
+  checkCodes: rows.reduce<Record<string, number>>((acc, r) => {
+    if (r.score?.checkCode) acc[r.score.checkCode] = (acc[r.score.checkCode] ?? 0) + 1;
+    return acc;
+  }, {}),
   errors: rate((r) => !!r.error && r.error !== "refusal"),
   p50LatencyMs: percentile(lat, 50),
   p90LatencyMs: percentile(lat, 90),
@@ -200,7 +208,7 @@ const table = [
       r.score?.targetDesc ? `${r.step?.target}: ${r.score.targetDesc}` : (r.step?.target ?? "-"),
       yes(r.score?.kindOk),
       yes(r.score?.targetOk),
-      r.score?.checkOk ? "✓" : `✗ ${r.score?.checkReason ?? ""}`,
+      r.score?.checkOk ? (r.score.trimmed ? "✓ trimmed" : "✓") : `✗ ${r.score?.checkReason ?? ""}`,
       r.latencyMs,
       r.outputTokens,
       r.cacheReadTokens,
@@ -219,6 +227,7 @@ const head = [
   ...(dry ? ["**DRY RUN: stub step, not a real score.**", ""] : []),
   `- model \`${model}\`, effort \`${effort}\`, repeat ${repeat}, ${ready.length} cases, ${n} runs`,
   `- **accuracy ${passed}/${n} (${pct(passed)})** — kind ${pct(summary.kindOk)}, target ${pct(summary.targetOk)}, checkStep ${pct(summary.checkOk)}, errors ${summary.errors}`,
+  `- **re-plans ${summary.replans}/${n} (${pct(summary.replans)})** — say over ${MAX_SAY_WORDS} words ${summary.overLimit}, trimmed instead ${summary.trimmed}${Object.keys(summary.checkCodes).length ? `; failures: ${Object.entries(summary.checkCodes).map(([k, v]) => `${k} ${v}`).join(", ")}` : ""}`,
   `- latency p50 ${summary.p50LatencyMs} ms, p90 ${summary.p90LatencyMs} ms`,
   `- avg output tokens ${summary.avgOutputTokens}; cache read avg ${summary.avgCacheReadTokens} / total ${summary.totalCacheReadTokens}; cache write total ${summary.totalCacheWriteTokens}`,
   ...(notCaptured.length ? [`- not captured (skipped): ${notCaptured.join(", ")}`] : []),

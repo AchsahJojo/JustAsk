@@ -69,7 +69,8 @@ Each run prints a table and writes `eval/reports/<timestamp>-<model>-<effort>[-d
 - **accuracy:** the share of runs where the kind, the target and checkStep are all correct, with no API error.
 - **kind:** `step.kind` is in `expected.allowKinds`, or equals `expected.kind` when there's no `allowKinds`.
 - **target:** for a `guide` or `act` step, the chosen element's text or label contains `targetText`. Matching is case-insensitive, and a list means any entry counts. The element must not contain any `forbidTargetText` entry. A step with no target (clarify, wait, done, blocked) passes unless it points at a forbidden element.
-- **check:** `checkStep(step, snapshot)` from `packages/shared`. Failures show the reason.
+- **check:** `checkStep(fixStep(step, snapshot), snapshot)` from `packages/shared`, the same as the extension. Failures show the reason. "✓ trimmed" means the `say` was 21–28 words and `fixStep` cut it at a sentence end that kept the action verb, the target's name and (for a clarify) the question.
+- **re-plans:** the share of replies that still fail the check after the trim. In the extension, each one costs a second Claude call, which roughly doubles the wait for that step. The line also counts replies over 20 words, how many were trimmed instead, and the failure codes (`say_long`, `unknown_target`, …). Keep re-plans at or below 3%. `planStep` logs the same numbers in Convex (`sayWords`, `trimmed`, `checkFail`), never the line itself.
 - **latency:** p50 and p90, in ms per call.
 - **tokens:** the average output tokens and the cache-read tokens. Cache reads near 0 mean the system prompt isn't being cached.
 - **served by** (in the JSON as `servedBy`): the model that actually answered. It differs from `--model` when a fallback served the call.
