@@ -286,6 +286,17 @@ export function Panel({ pinnedTabId }: { pinnedTabId: number | null }) {
               </div>
             )}
 
+            {phase === "confirming" && view.offer === "declined" && (
+              <div className="choices">
+                <button className="btn primary huge" onClick={() => void host.controller.declineAnswer(true)}>
+                  Something else
+                </button>
+                <button className="btn outline huge" onClick={() => void host.controller.declineAnswer(false)}>
+                  Stop
+                </button>
+              </div>
+            )}
+
             {phase === "confirming" && !view.scam && !view.offer && (
               <div className="choices">
                 <button className="btn primary huge" onClick={() => host.controller.confirm(true)}>
