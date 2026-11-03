@@ -293,6 +293,24 @@ const scenarios = {
       ["Accept all", "Only necessary"],
       "modal-only rule",
     );
+    // #15: one big button per choice, plus I don't know / Not now, all inside a 320 px panel.
+    await s.panel.setViewport({ width: 320, height: 820 });
+    const buttons = await s.panel.$$eval(".choices button", (bs) => {
+      const footer = document.querySelector("footer").getBoundingClientRect().top;
+      return bs.map((b) => ({ text: b.textContent.trim(), right: b.getBoundingClientRect().right, seen: b.getBoundingClientRect().bottom <= footer }));
+    });
+    assert.deepEqual(buttons.map((b) => b.text), ["Accept all", "Only necessary", "I don't know", "Not now"]);
+    assert.ok(buttons.every((b) => b.right <= 320), "choice buttons fit 320 px");
+    await shot(s.panel, "14b-panel-clarify-choices");
+    assert.ok(buttons.every((b) => b.seen), `all answers visible above the footer: ${JSON.stringify(buttons)}`);
+    assert.ok(await s.panel.evaluate(() => document.documentElement.scrollWidth <= 320), "no sideways scroll at 320 px");
+    const received = async () => (await fetch(`${PLANNER}/__received`)).json();
+    const before = (await received()).length;
+    await clickText(s.panel, "Only necessary");
+    for (let i = 0; i < 50 && (await received()).length === before; i++) await new Promise((r) => setTimeout(r, 100));
+    const last = JSON.parse((await received()).at(-1));
+    assert.equal(last.history.at(-1), 'The user answered: "Only necessary"');
+    await s.panel.setViewport({ width: 400, height: 820 });
     await closeSession(s);
   },
 

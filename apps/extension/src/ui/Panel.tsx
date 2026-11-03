@@ -308,6 +308,27 @@ export function Panel({ pinnedTabId }: { pinnedTabId: number | null }) {
               </div>
             )}
 
+            {/* #15: tap an answer instead of typing it. The choices come from the page or the user's words (checkStep). */}
+            {phase === "asking" && !!view.choices?.length && (
+              <div className="choices" role="group" aria-label="Choose an answer">
+                {view.choices.map((c, i) => (
+                  <button key={`${i}-${c}`} className="btn primary choice" onClick={() => void host.controller.answer(c)}>
+                    {c}
+                  </button>
+                ))}
+              </div>
+            )}
+            {phase === "asking" && (
+              <div className="choices pair">
+                <button className="btn outline" onClick={() => void host.controller.answer("I don't know")}>
+                  I don't know
+                </button>
+                <button className="btn outline" onClick={() => void host.controller.answer("Not now")}>
+                  Not now
+                </button>
+              </div>
+            )}
+
             {phase === "asking" && (
               <form
                 className="typed"

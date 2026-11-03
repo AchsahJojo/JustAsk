@@ -39,3 +39,24 @@ export function isDecline(raw: string): boolean {
   const s = raw.toLowerCase().replace(/[’]/g, "'");
   return /\b(?:(?:do|did|have|has|does)(?:n'?t| not)|never) (?:have|got|get|gotten|received?|know|remember|sen[dt])\b|\b(?:haven'?t|hasn'?t) (?:got|gotten|received|sent|had)\b|\bforgot\b|\bnot yet\b|\b(?:do it |maybe )?later\b|\bnever ?mind\b/.test(s);
 }
+
+const ORDINALS: Record<string, number> = { first: 0, "1st": 0, one: 0, "1": 0, second: 1, "2nd": 1, two: 1, "2": 1, third: 2, "3rd": 2, three: 2, "3": 2, fourth: 3, "4th": 3, four: 3, "4": 3 };
+
+/**
+ * A spoken or typed answer to a clarify with choices: "the second one", "number two", "the last one",
+ * or a choice's own words ("pick up in store"). Returns that choice's exact text, or null. Local only.
+ */
+export function pickChoice(raw: string, choices: string[]): string | null {
+  if (!choices.length) return null;
+  const s = raw.toLowerCase().replace(/[’]/g, "'").trim().replace(/[.!?,]+$/, "").trim();
+  const same = choices.find((c) => c.toLowerCase().trim() === s);
+  if (same) return same;
+  // "the second one", "number two", "2". A bare "one" is not a pick ("the one with the red label").
+  const m =
+    /^(?:(?:i'?ll take|i want|give me|pick|choose) )?(?:the )?(first|1st|second|2nd|third|3rd|fourth|4th|last)(?: one| option| choice)?(?: please)?$/.exec(s) ??
+    /^(?:number|option|choice) (one|two|three|four|[1-4])(?: please)?$|^([1-4])$/.exec(s);
+  if (!m) return null;
+  const word = m[1] ?? m[2];
+  const i = word === "last" ? choices.length - 1 : ORDINALS[word];
+  return choices[i] ?? null;
+}

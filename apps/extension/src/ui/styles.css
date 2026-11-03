@@ -95,6 +95,12 @@ input:focus { border-color: var(--ink); outline: none; }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .note { color: #ffd9b3; background: #3d2a17; } }
 
 .choices { display: grid; gap: 10px; }
+/* Side by side when they fit; one per row in a 320 px panel. */
+.choices.pair { grid-template-columns: repeat(auto-fit, minmax(132px, 1fr)); }
+.choices .btn { min-width: 0; text-align: center; overflow-wrap: anywhere; }
+/* Clarify answers: big enough to tap, compact enough that all of them sit above the footer. */
+.choices .choice { width: 100%; font-size: 20px; font-weight: 700; }
+.choices.pair .btn { padding: 10px 12px; font-size: 17px; min-height: 48px; }
 .actions { padding: 14px 20px 18px; border-top: 1px solid var(--line); display: grid; gap: 10px; background: var(--cream); position: sticky; bottom: 0; }
 
 .btn { border: 0; border-radius: 14px; padding: 12px 18px; font-size: 19px; font-weight: 650; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 10px; min-height: 52px; }

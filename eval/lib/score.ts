@@ -1,4 +1,5 @@
 import { checkStep, fixStep, sayWords, type CheckCode, type PageSnapshot, type Recipe, type StepResponse } from "../../packages/shared/src/index";
+import { userText } from "../../packages/core/src/drive";
 
 /** One eval case: eval/cases/<id>.case.json. */
 export interface EvalCase {
@@ -23,7 +24,7 @@ export interface EvalCase {
     /** Case-insensitive substring of the chosen element's text or label. A list means any of them. */
     targetText?: string | string[];
     forbidTargetText?: string[];
-    /** Case-insensitive substrings that must all appear in `say` (e.g. a clarify names the on-screen choices). */
+    /** Case-insensitive substrings that must all appear in `say` or `choices` (e.g. a clarify names the on-screen choices). */
     sayIncludes?: string[];
   };
 }
@@ -31,7 +32,7 @@ export interface EvalCase {
 export interface Score {
   kindOk: boolean;
   targetOk: boolean;
-  /** Every `sayIncludes` entry is in the spoken line (true when the case has none). */
+  /** Every `sayIncludes` entry is in the spoken line or the choices (true when the case has none). */
   sayOk: boolean;
   checkOk: boolean;
   checkReason: string | null;
@@ -61,12 +62,13 @@ export function scoreStep(c: EvalCase, step: StepResponse, snapshot: PageSnapsho
   else if (TARGETING.has(step.kind) && wanted.length) targetOk = !!el && wanted.some((w) => hay.includes(w.toLowerCase()));
   else targetOk = true;
 
-  const say = step.say.toLowerCase();
+  // A clarify may name the options aloud or show them as tap-able choices (#15): either counts.
+  const say = [step.say, ...(step.choices ?? [])].join("\n").toLowerCase();
   const sayOk = (c.expected.sayIncludes ?? []).every((w) => say.includes(w.toLowerCase()));
 
   // The same as the extension: a long line is trimmed first, and only what still fails is re-planned.
   const fixed = fixStep(step, snapshot);
-  const check = checkStep(fixed, snapshot);
+  const check = checkStep(fixed, snapshot, userText(c.request, c.history ?? [], c.recipe ?? null));
   const checkOk = check.ok;
   return {
     kindOk,

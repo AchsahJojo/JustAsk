@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { SessionController, type PageBridge, type Planner } from "../src/controller";
 import { mergeScans } from "../src/merge";
 import { buildTurn, SYSTEM_PROMPT } from "../src/prompt";
-import { isDecline, parseCommand } from "../src/commands";
+import { isDecline, parseCommand, pickChoice } from "../src/commands";
 import type { FrameScan, PlanRequest, StepResponse } from "@justask/shared";
 
 function frame(frameId: number, texts: string[], isTop = frameId === 0): FrameScan {
@@ -884,6 +884,49 @@ describe("waiting (P1)", () => {
     await tick(40);
     expect(h.plans.length).toBe(1);
     expect(h.bridge.watch).toHaveBeenLastCalledWith(false);
+  });
+});
+
+describe("clarify choices (#15)", () => {
+  const choices = ["Pick up in store", "Mail to my home"];
+  const page = [frame(0, ["Pick up in store", "Mail to my home"])];
+  const ask: StepResponse = { ...step("clarify", "Pick it up, or have it mailed?"), choices };
+
+  it("shows the choices while asking, and clears them on the next question", async () => {
+    const h = harness([ask, step("clarify", "Which day?")], [page]);
+    await h.c.start("refill");
+    expect(h.c.state.phase).toBe("asking");
+    expect(h.c.state.choices).toEqual(choices);
+    await h.c.input("tomorrow");
+    expect(h.c.state.choices).toBeNull();
+  });
+
+  it("\"the second one\" by voice picks choice 2 and sends its exact text", async () => {
+    const h = harness([ask, step("done", "Okay.")], [page]);
+    await h.c.start("refill");
+    await h.c.input("the second one");
+    expect(h.plans[1].history.at(-1)).toBe('The user answered: "Mail to my home"');
+  });
+
+  it("a choice the page doesn't have is rejected and re-planned", async () => {
+    const bad: StepResponse = { ...ask, choices: ["Pick up in store", "Drone delivery"] };
+    const h = harness([bad, ask], [page]);
+    await h.c.start("refill");
+    expect(h.plans).toHaveLength(2);
+    expect(h.plans[1].retryNote).toMatch(/Drone delivery/);
+    expect(h.c.state.choices).toEqual(choices);
+  });
+
+  it("pickChoice maps ordinals and exact words, and nothing else", () => {
+    expect(pickChoice("the first one", choices)).toBe("Pick up in store");
+    expect(pickChoice("Second.", choices)).toBe("Mail to my home");
+    expect(pickChoice("number two", choices)).toBe("Mail to my home");
+    expect(pickChoice("the last one", choices)).toBe("Mail to my home");
+    expect(pickChoice("2", choices)).toBe("Mail to my home");
+    expect(pickChoice("mail to my home", choices)).toBe("Mail to my home");
+    expect(pickChoice("the third one", choices)).toBeNull();
+    expect(pickChoice("the one", choices)).toBeNull();
+    expect(pickChoice("I want it mailed", choices)).toBeNull();
   });
 });
 

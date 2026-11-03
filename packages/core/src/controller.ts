@@ -1,8 +1,8 @@
 import { checkStep, fixStep, type ActResult, type ActSpec, type EventType, type FrameScan, type FromContent, type HighlightSpec, type PageSnapshot, type PlanRequest, type PlanResponse, type Recipe, type SnapshotElement, type StepResponse } from "@justask/shared";
 import { mergeScans, type TargetRef } from "./merge";
 import * as L from "./lines";
-import { isDecline, parseCommand } from "./commands";
-import { gateAct, userWords } from "./drive";
+import { isDecline, parseCommand, pickChoice } from "./commands";
+import { gateAct, userText, userWords } from "./drive";
 import { snapshotSignature } from "./signature";
 import { scamCheck, type ScamFlag, type ScamKind } from "./scam";
 
@@ -33,6 +33,8 @@ export interface SessionView {
    * "declined": after "No" to a risk question, JustAsk asks "something else here, or stop?".
    */
   offer: "search" | "declined" | null;
+  /** While asking: the tap-able answers from the clarify step (on the page or in the user's words), or null. */
+  choices: string[] | null;
 }
 
 export interface PageBridge {
@@ -138,6 +140,7 @@ const INITIAL: SessionView = {
   actions: 0,
   scam: null,
   offer: null,
+  choices: null,
 };
 
 /** What a "yes" in the confirming phase does next. */
@@ -274,7 +277,7 @@ export class SessionController {
 
   /** Restore after the panel or service worker restarts (state came from storage.session). */
   restore(view: SessionView, history: string[], recipe: Recipe | null) {
-    this.view = { ...INITIAL, ...view, guidedSteps: view.guidedSteps ?? view.clicks ?? 0, note: "", scam: view.scam ?? null, offer: view.offer ?? null };
+    this.view = { ...INITIAL, ...view, guidedSteps: view.guidedSteps ?? view.clicks ?? 0, note: "", scam: view.scam ?? null, offer: view.offer ?? null, choices: view.choices ?? null };
     this.history = history;
     this.recipe = recipe;
     for (const fn of this.listeners) fn(this.view);
@@ -478,7 +481,9 @@ export class SessionController {
     }
     // "Something else here, or stop?": words like "the cheaper shipping" are the something else.
     if (this.view.phase === "confirming" && this.view.offer === "declined" && raw.trim()) return this.declineAnswer(true, raw.trim());
-    if (this.view.phase === "asking" || this.view.phase === "waiting") return this.answer(raw);
+    // "The second one" or a choice's own words picks that choice, so Claude gets its exact text.
+    if (this.view.phase === "asking") return this.answer((this.view.choices && pickChoice(raw, this.view.choices)) ?? raw);
+    if (this.view.phase === "waiting") return this.answer(raw);
     if (this.view.phase === "idle" || this.view.phase === "done" || this.view.phase === "blocked") return this.start(raw);
     // Mid-step words ("I can't find it", "it's on the left") go to Claude for a fresh step, not a repeat.
     if ((this.view.phase === "guiding" || this.view.phase === "verifying") && raw.trim()) {
@@ -852,7 +857,7 @@ export class SessionController {
     }
     // A line a few words over the limit is cut at a sentence end rather than costing a second Claude call.
     const step = fixStep(res.step, snapshot);
-    const check = checkStep(step, snapshot);
+    const check = checkStep(step, snapshot, userText(this.view.request, this.history, this.recipe));
     if (!check.ok) {
       if (this.replans++ < 1) return this.requestStep(gen, check.reason);
       return this.block(L.TROUBLE_LINE, false);
@@ -935,7 +940,7 @@ export class SessionController {
         this.deps.events?.log("clarify");
         this.say(step.say);
         await this.deps.bridge.clear();
-        this.set({ phase: "asking", line: step.say, expect: null, risk: "none" });
+        this.set({ phase: "asking", line: step.say, expect: null, risk: "none", choices: step.choices?.length ? step.choices : null });
         return;
       case "wait":
         return this.enterWait(step);
