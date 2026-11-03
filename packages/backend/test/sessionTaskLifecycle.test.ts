@@ -71,6 +71,33 @@ describe("task status follows its session lifecycle", () => {
     expect(notifications[0].text).toBe('Margaret got stuck on "Refill".');
     expect(notifications[0].text).not.toContain("page content");
   });
+
+  test("a loop returns the task to pending and ends the session, without a stuck note on its own", async () => {
+    const t = setup();
+    const { token, taskId, sessionId } = await activeTask(t);
+    await t.mutation(api.prefs.set, { token, consent: { notifyOnComplete: false, notifyOnStuck: true } });
+
+    await t.mutation(api.sessions.logEvent, { token, sessionId, type: "loop" });
+
+    expect(await status(t, taskId)).toBe("pending");
+    expect(await t.run(async (ctx) => (await ctx.db.get(sessionId))?.outcome)).toBe("loop");
+    expect(await t.run((ctx) => ctx.db.query("notifications").collect())).toHaveLength(0);
+  });
+
+  test.each([
+    ["stuck", "loop"],
+    ["loop", "stuck"],
+  ])("a stuck-type loop (%s then %s) tells a consenting helper once", async (first, second) => {
+    const t = setup();
+    const { token, sessionId } = await activeTask(t);
+    await t.mutation(api.prefs.set, { token, consent: { notifyOnComplete: false, notifyOnStuck: true } });
+
+    await t.mutation(api.sessions.logEvent, { token, sessionId, type: first });
+    await t.mutation(api.sessions.logEvent, { token, sessionId, type: second });
+
+    const notifications = await t.run((ctx) => ctx.db.query("notifications").collect());
+    expect(notifications.map((n) => n.text)).toEqual(['Margaret got stuck on "Refill".']);
+  });
 });
 
 describe("caregiver impact stats", () => {
@@ -93,6 +120,30 @@ describe("caregiver impact stats", () => {
     expect(note.text).toBe('Margaret finished "Refill" and did every step themselves.');
     const page = await as.query(api.people.get, { seniorId });
     if (page.moved) throw new Error("moved");
-    expect(page.stats).toEqual({ finished: 1, stuck: 0, medianStepMs: 1500, stepsPerTask: 4, repeats: 1 });
+    expect(page.stats).toEqual({ finished: 1, stuck: 0, loops: 0, medianStepMs: 1500, stepsPerTask: 4, repeats: 1 });
+  });
+
+  test("loops count next to I'm stuck, and only with stuck consent", async () => {
+    const t = setup();
+    const token = await newAccount(t);
+    const { caregiverId, as } = await caregiver(t);
+    const seniorId = await t.run(async (ctx) => (await ctx.db.query("seniors").first())!._id);
+    await t.run((ctx) => ctx.db.insert("careLinks", { caregiverId, seniorId, relation: "child" }));
+    await t.mutation(api.prefs.set, { token, consent: { notifyOnComplete: true, notifyOnStuck: true } });
+    const taskId = await t.run((ctx) =>
+      ctx.db.insert("tasks", { seniorId, assignedBy: caregiverId, title: "Join", spokenPrompt: "Join", status: "active", createdAt: Date.now() }),
+    );
+    const sessionId = await t.mutation(api.sessions.start, { token, request: "Join", taskId });
+    await t.mutation(api.sessions.logEvent, { token, sessionId, type: "stuck" });
+    await t.mutation(api.sessions.logEvent, { token, sessionId, type: "loop" });
+
+    let page = await as.query(api.people.get, { seniorId });
+    if (page.moved) throw new Error("moved");
+    expect(page.stats).toMatchObject({ stuck: 1, loops: 1 });
+
+    await t.mutation(api.prefs.set, { token, consent: { notifyOnComplete: true, notifyOnStuck: false } });
+    page = await as.query(api.people.get, { seniorId });
+    if (page.moved) throw new Error("moved");
+    expect(page.stats).toMatchObject({ stuck: null, loops: null });
   });
 });
