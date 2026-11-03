@@ -1,0 +1,53 @@
+{
+  "snapshotId": "eval-knowledge-contact",
+  "url": "http://localhost:6174/gaps/contacts",
+  "title": "Contacts | Fixtures",
+  "heading": "Contacts",
+  "pageText": "Contacts\nDaniel Hill\nRuth Park\nThomas Reed",
+  "elements": [
+    {
+      "n": 1,
+      "role": "button",
+      "text": "Call",
+      "label": null,
+      "nearby": "Daniel Hill",
+      "color": "blue",
+      "big": false,
+      "disabled": false,
+      "inModal": false,
+      "inViewport": true,
+      "region": "main"
+    },
+    {
+      "n": 2,
+      "role": "button",
+      "text": "Call",
+      "label": null,
+      "nearby": "Ruth Park",
+      "color": "blue",
+      "big": false,
+      "disabled": false,
+      "inModal": false,
+      "inViewport": true,
+      "region": "main"
+    },
+    {
+      "n": 3,
+      "role": "button",
+      "text": "Call",
+      "label": null,
+      "nearby": "Thomas Reed",
+      "color": "blue",
+      "big": false,
+      "disabled": false,
+      "inModal": false,
+      "inViewport": true,
+      "region": "main"
+    }
+  ],
+  "omitted": {
+    "count": 0,
+    "regions": []
+  },
+  "surface": "web"
+}

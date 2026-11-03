@@ -1,0 +1,65 @@
+{
+  "snapshotId": "eval-knowledge-account",
+  "url": "http://localhost:6174/gaps/accounts",
+  "title": "Transfer | Fixtures",
+  "heading": "Move money",
+  "pageText": "Move money\nTransfer from which account?\nEveryday 1234\nRainy Day 5678",
+  "elements": [
+    {
+      "n": 1,
+      "role": "radio button",
+      "text": "",
+      "label": "Everyday 1234",
+      "nearby": "Everyday 1234",
+      "color": null,
+      "big": false,
+      "disabled": false,
+      "inModal": false,
+      "inViewport": true,
+      "region": "main",
+      "field": {
+        "kind": "radio",
+        "hasValue": false,
+        "valid": true,
+        "checked": false
+      }
+    },
+    {
+      "n": 2,
+      "role": "radio button",
+      "text": "",
+      "label": "Rainy Day 5678",
+      "nearby": "Rainy Day 5678",
+      "color": null,
+      "big": false,
+      "disabled": false,
+      "inModal": false,
+      "inViewport": true,
+      "region": "main",
+      "field": {
+        "kind": "radio",
+        "hasValue": false,
+        "valid": true,
+        "checked": false
+      }
+    },
+    {
+      "n": 3,
+      "role": "button",
+      "text": "Continue",
+      "label": null,
+      "nearby": "Move money",
+      "color": "blue",
+      "big": false,
+      "disabled": false,
+      "inModal": false,
+      "inViewport": true,
+      "region": "main"
+    }
+  ],
+  "omitted": {
+    "count": 0,
+    "regions": []
+  },
+  "surface": "web"
+}

@@ -137,7 +137,8 @@ const expectedDesc = (c: EvalCase) => {
   const kinds = (c.expected.allowKinds ?? [c.expected.kind]).join("/");
   const t = c.expected.targetText === undefined ? "" : ` "${[c.expected.targetText].flat().join('" | "')}"`;
   const f = c.expected.forbidTargetText?.length ? ` not "${c.expected.forbidTargetText.join('", "')}"` : "";
-  return kinds + t + f;
+  const s = c.expected.sayIncludes?.length ? ` say has "${c.expected.sayIncludes.join('", "')}"` : "";
+  return kinds + t + f + s;
 };
 async function runJob(i: number) {
   const { c, snapshot, attempt } = jobs[i];
@@ -175,6 +176,7 @@ const summary = {
   accuracy: n ? passed / n : 0,
   kindOk: rate((r) => !!r.score?.kindOk),
   targetOk: rate((r) => !!r.score?.targetOk),
+  sayOk: rate((r) => !!r.score?.sayOk),
   checkOk: rate((r) => !!r.score?.checkOk),
   /** Replies that fail checkStep after the trim: each one costs the user a second Claude call. */
   replans: rate((r) => !!r.score && !r.score.checkOk),
@@ -197,8 +199,8 @@ const summary = {
 const yes = (b: boolean | undefined) => (b ? "✓" : "✗");
 const cell = (s: string) => s.replace(/\|/g, "\\|").replace(/\n/g, " ");
 const table = [
-  "| case | # | got | expected | target | kind | target | check | ms | out tok | cache read | say |",
-  "|---|---|---|---|---|---|---|---|---|---|---|---|",
+  "| case | # | got | expected | target | kind | target | said | check | ms | out tok | cache read | say |",
+  "|---|---|---|---|---|---|---|---|---|---|---|---|---|",
   ...rows.map((r) =>
     [
       r.id,
@@ -208,6 +210,7 @@ const table = [
       r.score?.targetDesc ? `${r.step?.target}: ${r.score.targetDesc}` : (r.step?.target ?? "-"),
       yes(r.score?.kindOk),
       yes(r.score?.targetOk),
+      yes(r.score?.sayOk),
       r.score?.checkOk ? (r.score.trimmed ? "✓ trimmed" : "✓") : `✗ ${r.score?.checkReason ?? ""}`,
       r.latencyMs,
       r.outputTokens,
@@ -226,7 +229,7 @@ const head = [
   "",
   ...(dry ? ["**DRY RUN: stub step, not a real score.**", ""] : []),
   `- model \`${model}\`, effort \`${effort}\`, repeat ${repeat}, ${ready.length} cases, ${n} runs`,
-  `- **accuracy ${passed}/${n} (${pct(passed)})** — kind ${pct(summary.kindOk)}, target ${pct(summary.targetOk)}, checkStep ${pct(summary.checkOk)}, errors ${summary.errors}`,
+  `- **accuracy ${passed}/${n} (${pct(passed)})** — kind ${pct(summary.kindOk)}, target ${pct(summary.targetOk)}, say ${pct(summary.sayOk)}, checkStep ${pct(summary.checkOk)}, errors ${summary.errors}`,
   `- **re-plans ${summary.replans}/${n} (${pct(summary.replans)})** — say over ${MAX_SAY_WORDS} words ${summary.overLimit}, trimmed instead ${summary.trimmed}${Object.keys(summary.checkCodes).length ? `; failures: ${Object.entries(summary.checkCodes).map(([k, v]) => `${k} ${v}`).join(", ")}` : ""}`,
   `- latency p50 ${summary.p50LatencyMs} ms, p90 ${summary.p90LatencyMs} ms`,
   `- avg output tokens ${summary.avgOutputTokens}; cache read avg ${summary.avgCacheReadTokens} / total ${summary.totalCacheReadTokens}; cache write total ${summary.totalCacheWriteTokens}`,

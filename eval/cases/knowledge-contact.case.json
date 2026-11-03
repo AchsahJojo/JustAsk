@@ -1,0 +1,10 @@
+{
+  "id": "knowledge-contact",
+  "url": "{FIXTURES}/gaps/contacts",
+  "request": "call my son",
+  "note": "The page has names only, no relationships. Don't guess which one is the son (#12).",
+  "expected": {
+    "kind": "clarify",
+    "sayIncludes": ["Daniel", "Thomas"]
+  }
+}

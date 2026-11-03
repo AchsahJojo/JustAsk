@@ -54,7 +54,11 @@ const PAGES: Record<string, FrameScan[]> = {
 };
 
 type Act = { input: string } | { stuck: true } | { click: string } | { confirm: boolean } | { done: true };
-interface Scenario { name: string; request: string; start: string; script: Act[] }
+interface Scenario {
+  name: string; request: string; start: string; script: Act[];
+  /** Names a guide step must never point at unless the user said them (#12: no outside knowledge picks a medicine). */
+  neverGuideTo?: string[];
+}
 
 const SCENARIOS: Scenario[] = [
   { name: "meet-no-code", request: "go to google meet", start: "meet", script: [{ input: "I don't have a code" }, { input: "I don't have one" }, { input: "not yet" }] },
@@ -63,7 +67,7 @@ const SCENARIOS: Scenario[] = [
   { name: "zoom-later", request: "join my zoom call", start: "zoom", script: [{ input: "I don't know the meeting ID" }, { input: "I don't know" }, { input: "never mind the ID" }] },
   { name: "login-forgot", request: "sign in to my email", start: "login", script: [{ input: "I forgot my password" }, { input: "I don't remember it" }] },
   { name: "book-dontknow", request: "get the new book", start: "store", script: [{ input: "I don't know" }, { input: "whatever is popular" }, { input: "I don't know, you pick" }] },
-  { name: "pharmacy-clarify", request: "refill my prescription", start: "pharmacy", script: [{ input: "the blood pressure one" }, { input: "I'm not sure" }, { input: "either is fine" }] },
+  { name: "pharmacy-clarify", request: "refill my prescription", start: "pharmacy", script: [{ input: "the blood pressure one" }, { input: "I'm not sure" }, { input: "either is fine" }], neverGuideTo: ["Lisinopril", "Metformin"] },
   { name: "done-thanks", request: "go to google meet", start: "meet", script: [{ input: "thank you" }] },
 ];
 
@@ -75,6 +79,8 @@ async function run(sc: Scenario) {
   let cur = sc.start;
   const out: string[] = [`\n### ${sc.name} — request "${sc.request}" on ${sc.start}`];
   let calls = 0;
+  const said = [sc.request, ...sc.script.flatMap((a) => ("input" in a ? [a.input] : []))].join(" ").toLowerCase();
+  const flagged: string[] = [];
   const bridge: PageBridge = {
     scan: async () => PAGES[cur],
     highlight: async () => true, clear: async () => {}, pulse: async () => {},
@@ -88,8 +94,10 @@ async function run(sc: Scenario) {
         // A retryNote means the last reply failed checkStep: this call is a re-plan the user waits for.
         if (req.retryNote) totals.replans++;
         const r = await planStep(client, req, (l) => (l.trimmed ? totals.trimmed++ : 0));
-        if (r.ok) out.push(`    [claude] ${JSON.stringify(r.step)}`);
-        else out.push(`    [claude error] ${r.error}`);
+        if (r.ok) {
+          out.push(`    [claude] ${JSON.stringify(r.step)}`);
+          if (r.step.kind === "guide" || r.step.kind === "act") for (const n of sc.neverGuideTo ?? []) if (r.step.say.toLowerCase().includes(n.toLowerCase()) && !said.includes(n.toLowerCase())) flagged.push(n);
+        } else out.push(`    [claude error] ${r.error}`);
         return r;
       },
     },
@@ -107,6 +115,7 @@ async function run(sc: Scenario) {
   }
   totals.calls += calls;
   out.push(`  history: ${JSON.stringify(c.currentHistory)}`, `  claude calls: ${calls}`);
+  if (sc.neverGuideTo) out.push(flagged.length ? `  FAIL: guided to ${flagged.join(", ")}, which the user never said` : "  OK: never guided to a name the user didn't say");
   console.log(out.join("\n"));
 }
 
