@@ -35,9 +35,22 @@ export function mergePrefs(local: SyncedPrefs, remote: unknown): Partial<SyncedP
   return out;
 }
 
+/** A code the server refused. Does not say whether it was wrong, expired, or the other kind of code. */
+export const CODE_REJECTED =
+  "That code didn't work. Codes last 15 minutes and work once. If it came from “Share with my helper”, type it on the helper website.";
+
+/** Lockout and network failures stay specific. Anything else is a rejected code. */
+export function codeAttemptMessage(e: unknown): string {
+  if (e == null) return CODE_REJECTED;
+  const friendly = friendlyError(e);
+  if (friendly.startsWith("Too many tries") || friendly.startsWith("JustAsk can't reach")) return friendly;
+  return CODE_REJECTED;
+}
+
 /** Turn a Convex error into a short, kind sentence for the user. */
 export function friendlyError(e: unknown): string {
-  const msg = e instanceof Error ? e.message : typeof e === "string" ? e : "";
+  const data = typeof e === "object" && e !== null && "data" in e ? (e as { data?: unknown }).data : undefined;
+  const msg = typeof data === "string" ? data : e instanceof Error ? e.message : typeof e === "string" ? e : "";
   if (/too many tries/i.test(msg)) return "Too many tries. Please wait a few minutes, then try again.";
   if (/could not find public function|server error.*not found|function.*not.*exist/i.test(msg)) return "This part of JustAsk isn't ready yet. Please try again later.";
   if (/failed to fetch|network|fetch failed|ECONNREFUSED/i.test(msg)) return "JustAsk can't reach the internet right now. Please try again in a moment.";

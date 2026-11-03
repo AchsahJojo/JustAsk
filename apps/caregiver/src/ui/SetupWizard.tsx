@@ -131,7 +131,7 @@ function HelperCode() {
     try {
       const r = await redeem({ code: digits });
       if (!r) {
-        setError("That code didn't work. Ask them to press “Get a new code” and try again.");
+        setError("That code didn't work. Codes last 15 minutes and work once. The code on their computer's setup page is typed there, not here.");
         setBusy(false);
       } else go({ name: "person", id: r.seniorId });
     } catch (err) {

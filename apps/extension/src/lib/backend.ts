@@ -136,15 +136,15 @@ export class Backend {
     return { token: r.token, displayName: typeof r.displayName === "string" ? r.displayName : "" };
   }
 
-  /** Whose account a code links to, without using it up. Null if unknown or not supported yet. */
+  /**
+   * Whose account a code links to, without using it up.
+   * Null when the code is unknown, expired, or the helper-website kind.
+   * Throws on lockout or network trouble so the screen can say which.
+   */
   async peekCode(convexUrl: string, code: string): Promise<string | null> {
-    try {
-      const client = new ConvexHttpClient(convexUrl, { skipConvexDeploymentUrlCheck: true });
-      const r = await this.mutation<{ displayName?: unknown } | null>(client, "devices:peekCode", { code });
-      return r && typeof r.displayName === "string" && r.displayName.trim() ? r.displayName.trim() : null;
-    } catch {
-      return null;
-    }
+    const client = new ConvexHttpClient(convexUrl, { skipConvexDeploymentUrlCheck: true });
+    const r = await this.mutation<{ displayName?: unknown } | null>(client, "devices:peekCode", { code });
+    return r && typeof r.displayName === "string" && r.displayName.trim() ? r.displayName.trim() : null;
   }
 
   /**

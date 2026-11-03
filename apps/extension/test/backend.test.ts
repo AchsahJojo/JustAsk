@@ -51,6 +51,22 @@ describe("joinWithCode", () => {
   });
 });
 
+describe("peekCode", () => {
+  it("returns null for an unknown code and lets lockout and network errors through", async () => {
+    const b = new Backend();
+    mocks.mutation = async () => null;
+    expect(await b.peekCode("https://demo.convex.cloud", "123456")).toBeNull();
+    mocks.mutation = async () => {
+      throw new Error("Too many tries. Please wait a minute and try again.");
+    };
+    await expect(b.peekCode("https://demo.convex.cloud", "123456")).rejects.toThrow(/Too many tries/);
+    mocks.mutation = async () => {
+      throw new TypeError("Failed to fetch");
+    };
+    await expect(b.peekCode("https://demo.convex.cloud", "123456")).rejects.toThrow(/Failed to fetch/);
+  });
+});
+
 describe("isNotPaired", () => {
   it("recognizes ConvexError data and older messages", () => {
     expect(isNotPaired({ data: "not paired" })).toBe(true);
