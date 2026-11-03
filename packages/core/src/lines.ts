@@ -17,6 +17,29 @@ export const BLANK_TAB_LINE = "This tab is empty. Press Look it up, and I'll sea
 export const searchedNote = (q: string) => `The tab was empty, so JustAsk searched the web for "${q}"`;
 export const NEW_TAB_LINE = "That opened a new tab. I'll keep helping you there.";
 export const STUCK_LINE = "That's okay. Let me look again.";
+/** I'm stuck after JustAsk said done: ask first, don't re-plan the same page into the same "done". */
+export const NOT_WORKING_LINE = "What's not working? Tell me what you see, or what you wanted to do.";
+/** History note for Claude after I'm stuck on a finished task. */
+export const NOT_FINISHED_NOTE = "The user pressed I'm stuck after that, so it isn't finished for them";
+
+const REGION_WORDS: Record<string, string> = {
+  header: "at the top of the page",
+  nav: "in the menu",
+  footer: "at the very bottom of the page",
+  aside: "at the side of the page",
+  modal: "in the box that popped up",
+  main: "in the middle of the page",
+};
+
+/**
+ * A second I'm stuck on the same box: say where it is, from the snapshot's region and nearby heading.
+ * `scrolled` when it was off screen, so the page just moved to it.
+ */
+export function whereIs(region: string | undefined, nearby: string | null | undefined, scrolled: boolean) {
+  const where = (region && REGION_WORDS[region]) || "on the page";
+  const near = nearby ? `, near “${nearby.slice(0, 40)}”` : "";
+  return `${scrolled ? "I moved the page to it. " : ""}Look ${where}${near}. It has the glowing box around it.`;
+}
 export const TYPING_NOT_DETECTED = "I can't see anything in that box yet. Please type your answer, then tell me when you're done.";
 export const STOPPED_LINE = "Okay, I stopped. Press the big button any time.";
 export const NO_CHANGE_NOTE = "the page did not change after that";
