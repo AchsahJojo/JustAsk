@@ -314,7 +314,8 @@ export class SessionController {
     const gen = this.gen;
     this.recipe = opts.recipe ?? null;
     this.sessionId = opts.sessionId ?? null;
-    if (this.showMe()) this.history.push(L.SHOW_ME_NOTE);
+    // Only a real choice: with drive mode off, every step is a guide step anyway and the prompt says so.
+    if (this.deps.allowDrive && this.deps.prefs?.().showMeInstead) this.history.push(L.SHOW_ME_NOTE);
     // The user's own words first: a request that looks like a common scam gets one plain question
     // before JustAsk opens, searches or presses anything. Only the user's answer decides.
     const flag = scamCheck(text);

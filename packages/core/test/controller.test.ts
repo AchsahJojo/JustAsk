@@ -598,7 +598,13 @@ describe("guide only (the shipped build)", () => {
     await h.c.start("help me");
     expect(h.bridge.act).not.toHaveBeenCalled();
     expect(h.c.state.phase).toBe("guiding");
-    expect(h.plans[0].history[0]).toMatch(/Show me instead/);
+  });
+
+  it.each([false, true])("puts no Show me instead note in history (showMeInstead %s)", async (showMeInstead) => {
+    const h = harness([guide(1), step("done", "Done.")], undefined, { allowDrive: false, showMeInstead });
+    await h.c.start("help me");
+    await h.c.onContent({ type: "ja:step-done", how: "click" }, 0);
+    for (const p of h.plans) expect(p.history.join("\n")).not.toMatch(/Show me instead/);
   });
 });
 
