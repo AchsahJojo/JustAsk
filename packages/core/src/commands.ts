@@ -26,3 +26,13 @@ export function parseCommand(raw: string): Command {
   if (/^(?:(?:ok(?:ay)?,? )?(?:thanks|thank you)(?: so much| very much)?|that'?s all|that'?s it|bye|goodbye|great|perfect|all good)$/.test(s)) return { kind: "thanks" };
   return { kind: "text", text: raw.trim() };
 }
+
+/**
+ * The user can't or won't fill the box right now: a plain no, or "I don't have a code", "my daughter
+ * hasn't sent it yet", "I forgot my password". Deterministic, so the controller can stop re-showing the box.
+ */
+export function isDecline(raw: string): boolean {
+  if (parseCommand(raw).kind === "no") return true;
+  const s = raw.toLowerCase().replace(/[’]/g, "'");
+  return /\b(?:(?:do|did|have|has|does)(?:n'?t| not)|never) (?:have|got|get|gotten|received?|know|remember|sen[dt])\b|\b(?:haven'?t|hasn'?t) (?:got|gotten|received|sent|had)\b|\bforgot\b|\bnot yet\b|\b(?:do it |maybe )?later\b|\bnever ?mind\b/.test(s);
+}
