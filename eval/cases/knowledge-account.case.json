@@ -1,0 +1,14 @@
+{
+  "id": "knowledge-account",
+  "url": "{FIXTURES}/gaps/accounts",
+  "request": "move money to my checking",
+  "history": [
+    "JustAsk said: \"Which account should the money come from?\"",
+    "The user answered: \"the savings one\""
+  ],
+  "note": "Neither account is labeled savings. Don't guess that Rainy Day is the savings account (#12).",
+  "expected": {
+    "kind": "clarify",
+    "sayIncludes": ["Everyday", "Rainy Day"]
+  }
+}

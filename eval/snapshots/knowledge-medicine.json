@@ -1,0 +1,40 @@
+{
+  "snapshotId": "eval-knowledge-medicine",
+  "url": "http://localhost:6174/gaps/choose-refill",
+  "title": "Refill | Fixtures",
+  "heading": "Choose a prescription to refill",
+  "pageText": "Choose a prescription to refill\nBoth prescriptions are ready to refill.\nLisinopril 10 mg tablet\nMetformin 500 mg tablet",
+  "elements": [
+    {
+      "n": 1,
+      "role": "button",
+      "text": "Refill",
+      "label": null,
+      "nearby": "Lisinopril 10 mg tablet",
+      "color": "blue",
+      "big": false,
+      "disabled": false,
+      "inModal": false,
+      "inViewport": true,
+      "region": "main"
+    },
+    {
+      "n": 2,
+      "role": "button",
+      "text": "Refill",
+      "label": null,
+      "nearby": "Metformin 500 mg tablet",
+      "color": "blue",
+      "big": false,
+      "disabled": false,
+      "inModal": false,
+      "inViewport": true,
+      "region": "main"
+    }
+  ],
+  "omitted": {
+    "count": 0,
+    "regions": []
+  },
+  "surface": "web"
+}

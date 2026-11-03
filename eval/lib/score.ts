@@ -23,12 +23,16 @@ export interface EvalCase {
     /** Case-insensitive substring of the chosen element's text or label. A list means any of them. */
     targetText?: string | string[];
     forbidTargetText?: string[];
+    /** Case-insensitive substrings that must all appear in `say` (e.g. a clarify names the on-screen choices). */
+    sayIncludes?: string[];
   };
 }
 
 export interface Score {
   kindOk: boolean;
   targetOk: boolean;
+  /** Every `sayIncludes` entry is in the spoken line (true when the case has none). */
+  sayOk: boolean;
   checkOk: boolean;
   checkReason: string | null;
   /** The failure code after `fixStep`: a failed check costs the user a second Claude call (a re-plan). */
@@ -57,6 +61,9 @@ export function scoreStep(c: EvalCase, step: StepResponse, snapshot: PageSnapsho
   else if (TARGETING.has(step.kind) && wanted.length) targetOk = !!el && wanted.some((w) => hay.includes(w.toLowerCase()));
   else targetOk = true;
 
+  const say = step.say.toLowerCase();
+  const sayOk = (c.expected.sayIncludes ?? []).every((w) => say.includes(w.toLowerCase()));
+
   // The same as the extension: a long line is trimmed first, and only what still fails is re-planned.
   const fixed = fixStep(step, snapshot);
   const check = checkStep(fixed, snapshot);
@@ -64,13 +71,14 @@ export function scoreStep(c: EvalCase, step: StepResponse, snapshot: PageSnapsho
   return {
     kindOk,
     targetOk,
+    sayOk,
     checkOk,
     checkReason: check.ok ? null : check.reason,
     checkCode: check.ok ? null : check.code,
     sayWords: sayWords(step.say),
     trimmed: fixed !== step,
     targetDesc: el ? [el.text, el.label].filter(Boolean).join(" / ") : step.target === null ? null : `#${step.target} (not in list)`,
-    pass: kindOk && targetOk && checkOk,
+    pass: kindOk && targetOk && sayOk && checkOk,
   };
 }
 

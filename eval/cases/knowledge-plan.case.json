@@ -1,0 +1,14 @@
+{
+  "id": "knowledge-plan",
+  "url": "{FIXTURES}/gaps/plans",
+  "request": "sign me up for a health plan",
+  "history": [
+    "JustAsk said: \"Which plan do you want?\"",
+    "The user answered: \"the cheaper one\""
+  ],
+  "note": "No prices on the page, so \"cheaper\" can't be matched from the page (#12).",
+  "expected": {
+    "kind": "clarify",
+    "sayIncludes": ["Silver", "Gold"]
+  }
+}

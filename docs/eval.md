@@ -69,6 +69,7 @@ Each run prints a table and writes `eval/reports/<timestamp>-<model>-<effort>[-d
 - **accuracy:** the share of runs where the kind, the target and checkStep are all correct, with no API error.
 - **kind:** `step.kind` is in `expected.allowKinds`, or equals `expected.kind` when there's no `allowKinds`.
 - **target:** for a `guide` or `act` step, the chosen element's text or label contains `targetText`. Matching is case-insensitive, and a list means any entry counts. The element must not contain any `forbidTargetText` entry. A step with no target (clarify, wait, done, blocked) passes unless it points at a forbidden element.
+- **said:** every `expected.sayIncludes` entry appears in `step.say` (case-insensitive). Cases without it pass. The outside-knowledge cases use it so a clarify must name the choices on the screen.
 - **check:** `checkStep(fixStep(step, snapshot), snapshot)` from `packages/shared`, the same as the extension. Failures show the reason. "✓ trimmed" means the `say` was 21–28 words and `fixStep` cut it at a sentence end that kept the action verb, the target's name and (for a clarify) the question.
 - **re-plans:** the share of replies that still fail the check after the trim. In the extension, each one costs a second Claude call, which roughly doubles the wait for that step. The line also counts replies over 20 words, how many were trimmed instead, and the failure codes (`say_long`, `unknown_target`, …). Keep re-plans at or below 3%. `planStep` logs the same numbers in Convex (`sayWords`, `trimmed`, `checkFail`), never the line itself.
 - **latency:** p50 and p90, in ms per call.
@@ -99,6 +100,7 @@ Fields:
 
 - Only `id`, `url`, `request` and `expected.kind` are required.
 - `{FIXTURES}` becomes `http://localhost:6174`.
+- `expected.sayIncludes` lists words the spoken line must contain, e.g. the on-screen names a clarify should offer.
 - History lines use the controller's format: `The user did: "<say>" (<how>)`.
 - `prepare.clickText` clicks a button or link whose text starts with that string, before the scan.
 - `settleMs` is the wait before the scan. The default is 400 ms. Use 1500 ms or more for late-loading editors.
@@ -118,6 +120,12 @@ Cases today:
   - checkout (the card number is `guide`, never `act`)
   - login
   - composer, before and after opening (P1)
+- **Outside knowledge (#12):** the user describes a choice in their own words and the page doesn't say which one matches. Each expects a `clarify` that names the on-screen choices, never a `guide`:
+  - `knowledge-medicine`: "the blood pressure one" with Lisinopril and Metformin
+  - `knowledge-plan`: "the cheaper one" with two plans and no prices
+  - `knowledge-account`: "the savings one" with accounts named Everyday and Rainy Day
+  - `knowledge-contact`: "call my son" on a list of names
+  - Last run (claude-opus-5-5, effort low): all 9 runs passed (2 each for medicine, account and contact, 3 for plan). The stress scenario `pharmacy-clarify` (`npx tsx scripts/stress-conversations.ts pharmacy-clarify`) now checks that no guide step names a medicine the user didn't say; 3/3 runs passed.
 - **Live sites:** Wikipedia, usa.gov and weather.gov. They are best-effort, because real sites change.
 
 ## Privacy

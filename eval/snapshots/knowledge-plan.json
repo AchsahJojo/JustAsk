@@ -1,0 +1,40 @@
+{
+  "snapshotId": "eval-knowledge-plan",
+  "url": "http://localhost:6174/gaps/plans",
+  "title": "Plans | Fixtures",
+  "heading": "Pick your health plan",
+  "pageText": "Pick your health plan\nPrices are shown at checkout.\nSilver Choice PPO\nGold Select HMO",
+  "elements": [
+    {
+      "n": 1,
+      "role": "button",
+      "text": "Choose this plan",
+      "label": null,
+      "nearby": "Silver Choice PPO",
+      "color": "blue",
+      "big": false,
+      "disabled": false,
+      "inModal": false,
+      "inViewport": true,
+      "region": "main"
+    },
+    {
+      "n": 2,
+      "role": "button",
+      "text": "Choose this plan",
+      "label": null,
+      "nearby": "Gold Select HMO",
+      "color": "blue",
+      "big": false,
+      "disabled": false,
+      "inModal": false,
+      "inViewport": true,
+      "region": "main"
+    }
+  ],
+  "omitted": {
+    "count": 0,
+    "regions": []
+  },
+  "surface": "web"
+}
