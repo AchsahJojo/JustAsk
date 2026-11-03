@@ -354,15 +354,64 @@ describe("SessionController", () => {
     expect(h.events.slice(-2)).toEqual(["stuck", "loop"]);
   });
 
-  it("a loop after I'm stuck presses asks for the helper without logging stuck twice", async () => {
+  it("a loop after an I'm stuck press asks for the helper without logging stuck twice", async () => {
     const g = guide(1, "Click Join.");
     const h = harness([g, g, g]);
     await h.c.start("join my call");
-    await h.c.stuck();
+    await h.c.input("which one?");
     await h.c.stuck();
     expect(h.c.state.line).toMatch(/ask your helper/);
-    expect(h.events.filter((e) => e === "stuck")).toHaveLength(2);
+    expect(h.events.filter((e) => e === "stuck")).toHaveLength(1);
     expect(h.events.at(-1)).toBe("loop");
+  });
+
+  it("I'm stuck after done asks what's not working, without calling Claude", async () => {
+    const h = harness([step("done", "Google Meet is open."), guide(1, "Click New meeting.")]);
+    await h.c.start("open google meet");
+    await h.c.stuck();
+    expect(h.plans).toHaveLength(1);
+    expect(h.c.state.phase).toBe("asking");
+    expect(h.c.state.line).toBe("What's not working? Tell me what you see, or what you wanted to do.");
+    await h.c.input("I want to start a call");
+    expect(h.plans).toHaveLength(2);
+    expect(h.plans[1].request).toBe("open google meet");
+    expect(h.plans[1].history).toEqual([
+      'JustAsk said: "Google Meet is open."',
+      "The user pressed I'm stuck after that, so it isn't finished for them",
+      'JustAsk said: "What\'s not working? Tell me what you see, or what you wanted to do."',
+      'The user answered: "I want to start a call"',
+    ]);
+    expect(h.c.state.phase).toBe("guiding");
+  });
+
+  it("I'm stuck or Say that again typed after done is the command, not a new request", async () => {
+    const h = harness([step("done", "Google Meet is open.")]);
+    await h.c.start("open google meet");
+    expect(h.c.doneCommand("check my email")).toBe(false);
+    expect(h.c.doneCommand("say that again")).toBe(true);
+    expect(h.spoken.at(-1)).toBe("Google Meet is open.");
+    expect(h.c.doneCommand("I'm stuck")).toBe(true);
+    await tick();
+    expect(h.c.state.phase).toBe("asking");
+    expect(h.c.state.request).toBe("open google meet");
+    expect(h.plans).toHaveLength(1);
+    expect(h.c.doneCommand("I'm stuck")).toBe(false);
+  });
+
+  it("a second I'm stuck on the same box says where it is instead of re-planning", async () => {
+    const scans = [[frame(0, ["Join", "Help"])]];
+    Object.assign(scans[0][0].snapshot.elements[0], { region: "header", nearby: "Your meetings", inViewport: false });
+    const g = guide(1, "Click Join.");
+    const h = harness([g, g, g], scans);
+    await h.c.start("join my call");
+    await h.c.stuck();
+    expect(h.plans).toHaveLength(2);
+    await h.c.stuck();
+    expect(h.plans).toHaveLength(2);
+    expect(h.bridge.pulse).toHaveBeenCalled();
+    expect(h.spoken.at(-1)).toBe("I moved the page to it. Look at the top of the page, near “Your meetings”. It has the glowing box around it. Click Join.");
+    expect(h.c.state.phase).toBe("guiding");
+    expect(h.events.filter((e) => e === "stuck")).toHaveLength(2);
   });
 
   it("a step the user finished doesn't count toward the loop", async () => {

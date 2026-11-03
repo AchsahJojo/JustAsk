@@ -197,6 +197,8 @@ export class SessionController {
    * it"), or a press of I'm stuck (already logged as `stuck`).
    */
   private lastReply: "decline" | "stuck" | "pressed-stuck" | null = null;
+  /** The box (by `boxKey`) highlighted at the last I'm stuck press, so a second press on it gets more help. */
+  private stuckOn: string | null = null;
   /** The first request in a chain of follow-ups after finished tasks ("go to google meet", then "I don't have a code"). */
   private origin: string | null = null;
   /** When the session last reached `done`, to expire the follow-up chain. */
@@ -337,6 +339,19 @@ export class SessionController {
     const line = kind === "thanks" ? L.WELCOME_LINE : L.NOT_NOW_LINE;
     this.say(line);
     this.set({ line, note: "" });
+    return true;
+  }
+
+  /**
+   * "I'm stuck" or "Say that again" after a finished task arrives through the same box as a new request:
+   * it's the command, not a request called "I'm stuck". Returns true when it handled it.
+   */
+  doneCommand(text: string): boolean {
+    if (this.view.phase !== "done") return false;
+    const kind = parseCommand(text).kind;
+    if (kind === "repeat") this.repeat();
+    else if (kind === "stuck") void this.stuck();
+    else return false;
     return true;
   }
 
@@ -503,6 +518,26 @@ export class SessionController {
     if (this.view.phase === "idle") return;
     this.deps.events?.log("stuck");
     this.lastReply = "pressed-stuck";
+    if (this.view.phase === "done") {
+      // Re-planning the same request on the same page can only say "done" again. Ask first: the answer
+      // goes to Claude with the done line and the request, so it keeps the task.
+      this.noteLine();
+      this.history.push(L.NOT_FINISHED_NOTE);
+      this.say(L.NOT_WORKING_LINE);
+      this.set({ phase: "asking", line: L.NOT_WORKING_LINE, expect: null, risk: "none", note: "" });
+      return;
+    }
+    const box = this.view.phase === "guiding" && this.target && this.step ? this.element(this.step.target) : undefined;
+    const key = boxKey(box);
+    if (box && key && key === this.stuckOn) {
+      // Stuck again on the same box: a re-plan would show it again. Move the page to it and say where it is.
+      const where = L.whereIs(box.region, box.nearby, !box.inViewport);
+      void this.deps.bridge.pulse(this.target!);
+      this.say(`${where} ${this.view.line}`);
+      this.set({ note: where });
+      return;
+    }
+    this.stuckOn = key;
     this.noteLine();
     this.history.push("The user said they are stuck or can't find it");
     this.say(L.STUCK_LINE);
@@ -719,6 +754,7 @@ export class SessionController {
     const guidedSteps = this.view.guidedSteps + 1;
     this.history.push(this.onPage(`The user did: ${JSON.stringify(did)} (${how})`));
     this.repeat_ = { key: "", sig: "", count: 0 };
+    this.stuckOn = null;
     const p = L.praise(this.history.length);
     this.say(p);
     await this.deps.bridge.clear();
@@ -1168,6 +1204,7 @@ export class SessionController {
     this.repeat_ = { key: "", sig: "", count: 0 };
     this.questions = 0;
     this.lastReply = null;
+    this.stuckOn = null;
     this.origin = null;
     this.declined = new Set();
   }

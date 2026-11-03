@@ -15,6 +15,11 @@ vi.mock("@justask/core", () => ({
     farewell(text: string) {
       return text === "thank you";
     }
+    doneCommand(text: string) {
+      if (text !== "I'm stuck") return false;
+      mocks.events.push("controller.stuck");
+      return true;
+    }
   },
 }));
 
@@ -62,5 +67,13 @@ describe("SessionHost.start", () => {
     await host.start("thank you");
 
     expect(mocks.events).toEqual([]);
+  });
+
+  it("I'm stuck after done goes to the controller as the command, with no new session", async () => {
+    const host = new SessionHost({ pinnedTabId: 42 });
+
+    await host.start("I'm stuck");
+
+    expect(mocks.events).toEqual(["controller.stuck"]);
   });
 });
