@@ -1,7 +1,7 @@
 import { checkStep, type ActResult, type ActSpec, type EventType, type FrameScan, type FromContent, type HighlightSpec, type PageSnapshot, type PlanRequest, type PlanResponse, type Recipe, type SnapshotElement, type StepResponse } from "@justask/shared";
 import { mergeScans, type TargetRef } from "./merge";
 import * as L from "./lines";
-import { parseCommand } from "./commands";
+import { isDecline, parseCommand } from "./commands";
 import { gateAct, userWords } from "./drive";
 import { snapshotSignature } from "./signature";
 import { scamCheck, type ScamKind } from "./scam";
@@ -186,6 +186,8 @@ export class SessionController {
   private origin: string | null = null;
   /** When the session last reached `done`, to expire the follow-up chain. */
   private doneAt = 0;
+  /** Boxes the user said they can't fill yet ("I don't have a code"), by `boxKey`. Kept across follow-ups. */
+  private declined = new Set<string>();
 
   constructor(private deps: ControllerDeps) {
     this.t = { ...DEFAULT_TIMING, ...deps.timing };
@@ -283,8 +285,10 @@ export class SessionController {
     const recent = Date.now() - this.doneAt <= this.t.followUpMs;
     const origin = this.view.phase === "done" && this.view.request && recent && !opts.taskId ? (this.origin ?? this.view.request) : null;
     const before = origin ? L.followUpNote(origin, this.view.line) : null;
+    const declined = origin ? this.declined : new Set<string>();
     this.reset();
     this.origin = origin;
+    this.declined = declined;
     if (before) this.history.push(before);
     const gen = this.gen;
     this.recipe = opts.recipe ?? null;
@@ -461,6 +465,7 @@ export class SessionController {
   }
 
   async answer(text: string) {
+    this.noteDecline(text);
     this.noteLine();
     this.history.push(`The user answered: ${JSON.stringify(text.slice(0, 200))}`);
     this.set({ phase: "planning", line: L.FILLER_LINE });
@@ -475,6 +480,20 @@ export class SessionController {
     if (!["asking", "guiding", "waiting", "done"].includes(this.view.phase) || !this.view.line) return;
     const note = L.saidNote(this.view.line);
     if (this.history.at(-1) !== note) this.history.push(note);
+  }
+
+  /**
+   * "I don't have a code" while a box is highlighted for typing: that box isn't shown again, so JustAsk
+   * never asks for something the user just said they don't have. Other words (they have it now) lift it.
+   */
+  private noteDecline(text: string) {
+    if (!isDecline(text)) {
+      this.declined.clear();
+      return;
+    }
+    if (this.view.phase !== "guiding" || this.step?.expect !== "type") return;
+    const key = boxKey(this.element(this.step.target));
+    if (key) this.declined.add(key);
   }
 
   async confirm(yes: boolean) {
@@ -740,6 +759,11 @@ export class SessionController {
     }
     if (this.repeating(step)) {
       // The same step keeps coming back and the user keeps not doing it: stop asking. The user decides what's next.
+      this.deps.events?.log("blocked");
+      return this.block(L.LOOP_LINE);
+    }
+    if ((step.kind === "guide" || step.kind === "act") && step.expect === "type" && this.declined.has(boxKey(this.element(step.target)) ?? "")) {
+      // The user already said they can't fill this box: don't ask for it again.
       this.deps.events?.log("blocked");
       return this.block(L.LOOP_LINE);
     }
@@ -1041,7 +1065,13 @@ export class SessionController {
     this.pending = null;
     this.repeat_ = { key: "", sig: "", count: 0 };
     this.origin = null;
+    this.declined = new Set();
   }
+}
+
+/** The same box across snapshots (numbers change between scans): its role and what it says. */
+function boxKey(el: SnapshotElement | undefined): string | null {
+  return el ? [el.role, el.label ?? "", el.text, el.nearby ?? ""].join("|") : null;
 }
 
 function labelFor(expect: StepResponse["expect"]): string {

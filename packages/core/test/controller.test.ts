@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { SessionController, type PageBridge, type Planner } from "../src/controller";
 import { mergeScans } from "../src/merge";
 import { buildTurn, SYSTEM_PROMPT } from "../src/prompt";
-import { parseCommand } from "../src/commands";
+import { isDecline, parseCommand } from "../src/commands";
 import type { FrameScan, PlanRequest, StepResponse } from "@justask/shared";
 
 function frame(frameId: number, texts: string[], isTop = frameId === 0): FrameScan {
@@ -196,12 +196,44 @@ describe("SessionController", () => {
     const ask = guide(1, "Type the meeting code.", { expect: "type" });
     const h = harness([ask, ask, ask, ask]);
     await h.c.start("join my meeting");
-    await h.c.input("I don't have a code");
+    await h.c.input("which box?");
     expect(h.c.state.phase).toBe("guiding");
-    await h.c.input("not yet");
+    await h.c.input("hmm");
     expect(h.c.state.phase).toBe("blocked");
     expect(h.c.state.line).toMatch(/stop here for now/);
     expect(h.highlights).toHaveLength(2);
+  });
+
+  it("declining a code box never highlights that box again", async () => {
+    const ask = guide(1, "Type the meeting code.", { expect: "type" });
+    const h = harness([ask, ask], [[typedFrame(false)]]);
+    await h.c.start("join my meeting");
+    await h.c.input("my daughter hasn't sent it yet");
+    expect(h.highlights).toHaveLength(1);
+    expect(h.c.state.phase).toBe("blocked");
+    expect(h.c.state.line).toMatch(/stop here for now/);
+  });
+
+  it("a declined box stays declined across a follow-up after done", async () => {
+    const ask = guide(1, "Type the meeting code.", { expect: "type" });
+    const h = harness([ask, step("done", "Come back when you have it."), ask], [[typedFrame(false)]]);
+    await h.c.start("join my meeting");
+    await h.c.input("I don't have a code");
+    expect(h.c.state.phase).toBe("done");
+    await h.c.input("what now");
+    expect(h.highlights).toHaveLength(1);
+    expect(h.c.state.phase).toBe("blocked");
+  });
+
+  it("a declined box comes back once the user says they have it", async () => {
+    const ask = guide(1, "Type the meeting code.", { expect: "type" });
+    const h = harness([ask, step("clarify", "Do you have it now?"), ask], [[typedFrame(false)]]);
+    await h.c.start("join my meeting");
+    await h.c.input("I don't have a code");
+    expect(h.c.state.phase).toBe("asking");
+    await h.c.input("yes it just came");
+    expect(h.highlights).toHaveLength(2);
+    expect(h.c.state.phase).toBe("guiding");
   });
 
   it("the same question asked over and over ends the loop", async () => {
@@ -632,6 +664,13 @@ describe("parseCommand", () => {
   ])("keeps ordinary text containing command words as text: %s", (s) => {
     expect(parseCommand(s)).toEqual({ kind: "text", text: s });
   });
+
+  it.each(["no", "not yet", "I don't have a code", "my daughter hasn't sent it yet", "I forgot my password", "I don't know the meeting ID", "I'll do it later", "never mind the ID"])(
+    "counts %s as a decline",
+    (s) => expect(isDecline(s)).toBe(true),
+  );
+
+  it.each(["yes it just came", "it's 123 456", "where is the box?", "I have it now"])("does not count %s as a decline", (s) => expect(isDecline(s)).toBe(false));
 
   it("treats a clarify answer containing stop as an answer", async () => {
     const h = harness([step("clarify", "Which stop?"), guide(1)]);
