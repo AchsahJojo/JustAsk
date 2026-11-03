@@ -28,8 +28,11 @@ export interface SessionView {
   actions: number;
   /** Set while JustAsk asks "Did someone ask you to do this?" before a request that looks like a scam. */
   scam: ScamKind | null;
-  /** "search": on an empty tab, JustAsk asks whether to search the web or let the user go to the site. */
-  offer: "search" | null;
+  /**
+   * "search": on an empty tab, JustAsk asks whether to search the web or let the user go to the site.
+   * "declined": after "No" to a risk question, JustAsk asks "something else here, or stop?".
+   */
+  offer: "search" | "declined" | null;
 }
 
 export interface PageBridge {
@@ -200,6 +203,8 @@ export class SessionController {
   private doneAt = 0;
   /** Boxes the user said they can't fill yet ("I don't have a code"), by `boxKey`. Kept across follow-ups. */
   private declined = new Set<string>();
+  /** Buttons the user said "No" to at a risk question this session, by `boxKey`. Never shown again. */
+  private riskDeclined = new Set<string>();
 
   constructor(private deps: ControllerDeps) {
     this.t = { ...DEFAULT_TIMING, ...deps.timing };
@@ -271,6 +276,8 @@ export class SessionController {
     this.history = history;
     this.recipe = recipe;
     for (const fn of this.listeners) fn(this.view);
+    // "Something else here, or stop?" is only a question: keep asking it rather than re-planning the step they said no to.
+    if (view.offer === "declined") return;
     if (["planning", "guiding", "verifying", "confirming", "acting"].includes(view.phase)) void this.plan();
   }
 
@@ -439,7 +446,12 @@ export class SessionController {
       case "thanks":
         if (this.farewell(raw)) return;
         break;
+      case "something-else":
+        if (this.view.offer === "declined") return this.declineAnswer(true);
+        break;
     }
+    // "Something else here, or stop?": words like "the cheaper shipping" are the something else.
+    if (this.view.phase === "confirming" && this.view.offer === "declined" && raw.trim()) return this.declineAnswer(true, raw.trim());
     if (this.view.phase === "asking" || this.view.phase === "waiting") return this.answer(raw);
     if (this.view.phase === "idle" || this.view.phase === "done" || this.view.phase === "blocked") return this.start(raw);
     // Mid-step words ("I can't find it", "it's on the left") go to Claude for a fresh step, not a repeat.
@@ -458,6 +470,8 @@ export class SessionController {
   }
 
   async stop() {
+    // Stop at "something else here, or stop?" is the user's answer: end as before ("Nothing was sent").
+    if (this.view.phase === "confirming" && this.view.offer === "declined") return this.declineAnswer(false);
     const wasActive = this.view.phase !== "idle" && this.view.phase !== "done";
     // A blocked session already logged its outcome (`blocked` or `scam_stopped`): don't add `abandoned`.
     const logged = this.view.phase === "blocked";
@@ -535,6 +549,8 @@ export class SessionController {
     if (this.view.phase === "confirming" && this.view.scam) return this.scamAnswer(yes);
     // "Search the web for you?": yes searches, no lets the user open the site.
     if (this.view.phase === "confirming" && this.view.offer === "search") return this.searchAnswer(yes);
+    // "Something else here, or stop?": yes is something else, no is stop.
+    if (this.view.phase === "confirming" && this.view.offer === "declined") return this.declineAnswer(yes);
     if (this.view.phase !== "confirming" || !this.step) return;
     const step = this.step;
     const pending = this.pending ?? "guide";
@@ -545,16 +561,40 @@ export class SessionController {
         this.history.push(this.onPage(L.TEXT_DECLINED_NOTE));
         return this.showGuide(this.asGuide(step, false));
       }
-      this.history.push("The user chose not to do that step");
-      this.say("Okay, we won't do that.");
+      // "No" often means "not that one" (cheaper shipping, another address), not "stop everything": ask which.
+      const el = this.element(step.target);
+      this.history.push(this.onPage(L.riskDeclinedNote((el?.text || el?.label || step.say).trim())));
+      const key = boxKey(el);
+      if (key) this.riskDeclined.add(key);
       await this.deps.bridge.clear();
-      this.deps.events?.log("abandoned");
-      this.set({ phase: "done", line: "Okay, we won't do that. Nothing was sent.", note: "" });
+      this.say(L.RISK_DECLINED_LINE);
+      this.set({ phase: "confirming", line: L.RISK_DECLINED_LINE, note: "", risk: "none", expect: null, offer: "declined" });
       return;
     }
     if (pending === "risk-text") return this.askText(step);
     if (pending === "act" || pending === "text") return this.doAct(step);
     await this.showGuide(step);
+  }
+
+  /**
+   * The answer to "something else here, or stop?" after a risk "No". Stop ends the task the way a "No" used to.
+   * Something else asks what instead, or, when the user already said it (`text`), sends that to Claude.
+   */
+  async declineAnswer(somethingElse: boolean, text?: string) {
+    if (this.view.phase !== "confirming" || this.view.offer !== "declined") return;
+    if (!somethingElse) {
+      this.bump();
+      this.say(L.RISK_STOPPED_SAY);
+      this.deps.events?.log("abandoned");
+      this.set({ phase: "done", line: L.RISK_STOPPED_LINE, note: "", offer: null });
+      return;
+    }
+    if (text) {
+      this.set({ phase: "asking", line: L.SOMETHING_ELSE_LINE, offer: null });
+      return this.answer(text);
+    }
+    this.say(L.SOMETHING_ELSE_LINE);
+    this.set({ phase: "asking", line: L.SOMETHING_ELSE_LINE, note: "", offer: null });
   }
 
   async doneTyping() {
@@ -761,6 +801,12 @@ export class SessionController {
     if (!check.ok) {
       if (this.replans++ < 1) return this.requestStep(gen, check.reason);
       return this.block(L.TROUBLE_LINE, false);
+    }
+    if ((step.kind === "guide" || step.kind === "act") && this.riskDeclined.has(boxKey(this.element(step.target)) ?? "")) {
+      // The user said "No" to this button: never show it again. Ask Claude once for another way, then stop.
+      if (this.replans++ < 1) return this.requestStep(gen, L.RISK_DECLINED_RETRY);
+      this.deps.events?.log("blocked");
+      return this.block(L.LOOP_LINE);
     }
     await this.handleStep(step, res.latencyMs);
   }
@@ -1108,6 +1154,7 @@ export class SessionController {
     this.bump();
     this.leaveWaiting();
     this.history = [];
+    this.riskDeclined = new Set();
     this.recipe = null;
     this.snapshot = null;
     this.map = new Map();

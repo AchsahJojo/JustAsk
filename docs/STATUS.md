@@ -35,6 +35,9 @@ A caregiver is optional. When there is one, the caregiver can set JustAsk up for
 - **Guide mode:** highlights an element and waits for the user's click, typing or choice. "I'm done typing" checks that the field really has a value.
 - **Safety:**
   - money, personal-info and account-change steps ask first, and say exactly what would be pressed and where ("Next, I'd press “Place order” on pharmacy.example.")
+  - **No** to one of those doesn't end the task. JustAsk asks "Do you want to do something else here, or stop?" with **Something else** and **Stop** buttons.
+    - **Something else:** their answer goes to Claude with the decline noted, and that button is never shown again in the session.
+    - **Stop:** ends as before ("Nothing was sent"), logged as `abandoned`.
   - `suspicious` pages block (fake virus warnings, pay-with-gift-cards, fee-for-a-prize, lookalike sites)
   - **scam check on the user's own words** before anything happens (gift card codes, money to someone who called, remote access, sharing a code); see section 5
   - gift card numbers and claim codes count as sensitive, so JustAsk never types them

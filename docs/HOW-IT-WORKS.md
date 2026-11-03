@@ -94,7 +94,7 @@ This repeats until Claude says the task is done: "All done, you did it!"
 | Private fields stay private | password, code, card, SSN and bank fields are flagged and never read | `packages/page-agent/src/sensitive.ts` |
 | No typed values leave the page | the snapshot carries booleans only | `packages/page-agent/src/scanner.ts` |
 | Claude can't invent targets | the reply must name a number from this snapshot | `packages/shared/src/step.ts` (`checkStep`) |
-| Ask before money or account changes | risk steps show a yes/no question first | `packages/core/src/controller.ts` |
+| Ask before money or account changes | risk steps show a yes/no question first; after a No, that button is never shown again | `packages/core/src/controller.ts` |
 | Scam check | gift card, wire or remote-access requests get one plain question | `packages/core/src/scam.ts` |
 | Page text can't give orders | it goes inside `<page_content>`, marked untrusted | `packages/core/src/prompt.ts` |
 | Keys never reach the browser | Claude and Cartesia keys live in Convex env | `packages/backend/convex/plan.ts`, `voice.ts` |

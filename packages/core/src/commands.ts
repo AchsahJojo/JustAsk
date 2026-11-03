@@ -8,6 +8,7 @@ export type Command =
   | { kind: "no" }
   | { kind: "done-typing" }
   | { kind: "thanks" }
+  | { kind: "something-else" }
   | { kind: "text"; text: string };
 
 export function parseCommand(raw: string): Command {
@@ -24,6 +25,8 @@ export function parseCommand(raw: string): Command {
   if (/^(?:no|nope|don'?t|not now|not yet|later|maybe later|i'?ll do it later)(?: please| thanks| thank you)?$/.test(s)) return { kind: "no" };
   // Closing words after a task ("thank you", "that's all") are not a new request.
   if (/^(?:(?:ok(?:ay)?,? )?(?:thanks|thank you)(?: so much| very much)?|that'?s all|that'?s it|bye|goodbye|great|perfect|all good)$/.test(s)) return { kind: "thanks" };
+  // The answer to "do something else here, or stop?" after a risk "No".
+  if (/^(?:something else|(?:do )?something different|another way|a different way|(?:the )?other(?: one| way)?)$/.test(s)) return { kind: "something-else" };
   return { kind: "text", text: raw.trim() };
 }
 

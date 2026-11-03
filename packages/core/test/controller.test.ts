@@ -141,14 +141,82 @@ describe("SessionController", () => {
     expect(h.c.state.phase).toBe("blocked");
   });
 
-  it("asks before money steps; No ends without highlighting", async () => {
+  it("asks before money steps; No asks what next, without highlighting", async () => {
     const h = harness([guide(1, "Click Place order.", { risk: "money" })]);
     await h.c.start("buy");
     expect(h.c.state.phase).toBe("confirming");
     expect(h.highlights.length).toBe(0);
     await h.c.input("no");
-    expect(h.c.state.phase).toBe("done");
+    expect(h.c.state).toMatchObject({ phase: "confirming", offer: "declined", line: "Okay, I won't show that. Do you want to do something else here, or stop?" });
     expect(h.highlights.length).toBe(0);
+    expect(h.events).not.toContain("abandoned");
+  });
+
+  it("Stop after a risk No keeps today's line and the abandoned event", async () => {
+    const h = harness([guide(1, "Click Place order.", { risk: "money" })]);
+    await h.c.start("buy");
+    await h.c.confirm(false);
+    await h.c.declineAnswer(false);
+    expect(h.c.state).toMatchObject({ phase: "done", line: "Okay, we won't do that. Nothing was sent.", offer: null });
+    expect(h.events.filter((e) => e === "abandoned")).toHaveLength(1);
+    expect(h.plans).toHaveLength(1);
+  });
+
+  it("voice stop, the Stop button and no all end at the follow-up question", async () => {
+    for (const end of [(c: SessionController) => c.input("stop"), (c: SessionController) => c.stop(), (c: SessionController) => c.input("no")]) {
+      const h = harness([guide(1, "Click Place order.", { risk: "money" })]);
+      await h.c.start("buy");
+      await h.c.input("no");
+      await end(h.c);
+      expect(h.c.state).toMatchObject({ phase: "done", line: "Okay, we won't do that. Nothing was sent." });
+      expect(h.events.filter((e) => e === "abandoned")).toHaveLength(1);
+    }
+  });
+
+  it("Something else asks what instead, then re-plans with the decline in history", async () => {
+    const h = harness([guide(1, "Click Place order.", { risk: "money" }), guide(2, "Click B.")], [[frame(0, ["Place order", "B"])]]);
+    await h.c.start("buy");
+    await h.c.confirm(false);
+    await h.c.input("something else");
+    expect(h.c.state).toMatchObject({ phase: "asking", line: "Okay. What would you like to do instead?", offer: null });
+    await h.c.input("the cheaper shipping");
+    expect(h.plans).toHaveLength(2);
+    expect(h.plans[1].history.join("\n")).toContain('The user chose not to do that step: "Place order"');
+    expect(h.plans[1].history.at(-1)).toContain("the cheaper shipping");
+    expect(h.c.state.phase).toBe("guiding");
+    expect((h.highlights[0] as any).ref).toEqual({ frameId: 0, localId: 2 });
+  });
+
+  it("words at the follow-up question are the something else", async () => {
+    const h = harness([guide(1, "Click Place order.", { risk: "money" }), guide(2, "Click B.")], [[frame(0, ["Place order", "B"])]]);
+    await h.c.start("buy");
+    await h.c.confirm(false);
+    await h.c.input("I want to check the total first");
+    expect(h.plans).toHaveLength(2);
+    expect(h.plans[1].history.at(-1)).toContain("check the total first");
+  });
+
+  it("a declined button is never shown again, even when Claude returns it twice", async () => {
+    const order = guide(1, "Click Place order.", { risk: "money" });
+    const h = harness([order, order, order], [[frame(0, ["Place order", "B"])]]);
+    await h.c.start("buy");
+    await h.c.confirm(false);
+    await h.c.declineAnswer(true);
+    await h.c.answer("a different address");
+    expect(h.plans).toHaveLength(3);
+    expect(h.plans[2].retryNote).toContain("chose not to do that step");
+    expect(h.c.state.phase).toBe("blocked");
+    expect(h.highlights).toHaveLength(0);
+    expect(h.spoken.filter((s) => s.includes("This step will spend money"))).toHaveLength(1);
+  });
+
+  it("the next risk step after Something else still asks first", async () => {
+    const h = harness([guide(1, "Click Place order.", { risk: "money" }), guide(2, "Click Pay now.", { risk: "money" })], [[frame(0, ["Place order", "Pay now"])]]);
+    await h.c.start("buy");
+    await h.c.confirm(false);
+    await h.c.input("the cheaper one");
+    expect(h.c.state).toMatchObject({ phase: "confirming", offer: null, risk: "money" });
+    expect(h.highlights).toHaveLength(0);
   });
 
   it("Yes on a risk step highlights", async () => {
@@ -775,6 +843,8 @@ describe("parseCommand", () => {
     ["I'll do it later", "no"],
     ["Thank you!", "thanks"],
     ["that's all", "thanks"],
+    ["Something else.", "something-else"],
+    ["another way", "something-else"],
     ["help me refill", "text"],
   ])("%s -> %s", (s, k) => expect(parseCommand(s).kind).toBe(k));
 

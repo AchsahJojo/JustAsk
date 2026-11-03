@@ -71,7 +71,17 @@ export const SEE_IT_NOW = "Do you see it now?";
 export const ACT_FAILED_NOTE = "JustAsk couldn't do that, so the user will";
 export const GUIDE_MODE_NOTE = "JustAsk's last 3 actions did not change the page, so from now on the user does the steps themselves (use guide steps)";
 export const SHOW_ME_NOTE = "The user chose Show me instead: the user does every step themselves (use guide steps)";
-export const TEXT_DECLINED_NOTE = "The user did not want JustAsk to type that, so the user will type it themselves";
+// After "No" to a risk question: often "not that one", not "stop everything".
+export const RISK_DECLINED_LINE = "Okay, I won't show that. Do you want to do something else here, or stop?";
+export const SOMETHING_ELSE_LINE = "Okay. What would you like to do instead?";
+export const RISK_STOPPED_SAY = "Okay, we won't do that.";
+export const RISK_STOPPED_LINE = "Okay, we won't do that. Nothing was sent.";
+/** History note for Claude after a risk "No", so it doesn't offer the same button again. */
+export const riskDeclinedNote = (what: string) => `The user chose not to do that step: ${JSON.stringify(what.slice(0, 120))}`;
+/** Retry note when Claude points at a button the user already said no to. */
+export const RISK_DECLINED_RETRY = "The user already chose not to do that step. Never point at that same button again: offer another way, or reply done.";
+
+export const TEXT_DECLINED_NOTE ="The user did not want JustAsk to type that, so the user will type it themselves";
 
 /** Asked before typing text that has words the user didn't say. */
 export function typeConfirm(text: string) {
