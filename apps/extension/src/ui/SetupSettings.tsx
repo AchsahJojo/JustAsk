@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { getSettings, saveSettings, type Settings } from "../lib/config";
 import { backend } from "../lib/backend";
-import { friendlyError, seenAgo, spacedCode, type DeviceRow } from "../lib/prefs";
+import { codeAttemptMessage, friendlyError, seenAgo, spacedCode, type DeviceRow } from "../lib/prefs";
 import { pullPrefs } from "../lib/prefsSync";
 import type { Helper } from "../lib/backend";
 import { pushPrefs } from "../lib/prefsSync";
@@ -257,7 +257,9 @@ function HaveCode({ onJoined }: { onJoined: () => Promise<void> }) {
       const s = await getSettings();
       const name = s.convexUrl ? await backend.peekCode(s.convexUrl, digits) : null;
       if (name) setOwner(name);
-      else setMsg("That code didn't work. Make a new one and try again. Codes last 15 minutes.");
+      else setMsg(codeAttemptMessage(null));
+    } catch (err) {
+      setMsg(codeAttemptMessage(err));
     } finally {
       setBusy(false);
     }
@@ -268,14 +270,14 @@ function HaveCode({ onJoined }: { onJoined: () => Promise<void> }) {
     setBusy(true);
     try {
       const r = await backend.joinWithCode(digits);
-      if (!r) setMsg("That code didn't work. Make a new one and try again. Codes last 15 minutes.");
+      if (!r) setMsg(codeAttemptMessage(null));
       else {
         setMsg(`Linked. This browser and ${owner}'s JustAsk are now one.`);
         setCode("");
         await onJoined();
       }
     } catch (e) {
-      setMsg(friendlyError(e));
+      setMsg(codeAttemptMessage(e));
     } finally {
       setOwner(null);
       setBusy(false);

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { friendlyError, mergePrefs, parseCode, parseDevices, parseHandoff, seenAgo, spacedCode, type SyncedPrefs } from "../src/lib/prefs";
+import { codeAttemptMessage, friendlyError, mergePrefs, parseCode, parseDevices, parseHandoff, seenAgo, spacedCode, type SyncedPrefs } from "../src/lib/prefs";
 
 const LOCAL: SyncedPrefs = { voice: "browser", rate: 0.9, consent: { notifyOnComplete: false, notifyOnStuck: false }, showMeInstead: false };
 
@@ -47,6 +47,18 @@ describe("friendlyError", () => {
     expect(friendlyError(new TypeError("Failed to fetch"))).toMatch(/can't reach the internet/);
     expect(friendlyError("boom")).toMatch(/Something went wrong/);
     expect(friendlyError(undefined)).toMatch(/Something went wrong/);
+  });
+  it("reads the lockout from ConvexError data", () => {
+    expect(friendlyError(Object.assign(new Error("Server Error"), { data: "Too many tries. Please wait a minute and try again." }))).toMatch(/^Too many tries/);
+  });
+});
+
+describe("codeAttemptMessage", () => {
+  it("explains a rejected code without blaming a lockout or a network failure", () => {
+    expect(codeAttemptMessage(null)).toMatch(/15 minutes/);
+    expect(codeAttemptMessage(null)).toMatch(/helper website/);
+    expect(codeAttemptMessage(new Error("Too many tries. Please wait a minute."))).toMatch(/^Too many tries/);
+    expect(codeAttemptMessage(new TypeError("Failed to fetch"))).toMatch(/can't reach the internet/);
   });
 });
 
