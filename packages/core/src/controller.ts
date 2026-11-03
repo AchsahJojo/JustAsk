@@ -109,6 +109,12 @@ export const DEFAULT_TIMING = {
 /** Consecutive click/submit actions that changed nothing before the session switches to guide mode. */
 const NO_CHANGE_LIMIT = 3;
 
+/**
+ * How many times in a row the same step may come back on an unchanged page before JustAsk stops
+ * offering it (the user said they don't have the code, or not yet, and Claude asks again).
+ */
+const REPEAT_LIMIT: Partial<Record<StepResponse["kind"], number>> = { guide: 3, act: 3, clarify: 3, wait: 3 };
+
 const INITIAL: SessionView = {
   phase: "idle",
   request: "",
@@ -169,6 +175,10 @@ export class SessionController {
   private pending: Pending | null = null;
   private waiting: WaitState | null = null;
   private sleeps = new Set<() => void>();
+  /** The last step shown and the page it was shown on, to catch the same step coming back. */
+  private repeat_ = { key: "", sig: "", count: 0 };
+  /** The first request in a chain of follow-ups after finished tasks ("go to google meet", then "I don't have a code"). */
+  private origin: string | null = null;
 
   constructor(private deps: ControllerDeps) {
     this.t = { ...DEFAULT_TIMING, ...deps.timing };
@@ -260,7 +270,12 @@ export class SessionController {
   ) {
     const text = request.trim();
     if (!text) return;
+    // Words right after a finished task usually build on it ("I don't have a code"), so Claude sees what came before.
+    const origin = this.view.phase === "done" && this.view.request ? (this.origin ?? this.view.request) : null;
+    const before = origin ? L.followUpNote(origin, this.view.line) : null;
     this.reset();
+    this.origin = origin;
+    if (before) this.history.push(before);
     const gen = this.gen;
     this.recipe = opts.recipe ?? null;
     this.sessionId = opts.sessionId ?? null;
@@ -277,6 +292,17 @@ export class SessionController {
     }
     this.set({ ...INITIAL, request: text, taskId: opts.taskId ?? null, stepNo: 1, line: L.FILLER_LINE, phase: "planning" });
     return this.begin(gen, opts.prepare ?? null);
+  }
+
+  /**
+   * Closing words ("thank you", "that's all") when no task is running: answer kindly instead of
+   * starting a new task. Returns true when it handled them.
+   */
+  farewell(text: string): boolean {
+    if (!["idle", "done", "blocked"].includes(this.view.phase) || parseCommand(text).kind !== "thanks") return false;
+    this.say(L.WELCOME_LINE);
+    this.set({ line: L.WELCOME_LINE, note: "" });
+    return true;
   }
 
   /** What `start` deferred while the scam question was open. */
@@ -379,6 +405,9 @@ export class SessionController {
       case "done-typing":
         if (this.view.phase === "guiding" && this.step?.expect === "type") return this.doneTyping();
         break;
+      case "thanks":
+        if (this.farewell(raw)) return;
+        break;
     }
     if (this.view.phase === "asking" || this.view.phase === "waiting") return this.answer(raw);
     if (this.view.phase === "idle" || this.view.phase === "done" || this.view.phase === "blocked") return this.start(raw);
@@ -411,6 +440,7 @@ export class SessionController {
   async stuck() {
     if (this.view.phase === "idle") return;
     this.deps.events?.log("stuck");
+    this.noteLine();
     this.history.push("The user said they are stuck or can't find it");
     this.say(L.STUCK_LINE);
     await this.deps.bridge.clear();
@@ -419,9 +449,20 @@ export class SessionController {
   }
 
   async answer(text: string) {
+    this.noteLine();
     this.history.push(`The user answered: ${JSON.stringify(text.slice(0, 200))}`);
     this.set({ phase: "planning", line: L.FILLER_LINE });
     await this.plan();
+  }
+
+  /**
+   * Before the user's words go to Claude: what JustAsk last asked or showed. Without it, "no" or
+   * "I don't have one" has no question, and Claude asks the same thing again.
+   */
+  private noteLine() {
+    if (!["asking", "guiding", "waiting", "done"].includes(this.view.phase) || !this.view.line) return;
+    const note = L.saidNote(this.view.line);
+    if (this.history.at(-1) !== note) this.history.push(note);
   }
 
   async confirm(yes: boolean) {
@@ -572,6 +613,7 @@ export class SessionController {
     const clicks = this.view.clicks + (how === "click" ? 1 : 0);
     const guidedSteps = this.view.guidedSteps + 1;
     this.history.push(this.onPage(`The user did: ${JSON.stringify(did)} (${how})`));
+    this.repeat_ = { key: "", sig: "", count: 0 };
     const p = L.praise(this.history.length);
     this.say(p);
     await this.deps.bridge.clear();
@@ -684,6 +726,11 @@ export class SessionController {
       this.deps.events?.log("blocked");
       return this.block(L.SUSPICIOUS_LINE);
     }
+    if (this.repeating(step)) {
+      // The same step keeps coming back and the user keeps not doing it: stop asking. The user decides what's next.
+      this.deps.events?.log("blocked");
+      return this.block(L.LOOP_LINE);
+    }
     switch (step.kind) {
       case "act":
       case "guide": {
@@ -733,6 +780,20 @@ export class SessionController {
         this.deps.events?.log("blocked");
         return this.block(step.say);
     }
+  }
+
+  /** True when this step is the same one shown the last few times, on a page that hasn't changed. */
+  private repeating(step: StepResponse): boolean {
+    const limit = REPEAT_LIMIT[step.kind];
+    if (!limit) {
+      this.repeat_ = { key: "", sig: "", count: 0 };
+      return false;
+    }
+    const key = step.kind === "guide" || step.kind === "act" ? `target|${step.target}|${step.expect}` : step.kind;
+    const sig = this.snapshot ? snapshotSignature(this.snapshot) : "";
+    const r = this.repeat_;
+    this.repeat_ = r.key === key && r.sig === sig ? { key, sig, count: r.count + 1 } : { key, sig, count: 1 };
+    return this.repeat_.count >= limit;
   }
 
   // ───────────── drive mode (docs/ARCHITECTURE.md §11) ─────────────
@@ -802,6 +863,7 @@ export class SessionController {
     }
 
     this.history.push(this.onPage(`JustAsk did: ${JSON.stringify(step.say)} (${expect})`));
+    this.repeat_ = { key: "", sig: "", count: 0 };
     await this.deps.bridge.clear();
     this.target = null;
     // No praise after JustAsk's own actions.
@@ -965,6 +1027,8 @@ export class SessionController {
     this.guideMode = false;
     this.noChange = 0;
     this.pending = null;
+    this.repeat_ = { key: "", sig: "", count: 0 };
+    this.origin = null;
   }
 }
 

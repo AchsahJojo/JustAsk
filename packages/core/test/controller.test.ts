@@ -185,6 +185,69 @@ describe("SessionController", () => {
     expect(h.c.state.phase).toBe("guiding");
   });
 
+  it("an answer carries the question it answers", async () => {
+    const h = harness([guide(1, "Type the meeting code in the white box.", { expect: "type" }), step("done", "Okay.")]);
+    await h.c.start("join my meeting");
+    await h.c.input("I don't have one");
+    expect(h.plans[1].history.slice(-2)).toEqual(['JustAsk said: "Type the meeting code in the white box."', 'The user answered: "I don\'t have one"']);
+  });
+
+  it("stops offering the same step after it comes back three times on an unchanged page", async () => {
+    const ask = guide(1, "Type the meeting code.", { expect: "type" });
+    const h = harness([ask, ask, ask, ask]);
+    await h.c.start("join my meeting");
+    await h.c.input("I don't have a code");
+    expect(h.c.state.phase).toBe("guiding");
+    await h.c.input("not yet");
+    expect(h.c.state.phase).toBe("blocked");
+    expect(h.c.state.line).toMatch(/stop here for now/);
+    expect(h.highlights).toHaveLength(2);
+  });
+
+  it("the same question asked over and over ends the loop", async () => {
+    const q = step("clarify", "Start a call or join one?");
+    const h = harness([q, q, q, q]);
+    await h.c.start("google meet");
+    await h.c.input("I don't know");
+    await h.c.input("I don't have one");
+    expect(h.c.state.phase).toBe("blocked");
+  });
+
+  it("a step the user finished doesn't count toward the loop", async () => {
+    const h = harness([guide(1), guide(1), guide(1), step("done", "Done.")]);
+    await h.c.start("x");
+    await h.c.onContent({ type: "ja:step-done", how: "click" }, 0);
+    await h.c.onContent({ type: "ja:step-done", how: "click" }, 0);
+    expect(h.c.state.phase).toBe("guiding");
+    await h.c.onContent({ type: "ja:step-done", how: "click" }, 0);
+    expect(h.c.state.phase).toBe("done");
+  });
+
+  it("words after a finished task keep what came before", async () => {
+    const h = harness([step("done", "Meet is open."), step("done", "Okay.")]);
+    await h.c.start("go to google meet");
+    await h.c.start("I don't have a code");
+    expect(h.plans[1].request).toBe("I don't have a code");
+    expect(h.plans[1].history.join("\n")).toContain('the user asked "go to google meet" and JustAsk finished with: "Meet is open."');
+  });
+
+  it("a chain of follow-ups keeps the first request", async () => {
+    const h = harness([step("done", "Meet is open."), step("done", "Okay, later."), step("done", "Okay.")]);
+    await h.c.start("go to google meet");
+    await h.c.start("I don't have a code");
+    await h.c.start("not yet");
+    expect(h.plans[2].history.join("\n")).toContain('the user asked "go to google meet" and JustAsk finished with: "Okay, later."');
+  });
+
+  it("thank you after a task is answered, not planned", async () => {
+    const h = harness([step("done", "Meet is open.")]);
+    await h.c.start("go to google meet");
+    expect(h.c.farewell("thank you")).toBe(true);
+    expect(h.plans).toHaveLength(1);
+    expect(h.c.state.line).toMatch(/welcome/);
+    expect(h.c.farewell("check my email")).toBe(false);
+  });
+
   it("free text while guiding replans with the user's words instead of repeating", async () => {
     const h = harness([guide(1), guide(2)]);
     await h.c.start("refill");
@@ -516,6 +579,11 @@ describe("parseCommand", () => {
     ["stop", "stop"],
     ["I'm stuck", "stuck"],
     ["yes please", "yes"],
+    ["Yes.", "yes"],
+    ["not yet", "no"],
+    ["I'll do it later", "no"],
+    ["Thank you!", "thanks"],
+    ["that's all", "thanks"],
     ["help me refill", "text"],
   ])("%s -> %s", (s, k) => expect(parseCommand(s).kind).toBe(k));
 
