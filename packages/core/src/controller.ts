@@ -4,7 +4,7 @@ import * as L from "./lines";
 import { isDecline, parseCommand } from "./commands";
 import { gateAct, userWords } from "./drive";
 import { snapshotSignature } from "./signature";
-import { scamCheck, type ScamKind } from "./scam";
+import { scamCheck, type ScamFlag, type ScamKind } from "./scam";
 
 export type Phase = "idle" | "planning" | "confirming" | "acting" | "guiding" | "verifying" | "asking" | "waiting" | "paused" | "done" | "blocked";
 
@@ -320,10 +320,8 @@ export class SessionController {
     // before JustAsk opens, searches or presses anything. Only the user's answer decides.
     const flag = scamCheck(text);
     if (flag) {
-      this.afterScamCheck = opts.prepare ?? null;
-      this.deps.events?.log("scam_check");
-      this.say(`${flag.fact} ${flag.question}`);
-      this.set({ ...INITIAL, request: text, taskId: opts.taskId ?? null, stepNo: 1, phase: "confirming", line: flag.question, note: flag.fact, risk: "suspicious", scam: flag.kind });
+      const prepare = opts.prepare ?? null;
+      this.askScam(flag, () => this.begin(this.gen, prepare), { ...INITIAL, request: text, taskId: opts.taskId ?? null, stepNo: 1 });
       return;
     }
     this.set({ ...INITIAL, request: text, taskId: opts.taskId ?? null, stepNo: 1, line: L.FILLER_LINE, phase: "planning" });
@@ -356,8 +354,19 @@ export class SessionController {
     return true;
   }
 
-  /** What `start` deferred while the scam question was open. */
-  private afterScamCheck: ((announce: (line: string) => void) => Promise<string | null>) | null = null;
+  /** What was deferred while the scam question was open: the start of the session, or planning from an answer. */
+  private scamResume: (() => Promise<void>) | null = null;
+  /** Scam kinds already asked about this session, so "my own idea" isn't asked again for every answer. */
+  private scamAsked = new Set<ScamKind>();
+
+  /** Ask the one scam question before anything else happens. `resume` runs if the user says it's their own idea. */
+  private askScam(flag: ScamFlag, resume: () => Promise<void>, patch: Partial<SessionView> = {}) {
+    this.scamAsked.add(flag.kind);
+    this.scamResume = resume;
+    this.deps.events?.log("scam_check");
+    this.say(`${flag.fact} ${flag.question}`);
+    this.set({ ...patch, phase: "confirming", line: flag.question, note: flag.fact, risk: "suspicious", scam: flag.kind });
+  }
 
   /**
    * The user's answer to the scam question. Someone asked the user: stop, and say what to do instead. The user's own
@@ -365,8 +374,8 @@ export class SessionController {
    */
   async scamAnswer(someoneAsked: boolean) {
     if (this.view.phase !== "confirming" || !this.view.scam) return;
-    const prepare = this.afterScamCheck;
-    this.afterScamCheck = null;
+    const resume = this.scamResume;
+    this.scamResume = null;
     if (someoneAsked) {
       this.deps.events?.log("scam_stopped");
       await this.block(L.SCAM_STOP_LINE, false);
@@ -376,7 +385,8 @@ export class SessionController {
     }
     this.history.push(L.SCAM_OWN_IDEA_NOTE);
     this.set({ phase: "planning", line: L.FILLER_LINE, risk: "none", scam: null });
-    return this.begin(this.gen, prepare);
+    // After a panel reload the deferred work is gone: plan on whatever page is there.
+    return resume ? resume() : this.begin(this.gen, null);
   }
 
   /**
@@ -551,6 +561,14 @@ export class SessionController {
     this.noteDecline(text);
     this.lastReply = isDecline(text) ? "decline" : STUCK_WORDS.test(text) ? "stuck" : null;
     this.noteLine();
+    // Words later in a session get the same local scam check as the first request ("they said to pay with
+    // gift cards"), before they reach history or Claude. Once per kind per session.
+    const flag = scamCheck(text);
+    if (flag && !this.scamAsked.has(flag.kind)) return this.askScam(flag, () => this.answered(text));
+    return this.answered(text);
+  }
+
+  private async answered(text: string) {
     this.history.push(`The user answered: ${JSON.stringify(text.slice(0, 200))}`);
     this.set({ phase: "planning", line: L.FILLER_LINE });
     await this.plan();
@@ -1206,6 +1224,8 @@ export class SessionController {
     this.questions = 0;
     this.lastReply = null;
     this.stuckOn = null;
+    this.scamResume = null;
+    this.scamAsked = new Set();
     this.origin = null;
     this.declined = new Set();
   }

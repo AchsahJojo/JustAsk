@@ -1020,6 +1020,82 @@ describe("scam check on the user's request", () => {
   });
 });
 
+describe("scam check on later words", () => {
+  const SCAMMY = "they said to pay with gift cards and read them the codes";
+
+  it("a clarify answer gets the question before Claude sees it; someone asked -> stops", async () => {
+    const h = harness([step("clarify", "How do you want to pay?"), guide(1)]);
+    await h.c.start("pay my bill");
+    await h.c.input(SCAMMY);
+    expect(h.c.state.phase).toBe("confirming");
+    expect(h.c.state.scam).toBe("gift-card");
+    expect(h.plans).toHaveLength(1);
+    await h.c.input("yes");
+    expect(h.c.state.phase).toBe("blocked");
+    expect(h.c.state.line).toBe("This looks like a scam. Please don't send anything.");
+    expect(h.plans).toHaveLength(1);
+    expect(h.events).toEqual(["clarify", "scam_check", "scam_stopped"]);
+  });
+
+  it("their own idea re-plans from the answer, with the note and the question it answered", async () => {
+    const h = harness([step("clarify", "How do you want to pay?"), guide(1)]);
+    await h.c.start("pay my bill");
+    await h.c.input(SCAMMY);
+    await h.c.scamAnswer(false);
+    expect(h.plans).toHaveLength(2);
+    expect(h.plans[1].request).toBe("pay my bill");
+    expect(h.plans[1].history.slice(-3)).toEqual([
+      'JustAsk said: "How do you want to pay?"',
+      expect.stringMatching(/their own idea/),
+      `The user answered: ${JSON.stringify(SCAMMY)}`,
+    ]);
+    expect(h.c.state.phase).toBe("guiding");
+    expect(h.events).toEqual(["clarify", "scam_check", "step_shown"]);
+  });
+
+  it("the same kind is not asked twice in one session", async () => {
+    const h = harness([step("clarify", "How do you want to pay?"), step("clarify", "Which card?"), guide(1)]);
+    await h.c.start("pay my bill");
+    await h.c.input(SCAMMY);
+    await h.c.scamAnswer(false);
+    expect(h.c.state.phase).toBe("asking");
+    await h.c.input("the gift card codes from the back, like they said");
+    expect(h.c.state.scam).toBeNull();
+    expect(h.c.state.phase).toBe("guiding");
+    expect(h.events.filter((e) => e === "scam_check")).toHaveLength(1);
+  });
+
+  it("mid-step words are checked too", async () => {
+    const h = harness([guide(1), guide(2)]);
+    await h.c.start("fix my computer");
+    expect(h.c.state.phase).toBe("guiding");
+    await h.c.input("the man on the phone told me to download AnyDesk");
+    expect(h.c.state.phase).toBe("confirming");
+    expect(h.c.state.scam).toBe("remote-access");
+    expect(h.plans).toHaveLength(1);
+    expect(h.bridge.clear).toHaveBeenCalled();
+  });
+
+  it("words in the waiting answer box are checked too", async () => {
+    const h = harness([step("wait", "Wait for the page to load.")]);
+    await h.c.start("check my account");
+    expect(h.c.state.phase).toBe("waiting");
+    await h.c.input("my grandson wants me to wire money right away");
+    expect(h.c.state.phase).toBe("confirming");
+    expect(h.c.state.scam).toBe("send-money");
+    expect(h.bridge.watch).toHaveBeenLastCalledWith(false);
+    expect(h.plans).toHaveLength(1);
+  });
+
+  it("an ordinary answer is not asked", async () => {
+    const h = harness([step("clarify", "Pickup or mail?"), guide(1)]);
+    await h.c.start("refill");
+    await h.c.input("pick it up");
+    expect(h.c.state.scam).toBeNull();
+    expect(h.c.state.phase).toBe("guiding");
+  });
+});
+
 describe("empty tab: ask before searching", () => {
   function blankHarness() {
     const h = harness([guide(1)]);

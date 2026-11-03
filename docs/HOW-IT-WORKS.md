@@ -128,7 +128,6 @@ This repeats until Claude says the task is done: "All done, you did it!"
 
 - No Chrome Web Store listing; load it unpacked.
 - No email verification or password reset for caregivers.
-- The scam check runs on the first request only, not on later answers.
 - `about:blank` / `srcdoc` iframes aren't read.
 - Not tested on Firefox or Safari.
 
