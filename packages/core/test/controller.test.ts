@@ -239,6 +239,43 @@ describe("SessionController", () => {
     expect(h.plans[2].history.join("\n")).toContain('the user asked "go to google meet" and JustAsk finished with: "Okay, later."');
   });
 
+  it("Ask for something else clears the chain", async () => {
+    const h = harness([step("done", "Meet is open."), step("done", "Okay.")]);
+    await h.c.start("go to google meet");
+    await h.c.stop();
+    await h.c.start("check my email");
+    expect(h.plans[1].history.join("\n")).not.toContain("Before this");
+  });
+
+  it("words long after a finished task start fresh", async () => {
+    const h = harness([step("done", "Meet is open."), step("done", "Okay.")], undefined, { timing: { followUpMs: 1_000 } });
+    const now = vi.spyOn(Date, "now").mockReturnValue(1_000_000);
+    await h.c.start("go to google meet");
+    now.mockReturnValue(1_002_000);
+    await h.c.start("check my email");
+    now.mockRestore();
+    expect(h.plans[1].history.join("\n")).not.toContain("Before this");
+  });
+
+  it("a caregiver task after a finished task isn't framed as a follow-up", async () => {
+    const h = harness([step("done", "Meet is open."), step("done", "Okay.")]);
+    await h.c.start("go to google meet");
+    await h.c.start("Refill your prescription", { taskId: "task-1" });
+    expect(h.plans[1].history.join("\n")).not.toContain("Before this");
+  });
+
+  it("Ask for something else after a block doesn't log abandoned on top of blocked", async () => {
+    const q = step("clarify", "Start a call or join one?");
+    const h = harness([q, q, q, q]);
+    await h.c.start("google meet");
+    await h.c.input("I don't know");
+    await h.c.input("I don't have one");
+    expect(h.c.state.phase).toBe("blocked");
+    await h.c.stop();
+    expect(h.events).toContain("blocked");
+    expect(h.events).not.toContain("abandoned");
+  });
+
   it("thank you after a task is answered, not planned", async () => {
     const h = harness([step("done", "Meet is open.")]);
     await h.c.start("go to google meet");
