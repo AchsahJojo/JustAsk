@@ -5,8 +5,8 @@ import type { Id } from "./_generated/dataModel";
 import { TASK_CHECK_LIMITS, type TaskDraft } from "@justask/shared";
 import { requireLink } from "./lib";
 import { rateLimiter, TOO_MANY_TRIES } from "./rateLimits";
-import { makeClient } from "../lib/planStep";
-import { checkTask, mockCheck, type TaskCheckInput } from "../lib/taskCheck";
+import { pickProvider } from "../lib/providers";
+import { mockCheck, type TaskCheckInput } from "../lib/taskCheck";
 
 const CHECK_TTL_MS = 60 * 60 * 1000;
 
@@ -77,10 +77,11 @@ export const review = action({
     let reply;
     if (process.env.JUSTASK_TASKCHECK_MOCK === "1") reply = mockCheck(input);
     else {
-      const key = process.env.ANTHROPIC_API_KEY;
-      if (!key) return { status: "error" as const, message: "JustAsk can't check tasks right now (the server isn't set up). Try again later." };
-      // The caregiver is waiting on a form, not a live step: give Claude more time than /plan gets.
-      const out = await checkTask(makeClient(key, 45_000), input);
+      const picked = pickProvider(process.env);
+      if (!picked.ok) return { status: "error" as const, message: "JustAsk can't check tasks right now (the server isn't set up). Try again later." };
+      if (picked.warning) console.warn("taskCheck", picked.warning);
+      // The caregiver is waiting on a form, not a live step: give the model more time than /plan gets.
+      const out = await picked.provider.checkTask(input, 45_000);
       // Numbers only in logs, never the caregiver's words.
       console.log("taskCheck", JSON.stringify({ ok: out.ok, clear: out.ok ? out.reply.clear : null, error: out.ok ? null : out.error, answers: args.answers.length }));
       if (!out.ok) return { status: "error" as const, message: "JustAsk couldn't check this task just now. Try again in a moment." };
