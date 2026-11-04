@@ -2,8 +2,9 @@ import { describe, expect, it, vi } from "vitest";
 import { SYSTEM_PROMPT } from "@justask/core";
 import type { PlanRequest, StepResponse } from "@justask/shared";
 import type { PlanLog } from "../lib/planStep";
-import { DEEPSEEK_STEP_SYSTEM, DEEPSEEK_URL, INVALID_JSON_NOTE, deepseekCheckTask, deepseekPlanStep, deepseekSearchQuery } from "../lib/providers/deepseek";
+import { DEEPSEEK_EXTRA_RULES, DEEPSEEK_STEP_SYSTEM, DEEPSEEK_URL, INVALID_JSON_NOTE, deepseekCheckTask, deepseekPlanStep, deepseekSearchQuery } from "../lib/providers/deepseek";
 import { deepseekAllowed, pickProvider } from "../lib/providers";
+import { checkOutsideKnowledge } from "../lib/providers/guard";
 
 const req: PlanRequest = {
   deviceToken: null,
@@ -153,5 +154,51 @@ describe("pickProvider (PLANNER_PROVIDER)", () => {
     const p = pickProvider({ PLANNER_PROVIDER: "gpt", ANTHROPIC_API_KEY: "sk-ant-x" });
     expect(p).toMatchObject({ ok: true, provider: { name: "anthropic" } });
     expect(p.ok && p.warning).toMatch(/unknown/);
+  });
+});
+
+describe("DeepSeek outside-knowledge guard", () => {
+  const meds: PlanRequest = {
+    ...req,
+    history: ['JustAsk said: "Which one?"', 'The user answered: "the blood pressure one"'],
+    snapshot: {
+      ...req.snapshot,
+      pageText: "Choose a prescription. Amlodipine 5mg - Refill. Sertraline 50mg - Refill.",
+      elements: [
+        { ...req.snapshot.elements[0], n: 1, nearby: "Amlodipine 5mg" },
+        { ...req.snapshot.elements[0], n: 2, nearby: "Sertraline 50mg" },
+      ],
+    },
+  };
+  const guess: StepResponse = { ...good, say: "Click the Refill button next to Amlodipine, the blood pressure one." };
+  const ask: StepResponse = { kind: "clarify", say: "The page doesn't say what each is for. Amlodipine or Sertraline?", target: null, expect: null, option: null, text: null, risk: "none", choices: ["Amlodipine 5mg", "Sertraline 50mg"] };
+
+  it("a guide line claiming what the page never says is re-planned with the reason, and a clarify passes", async () => {
+    const f = mockFetch(reply(JSON.stringify(guess)), reply(JSON.stringify(ask)));
+    const res = await deepseekPlanStep("dk-test", meds, () => {}, { fetch: f.fetch });
+    expect(res).toMatchObject({ ok: true, step: { kind: "clarify" } });
+    expect(f.calls()).toBe(2);
+    expect(f.bodies[1].messages[1].content).toContain('the page never says "blood pressure"');
+  });
+
+  it("guessing twice blocks", async () => {
+    const f = mockFetch(reply(JSON.stringify(guess)));
+    const res = await deepseekPlanStep("dk-test", meds, () => {}, { fetch: f.fetch });
+    expect(res).toMatchObject({ ok: true, step: { kind: "blocked" } });
+    expect(f.calls()).toBe(2);
+  });
+
+  it("the claim is fine when the page says it", () => {
+    const labelled = { ...meds.snapshot, pageText: meds.snapshot.pageText + " Amlodipine (blood pressure)." };
+    expect(checkOutsideKnowledge(guess, labelled)).toEqual({ ok: true });
+    expect(checkOutsideKnowledge(guess, meds.snapshot)).toMatchObject({ ok: false, code: "outside_knowledge" });
+    // A done line has no target, so it may repeat the user's words.
+    expect(checkOutsideKnowledge({ kind: "done", say: "That's fine. When your daughter sends it, press the big button.", target: null, expect: null, option: null, text: null, risk: "none", choices: null }, meds.snapshot)).toEqual({ ok: true });
+    // Whole words only: "reason" is not "son".
+    expect(checkOutsideKnowledge({ ...good, say: "Click Refill for that reason." }, meds.snapshot)).toEqual({ ok: true });
+  });
+
+  it("the extra rules sit between the shared prompt and the schema, as one constant", () => {
+    expect(DEEPSEEK_STEP_SYSTEM.startsWith(SYSTEM_PROMPT + DEEPSEEK_EXTRA_RULES)).toBe(true);
   });
 });

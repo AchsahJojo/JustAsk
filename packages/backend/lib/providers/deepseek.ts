@@ -1,6 +1,7 @@
 import { buildTurn, SYSTEM_PROMPT, userText } from "@justask/core";
 import { checkStep, cleanQuery, fixStep, StepResponse, stepJsonSchema, TaskCheckReply, taskCheckJsonSchema, type PlanRequest, type PlanResponse, type QueryResponse } from "@justask/shared";
 import { checkLog, type PlanLog } from "../planStep";
+import { checkOutsideKnowledge } from "./guard";
 import { QUERY_SYSTEM } from "../searchQuery";
 import { TASK_CHECK_SYSTEM, taskCheckTurn, tidyReply, type TaskCheckInput, type TaskCheckOutcome } from "../taskCheck";
 import type { StepProvider } from "./types";
@@ -19,7 +20,30 @@ export const DEEPSEEK_MODEL = "deepseek-chat";
  */
 const jsonNote = (schema: unknown) =>
   `\n\nReply with one JSON object only, no other text. It must match this JSON Schema exactly, with every property present (use null where allowed):\n${JSON.stringify(schema)}`;
-export const DEEPSEEK_STEP_SYSTEM = SYSTEM_PROMPT + jsonNote(stepJsonSchema());
+/**
+ * Extra rules for DeepSeek only. The 2026-11-04 eval showed it guessing which medicine, account or plan the user
+ * meant from their description. The examples use names that are not in the eval fixtures, so a better score means
+ * the rule took, not that the answers were copied.
+ */
+export const DEEPSEEK_EXTRA_RULES = `
+
+Ask, don't guess (read this twice; it matters more than finishing the task):
+- When the user describes the item by what it is for or who it is ("the blood pressure one", "my savings", "my son", "the cheaper plan") and no words on the page say which item that is, reply "clarify". Say the names from the screen and ask which one. Put those names in "choices", copied exactly from the page. Never connect their description to an item using your own knowledge, even if you are sure. A wrong guess here can cost money or harm health.
+- Medicines, money, accounts, people and plans: never pick one for the user. This stays true after "I'm not sure", "either is fine" or "you pick". If you already asked, don't ask again: reply "done" and tell them to check the name (on the bottle, the statement, the card) and press the big button again.
+- Never write what a medicine is for, which account is savings, who a person is, or which plan costs less, unless those exact words are on the page.
+- Before you reply "guide", check: did the user's own words name this item, or is it the only item that can do what they asked? If two or more items fit and their words don't pick one, reply "clarify".
+- When only one item can do what they asked (the others say Not due, Needs renewal, Out of stock, or are disabled), guide them to that one and say why in a few words. Don't ask.
+- Risk: picking an item, opening a page or a Refill button is "none". Use "personal_info" only for the button that sends their details, and "money" only for the button that pays.
+- If the user forgot their password or doesn't know it, point at the "Forgot password" or "Can't sign in" link if there is one. Never point at the password box again.
+
+More worked examples (shapes only):
+A. Page text "Atorvastatin 20mg - Refill. Omeprazole 40mg - Refill." History: JustAsk asked which one; the user answered "the cholesterol one". Reply: {"kind":"clarify","say":"The page doesn't say what each is for. Is it Atorvastatin or Omeprazole?","target":null,"expect":null,"option":null,"text":null,"risk":"none","choices":["Atorvastatin 20mg","Omeprazole 40mg"]}
+B. Request "send money from my savings". List has [3] radio "Main 4410" and [4] radio "Holiday Fund 9902". Neither says savings. Reply: {"kind":"clarify","say":"I don't see which one is savings. Should it come from Main or Holiday Fund?","target":null,"expect":null,"option":null,"text":null,"risk":"none","choices":["Main 4410","Holiday Fund 9902"]}
+C. Same page as A. History: JustAsk asked "Is it Atorvastatin or Omeprazole?" and the user answered "either is fine". Reply: {"kind":"done","say":"Let's not guess. Check the name on your bottle, then press the big button again.","target":null,"expect":null,"option":null,"text":null,"risk":"none","choices":null}
+D. Request "refill my prescription". List has [5] button "Refill" near "Amlodipine 5mg", [6] text "Not due until June" near "Sertraline 50mg". Reply: {"kind":"guide","say":"Click the blue Refill button next to Amlodipine. It's the only one ready now.","target":5,"expect":"click","option":null,"text":null,"risk":"none","choices":null}
+E. Request "log in to my bank". History: the user answered "I forgot my password". List has [2] password box and [7] link "Forgot password?". Reply: {"kind":"guide","say":"Click the link that says Forgot password? to set a new one.","target":7,"expect":"click","option":null,"text":null,"risk":"none","choices":null}`;
+
+export const DEEPSEEK_STEP_SYSTEM = SYSTEM_PROMPT + DEEPSEEK_EXTRA_RULES + jsonNote(stepJsonSchema());
 export const DEEPSEEK_TASK_SYSTEM = TASK_CHECK_SYSTEM + jsonNote(taskCheckJsonSchema());
 
 /** The note for the one retry after a reply that isn't valid JSON for the schema. */
@@ -116,7 +140,10 @@ export async function deepseekPlanStep(key: string, req: PlanRequest, log: (l: P
       continue;
     }
     log({ ...entry, ...checkLog(step, req.snapshot, said) });
-    const check = checkStep(fixStep(step, req.snapshot), req.snapshot, said);
+    const fixed = fixStep(step, req.snapshot);
+    const base = checkStep(fixed, req.snapshot, said);
+    // DeepSeek only: a guide line may not claim what the page never says (which medicine, which account).
+    const check = base.ok ? checkOutsideKnowledge(fixed, req.snapshot) : base;
     if (!check.ok) {
       // The same note the controller sends on a re-plan. The extension's own check still runs on what we return.
       retryNote = check.reason;
