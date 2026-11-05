@@ -1,7 +1,8 @@
 import { ConvexError, v } from "convex/values";
 import { mutation, query } from "./_generated/server";
+import type { Doc } from "./_generated/dataModel";
 import { TASK_LIMITS, isSafeStartUrl } from "@justask/shared";
-import { clean, requireCaregiver, requireDevice, requireLink } from "./lib";
+import { clean, findLink, requireCaregiver, requireDevice, requireLink } from "./lib";
 
 /**
  * Caregiver: send a task. Only a draft that taskCheck:review said is clear can be sent, so a vague
@@ -34,14 +35,23 @@ export const assign = mutation({
   },
 });
 
-/** Caregiver: take back a task that hasn't been started. */
+/** A started task with no word from the run for this long can be taken back (the browser likely closed). */
+export const STALE_ACTIVE_MS = 30 * 60 * 1000;
+
+/** True when the caregiver may take this task back: still waiting, or started and then gone quiet. */
+export function canTakeBack(task: Doc<"tasks">, now: number): boolean {
+  if (task.status === "pending") return true;
+  return task.status === "active" && now - (task.touchedAt ?? task.createdAt) > STALE_ACTIVE_MS;
+}
+
+/** Caregiver: take back a task that hasn't been started, or one that was started and then went quiet. */
 export const cancel = mutation({
   args: { taskId: v.id("tasks") },
   handler: async (ctx, { taskId }) => {
     const cg = await requireCaregiver(ctx);
     const task = await ctx.db.get(taskId);
     if (!task || task.assignedBy !== cg._id) throw new ConvexError("not found");
-    if (task.status !== "pending") throw new ConvexError("They already started this task.");
+    if (!canTakeBack(task, Date.now())) throw new ConvexError("They already started this task.");
     await ctx.db.delete(taskId);
   },
 });
@@ -105,11 +115,12 @@ export const setStatus = mutation({
     if (!task || task.seniorId !== device.seniorId) throw new Error("not found");
     // Done and dismissed are final: a late or repeated call changes nothing and sends nothing.
     if (task.status === "done" || task.status === "dismissed") return null;
-    await ctx.db.patch(taskId, status === "done" ? { status, doneAt: Date.now() } : { status });
+    const now = Date.now();
+    await ctx.db.patch(taskId, status === "done" ? { status, doneAt: now, touchedAt: now } : { status, touchedAt: now });
     // "I did it" from the user's task list: the same consent-gated note as finishing with JustAsk.
     if (status === "done") {
       const senior = await ctx.db.get(device.seniorId);
-      const linked = (await ctx.db.query("careLinks").withIndex("by_senior", (q) => q.eq("seniorId", device.seniorId)).collect()).some((l) => l.caregiverId === task.assignedBy);
+      const linked = (await findLink(ctx, task.assignedBy, device.seniorId)) !== null;
       if (senior?.consent.notifyOnComplete && linked) {
         const who = senior.displayName || senior.name || "They";
         await ctx.db.insert("notifications", { toCaregiverId: task.assignedBy, seniorId: senior._id, text: `${who} finished "${task.title}".`, at: Date.now(), read: false });

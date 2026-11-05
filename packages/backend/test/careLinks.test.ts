@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import { api } from "../convex/_generated/api";
+import { api, internal } from "../convex/_generated/api";
 import { authUser, caregiver, newAccount, setup } from "./helpers";
 
 beforeEach(() => vi.useFakeTimers());
@@ -14,16 +14,27 @@ test("helper code links a signed-in caregiver once", async () => {
 
   const { as, caregiverId } = await caregiver(t, "Sam");
   const res = await as.mutation(api.careLinks.redeemHelperCode, { code, relation: "child" });
-  expect(res?.displayName).toBe("Margaret");
+  expect(res).toMatchObject({ displayName: "Margaret", pending: true });
   const links = await t.run((ctx) => ctx.db.query("careLinks").collect());
   expect(links).toEqual([expect.objectContaining({ caregiverId, seniorId: res!.seniorId, relation: "child" })]);
+
+  // Nothing until Margaret says yes on her computer: no person page, no tasks.
+  expect(await as.query(api.people.list, {})).toEqual([]);
+  await expect(as.query(api.people.get, { seniorId: res!.seniorId })).rejects.toThrow(/not your senior/);
+  expect(await as.query(api.careLinks.pendingForMe, {})).toEqual([{ seniorId: res!.seniorId, displayName: "Margaret" }]);
+  const me = await t.query(api.devices.me, { token: seniorToken });
+  expect(me?.helpers).toEqual([]);
+  expect(me?.pendingHelpers).toEqual([{ id: caregiverId, name: "Sam" }]);
+  await t.mutation(api.careLinks.respond, { token: seniorToken, caregiverId, allow: true });
+  expect((await t.query(api.devices.me, { token: seniorToken }))?.helpers).toEqual([{ id: caregiverId, name: "Sam" }]);
+  expect(await as.query(api.careLinks.pendingForMe, {})).toEqual([]);
 
   // Single use.
   expect(await as.mutation(api.careLinks.redeemHelperCode, { code })).toBeNull();
 
   // A second code for an already-linked caregiver doesn't duplicate the link.
   const again = await t.mutation(api.careLinks.createHelperCode, { token: seniorToken });
-  expect(await as.mutation(api.careLinks.redeemHelperCode, { code: again.code })).not.toBeNull();
+  expect(await as.mutation(api.careLinks.redeemHelperCode, { code: again.code })).toMatchObject({ pending: false });
   expect(await t.run((ctx) => ctx.db.query("careLinks").collect())).toHaveLength(1);
 
   // The caregiver can now assign tasks (existing caregiver API).
@@ -69,4 +80,20 @@ test("wrong helper codes are rate limited per caregiver", async () => {
   // Another caregiver isn't affected.
   const other = await caregiver(t, "Ami");
   expect(await other.as.mutation(api.careLinks.redeemHelperCode, { code: "500000" })).toBeNull();
+});
+
+test("no to a helper removes the waiting link; an unanswered one is dropped after a day", async () => {
+  const t = setup();
+  const seniorToken = await newAccount(t, "Margaret");
+  const { as, caregiverId } = await caregiver(t, "Microsoft Support");
+  const first = await t.mutation(api.careLinks.createHelperCode, { token: seniorToken });
+  await as.mutation(api.careLinks.redeemHelperCode, { code: first.code });
+  await t.mutation(api.careLinks.respond, { token: seniorToken, caregiverId, allow: false });
+  expect(await t.run((ctx) => ctx.db.query("careLinks").collect())).toEqual([]);
+
+  const second = await t.mutation(api.careLinks.createHelperCode, { token: seniorToken });
+  await as.mutation(api.careLinks.redeemHelperCode, { code: second.code });
+  vi.advanceTimersByTime(24 * 60 * 60 * 1000 + 1);
+  await t.mutation(internal.cleanup.run, {});
+  expect(await t.run((ctx) => ctx.db.query("careLinks").collect())).toEqual([]);
 });

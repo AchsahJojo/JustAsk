@@ -3,10 +3,11 @@ import { mutation, query } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import type { CaregiverTaskStatus } from "@justask/shared";
-import { clean, prefsOf, requireCaregiver, requireLink, resolveSenior } from "./lib";
+import { clean, isActiveDevice, prefsOf, requireCaregiver, requireLink, resolveSenior } from "./lib";
+import { canTakeBack } from "./tasks";
 
 async function deviceCount(ctx: QueryCtx | MutationCtx, seniorId: Id<"seniors">) {
-  return (await ctx.db.query("devices").withIndex("by_senior", (q) => q.eq("seniorId", seniorId)).collect()).filter((d) => d.revokedAt === undefined).length;
+  return (await ctx.db.query("devices").withIndex("by_senior", (q) => q.eq("seniorId", seniorId)).collect()).filter(isActiveDevice).length;
 }
 
 /**
@@ -24,7 +25,8 @@ export const list = query({
   args: {},
   handler: async (ctx) => {
     const cg = await requireCaregiver(ctx);
-    const links = await ctx.db.query("careLinks").withIndex("by_caregiver", (q) => q.eq("caregiverId", cg._id)).collect();
+    // A link the user hasn't said yes to yet doesn't show the person (careLinks:pendingForMe does).
+    const links = (await ctx.db.query("careLinks").withIndex("by_caregiver", (q) => q.eq("caregiverId", cg._id)).collect()).filter((l) => l.pendingSince === undefined);
     const rows = await Promise.all(
       links.map(async (l) => {
         const s = await ctx.db.get(l.seniorId);
@@ -62,8 +64,9 @@ export const get = query({
     const { cg, link } = await requireLink(ctx, seniorId);
     const s = await ctx.db.get(seniorId);
     if (!s) throw new Error("not your senior");
+    const now = Date.now();
     const devices = await deviceCount(ctx, seniorId);
-    const otherHelpers = (await ctx.db.query("careLinks").withIndex("by_senior", (q) => q.eq("seniorId", seniorId)).collect()).length - 1;
+    const otherHelpers = (await ctx.db.query("careLinks").withIndex("by_senior", (q) => q.eq("seniorId", seniorId)).collect()).filter((l) => l.pendingSince === undefined).length - 1;
     // Removed tasks stay visible for two weeks so the helper knows. There is no dismissedAt; createdAt is close enough.
     const dismissedSince = Date.now() - 14 * 86_400_000;
     const tasks = (await ctx.db.query("tasks").withIndex("by_assigner", (q) => q.eq("assignedBy", cg._id)).collect())
@@ -127,7 +130,7 @@ export const get = query({
       consent: s.consent,
       showMeInstead: prefsOf(s).showMeInstead,
       showMeSetBy: s.showMeSetBy ?? null,
-      tasks: tasks.map((t) => ({ id: t._id, title: t.title, spokenPrompt: t.spokenPrompt, recipe: t.recipe ?? null, createdAt: t.createdAt, status: statusFor(t, s), canCancel: t.status === "pending" })),
+      tasks: tasks.map((t) => ({ id: t._id, title: t.title, spokenPrompt: t.spokenPrompt, recipe: t.recipe ?? null, createdAt: t.createdAt, status: statusFor(t, s), canCancel: canTakeBack(t, now) })),
       stats,
     };
   },

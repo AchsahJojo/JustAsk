@@ -15,6 +15,8 @@ describe("accounts:createSelf", () => {
       displayName: "Margaret",
       consent: { notifyOnComplete: false, notifyOnStuck: false },
       helpers: [],
+      pendingHelpers: [],
+      pendingDevices: [],
       showMeSetBy: null,
     });
     const devices = await t.query(api.devices.list, { token: res.token });
@@ -94,7 +96,7 @@ describe("link codes", () => {
     const browser = await newAccount(t, "Maggie", ext());
     const { code } = await t.mutation(api.devices.createLinkCode, { token: d });
     const res = await t.mutation(api.devices.redeemCode, { code, token: browser });
-    expect(res).toEqual({ token: browser, displayName: "Margaret" }); // joins the app's account, keeps its token
+    expect(res).toEqual({ token: browser, displayName: "Margaret", pending: false }); // the user's own code: joins the app's account, keeps its token
     const list = await t.query(api.devices.list, { token: browser });
     expect(list.map((x) => [x.kind, x.machineId]).sort()).toEqual([["desktop", "pc-1"], ["extension", "pc-1"]]);
     // Handoffs now match: the app can send a session to this browser.

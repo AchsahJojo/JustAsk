@@ -36,7 +36,19 @@ export async function requireDevice(ctx: QueryCtx | MutationCtx, token: string |
     .withIndex("by_token", (q) => q.eq("tokenHash", tokenHash))
     .unique();
   if (!device || device.revokedAt !== undefined) throw new ConvexError("not paired");
+  // Waiting for the user to allow this computer: no access yet (devices:joinStatus says what's happening).
+  if (isPendingDevice(device)) throw new ConvexError("waiting for approval");
   return device;
+}
+
+/** Like requireDevice, but also returns an install that is waiting to be allowed. */
+export async function findDeviceByToken(ctx: QueryCtx | MutationCtx, token: string) {
+  const tokenHash = await sha256(token);
+  const device = await ctx.db
+    .query("devices")
+    .withIndex("by_token", (q) => q.eq("tokenHash", tokenHash))
+    .unique();
+  return device && device.revokedAt === undefined ? device : null;
 }
 
 /** The signed-in caregiver, or null (signed out, or signed in but no profile yet). */
@@ -60,12 +72,19 @@ export async function requireCaregiver(ctx: QueryCtx | MutationCtx) {
   return cg;
 }
 
+/** The caregiver's link to this senior. A link the user hasn't said yes to yet (`pendingSince`) gives no access. */
 export async function findLink(ctx: QueryCtx | MutationCtx, caregiverId: Id<"caregivers">, seniorId: Id<"seniors">) {
-  return ctx.db
+  const link = await ctx.db
     .query("careLinks")
     .withIndex("by_caregiver_and_senior", (q) => q.eq("caregiverId", caregiverId).eq("seniorId", seniorId))
     .first();
+  return link && link.pendingSince === undefined ? link : null;
 }
+
+/** A device that is waiting for the user to press Allow (devices:approve). */
+export const isPendingDevice = (d: Doc<"devices">) => d.joinSeniorId !== undefined;
+/** An install that works: not revoked, not waiting to be allowed. */
+export const isActiveDevice = (d: Doc<"devices">) => d.revokedAt === undefined && !isPendingDevice(d);
 
 /** The caregiver plus their link to this senior. Throws the same error whether the senior is missing or not theirs. */
 export async function requireLink(ctx: QueryCtx | MutationCtx, seniorId: Id<"seniors">) {

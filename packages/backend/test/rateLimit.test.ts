@@ -5,7 +5,7 @@ import { newAccount, setup, type T } from "./helpers";
 beforeEach(() => vi.useFakeTimers());
 afterEach(() => vi.useRealTimers());
 
-/** A live device code with a chosen value (so tests control its 3-digit prefix). */
+/** A live device code with a chosen value (so tests control its 4-digit prefix). */
 async function codeFor(t: T, code: string) {
   await newAccount(t);
   const seniorId = (await t.run((ctx) => ctx.db.query("seniors").first()))!._id;
@@ -17,9 +17,9 @@ test("10 wrong codes in one prefix lock that prefix only, then it refills", asyn
   await codeFor(t, "123999");
   await codeFor(t, "456999");
   for (let i = 0; i < 10; i++) {
-    expect(await t.mutation(api.devices.redeemCode, { code: `12300${i}` })).toBeNull();
+    expect(await t.mutation(api.devices.redeemCode, { code: `12390${i}` })).toBeNull();
   }
-  await expect(t.mutation(api.devices.redeemCode, { code: "123010" })).rejects.toThrow(/Too many tries/);
+  await expect(t.mutation(api.devices.redeemCode, { code: "123910" })).rejects.toThrow(/Too many tries/);
   // Locked out: even the right code in that prefix is refused (no oracle for brute force).
   await expect(t.mutation(api.devices.redeemCode, { code: "123999" })).rejects.toThrow(/Too many tries/);
   await expect(t.mutation(api.devices.peekCode, { code: "123999" })).rejects.toThrow(/Too many tries/);
@@ -32,7 +32,7 @@ test("10 wrong codes in one prefix lock that prefix only, then it refills", asyn
 
 test("wrong peeks count too", async () => {
   const t = setup();
-  for (let i = 0; i < 10; i++) expect(await t.mutation(api.devices.peekCode, { code: `77700${i}` })).toBeNull();
+  for (let i = 0; i < 10; i++) expect(await t.mutation(api.devices.peekCode, { code: `77770${i}` })).toBeNull();
   await expect(t.mutation(api.devices.redeemCode, { code: "777777" })).rejects.toThrow(/Too many tries/);
 });
 

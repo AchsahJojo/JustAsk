@@ -55,7 +55,7 @@ describe("task status follows its session lifecycle", () => {
     expect(await t.query(api.tasks.pendingForDevice, { token })).toHaveLength(0);
   });
 
-  test("blocked task sends a consented stuck notification without page content", async () => {
+  test("blocked task sends a consented paused note without page content", async () => {
     const t = setup();
     const { token, taskId, sessionId } = await activeTask(t);
     await t.mutation(api.prefs.set, {
@@ -68,7 +68,7 @@ describe("task status follows its session lifecycle", () => {
     expect(await status(t, taskId)).toBe("pending");
     const notifications = await t.run((ctx) => ctx.db.query("notifications").collect());
     expect(notifications).toHaveLength(1);
-    expect(notifications[0].text).toBe('Margaret got stuck on "Refill".');
+    expect(notifications[0].text).toBe(`JustAsk paused "Refill" for Margaret. It's back on their list.`);
     expect(notifications[0].text).not.toContain("page content");
   });
 
