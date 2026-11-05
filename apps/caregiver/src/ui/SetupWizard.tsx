@@ -1,6 +1,6 @@
-import { useState } from "react";
-import { useMutation } from "convex/react";
-import { api, errorText } from "../api";
+import { useEffect, useRef, useState } from "react";
+import { useMutation, useQuery } from "convex/react";
+import { api, errorText, type Id } from "../api";
 import { go, href } from "../router";
 
 const RELATIONS: Array<{ label: string; call: string }> = [
@@ -118,10 +118,32 @@ export function SetupWizard() {
  */
 function HelperCode() {
   const redeem = useMutation(api.careLinks.redeemHelperCode);
+  const pendingList = useQuery(api.careLinks.pendingForMe);
   const [code, setCode] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  // The code worked; the link waits until they say yes on their computer (careLinks:respond).
+  const [waiting, setWaiting] = useState<{ seniorId: Id<"seniors">; displayName: string } | null>(null);
   const digits = code.replace(/\D/g, "");
+
+  // They answered: yes opens their page; no (or a day passing) drops the waiting link.
+  const people = useQuery(api.people.list);
+  // Decide only after the live list has shown the waiting link once, so a slow first update isn't read as a no.
+  const seenWaiting = useRef(false);
+  useEffect(() => {
+    if (!waiting || pendingList === undefined || people === undefined) return;
+    if (people.some((p) => p.id === waiting.seniorId)) return go({ name: "person", id: waiting.seniorId });
+    if (pendingList.some((p) => p.seniorId === waiting.seniorId)) {
+      seenWaiting.current = true;
+      return;
+    }
+    if (seenWaiting.current) {
+      seenWaiting.current = false;
+      setWaiting(null);
+      setBusy(false);
+      setError(`${waiting.displayName || "They"} said no on their computer. If that was a mistake, ask them for a new code.`);
+    }
+  }, [waiting, pendingList, people]);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -133,7 +155,8 @@ function HelperCode() {
       if (!r) {
         setError("That code didn't work. Codes last 15 minutes and work once. The code on their computer's setup page is typed there, not here.");
         setBusy(false);
-      } else go({ name: "person", id: r.seniorId });
+      } else if (r.pending) setWaiting({ seniorId: r.seniorId, displayName: r.displayName });
+      else go({ name: "person", id: r.seniorId });
     } catch (err) {
       setError(errorText(err));
       setBusy(false);
@@ -152,6 +175,12 @@ function HelperCode() {
           {busy ? "Connecting…" : "Connect"}
         </button>
       </div>
+      {waiting && (
+        <p className="note" role="status">
+          <strong>Now {waiting.displayName || "they"} says yes.</strong> JustAsk is asking on their computer: “Let you help with JustAsk?” This page opens
+          their page as soon as they press Yes.
+        </p>
+      )}
       {error && (
         <p className="error" role="alert">
           {error}
