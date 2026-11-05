@@ -29,6 +29,22 @@ export interface Helper {
   name: string;
 }
 
+/** A computer that typed a helper's code and waits for the user to press Allow (devices:approve). */
+export interface PendingDevice {
+  deviceId: string;
+  label: string;
+  platform: string;
+  since: number;
+}
+
+/** True when the server says this browser is waiting for the user to allow it on another computer. */
+export function isWaitingForApproval(e: unknown): boolean {
+  if (typeof e !== "object" || e === null) return false;
+  if ((e as { data?: unknown }).data === "waiting for approval") return true;
+  const m = (e as { message?: unknown }).message;
+  return typeof m === "string" && /waiting for approval/i.test(m);
+}
+
 const NOT_CONNECTED = "JustAsk isn't connected to an account on this browser yet.";
 /** Shown when this browser's token was revoked or removed on the server. */
 export const NOT_PAIRED = "This browser isn't connected anymore. Ask your helper for a new code, or choose I'm new.";
@@ -121,8 +137,11 @@ export class Backend {
     return { token: r.token };
   }
 
-  /** Redeem a 6-digit code. Resolves null for a wrong or expired code; throws on lockout or network trouble. */
-  async redeem(convexUrl: string, code: string, device?: DeviceInfo): Promise<{ token: string; displayName: string } | null> {
+  /**
+   * Redeem a 6-digit code. Resolves null for a wrong or expired code; throws on lockout or network trouble.
+   * `pending`: the account is in use on another computer, and this one waits until the user presses Allow there.
+   */
+  async redeem(convexUrl: string, code: string, device?: DeviceInfo): Promise<{ token: string; displayName: string; pending: boolean } | null> {
     const client = new ConvexHttpClient(convexUrl, { skipConvexDeploymentUrlCheck: true });
     let r: { token?: unknown; displayName?: unknown } | null;
     try {
@@ -133,7 +152,32 @@ export class Backend {
     }
     if (!r || typeof r.token !== "string") return null;
     this.setNotPaired(false);
-    return { token: r.token, displayName: typeof r.displayName === "string" ? r.displayName : "" };
+    return { token: r.token, displayName: typeof r.displayName === "string" ? r.displayName : "", pending: (r as { pending?: unknown }).pending === true };
+  }
+
+  /** After a code: is this browser still waiting for the user's Allow, ready, or turned away ("gone")? Null when offline. */
+  async joinStatus(): Promise<{ status: "waiting" | "ready" | "gone"; displayName: string } | null> {
+    const c = await this.c();
+    if (!c) return null;
+    try {
+      const r = await this.query<{ status?: unknown; displayName?: unknown }>(c.client, "devices:joinStatus", { token: c.token });
+      const status = r.status === "waiting" || r.status === "ready" || r.status === "gone" ? r.status : null;
+      return status ? { status, displayName: typeof r.displayName === "string" ? r.displayName : "" } : null;
+    } catch {
+      return null;
+    }
+  }
+
+  /** Let a waiting computer into the user's account, or turn it away. */
+  async answerDevice(deviceId: string, allow: boolean): Promise<void> {
+    const c = await this.must();
+    await this.mutation(c.client, allow ? "devices:approve" : "devices:deny", { token: c.token, deviceId });
+  }
+
+  /** Yes or no to someone who typed the user's helper code in the helper website. */
+  async answerHelper(caregiverId: string, allow: boolean): Promise<void> {
+    const c = await this.must();
+    await this.mutation(c.client, "careLinks:respond", { token: c.token, caregiverId, allow });
   }
 
   /**
@@ -151,18 +195,26 @@ export class Backend {
    * A caregiver's code typed on an install that already has the user's account: the caregiver joins it,
    * and nothing the user set up is lost. Resolves null for a wrong or expired code.
    */
-  async joinWithCode(code: string): Promise<{ displayName: string } | null> {
+  async joinWithCode(code: string): Promise<{ displayName: string; pending: boolean } | null> {
     const c = await this.must();
     const r = await this.mutation<{ token?: unknown; displayName?: unknown } | null>(c.client, "devices:redeemCode", { code, token: c.token });
     if (!r || typeof r.token !== "string") return null;
     // The server treats a stale token as a new install and hands back a fresh one: keep it.
     if (r.token !== c.token) await saveSettings({ deviceToken: r.token });
     this.setNotPaired(false);
-    return { displayName: typeof r.displayName === "string" ? r.displayName : "" };
+    return { displayName: typeof r.displayName === "string" ? r.displayName : "", pending: (r as { pending?: unknown }).pending === true };
   }
 
   /** The user's name, consent, the helpers who can send the user tasks, and who last set Show me instead. Null when unavailable. */
-  async me(): Promise<{ displayName: string; consent: { notifyOnComplete: boolean; notifyOnStuck: boolean }; helpers: Helper[]; showMeSetBy: "self" | "caregiver" | null } | null> {
+  async me(): Promise<{
+    displayName: string;
+    consent: { notifyOnComplete: boolean; notifyOnStuck: boolean };
+    helpers: Helper[];
+    /** Older servers send neither list. */
+    pendingHelpers?: Helper[];
+    pendingDevices?: PendingDevice[];
+    showMeSetBy: "self" | "caregiver" | null;
+  } | null> {
     const c = await this.c();
     if (!c) return null;
     try {
