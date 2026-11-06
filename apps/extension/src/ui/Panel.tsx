@@ -8,6 +8,7 @@ import { getSettings } from "../lib/config";
 import { pullPrefs } from "../lib/prefsSync";
 import { buildCapture, captureFileName } from "../lib/capture";
 import { Orb, type OrbMode } from "./Orb";
+import { Requests } from "./Requests";
 import { useNotPaired, useTaskList } from "./useTaskList";
 import { focusCaptionUnlessAsking } from "./focusCaption";
 
@@ -188,6 +189,7 @@ export function Panel({ pinnedTabId }: { pinnedTabId: number | null }) {
                 {NOT_PAIRED}
               </p>
             )}
+            <Requests />
             <Tasks list={tasks} onStart={startTask} onFinish={finishTask} />
 
             {resume && (

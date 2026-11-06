@@ -47,5 +47,5 @@ export function cleanQuery(q: unknown): string | null {
   return t && t.length <= 100 ? t : null;
 }
 
-export const EventType = z.enum(["step_shown", "repeat", "clarify", "stuck", "no_change", "done", "abandoned", "blocked", "scam_check", "scam_stopped", "loop"]);
+export const EventType = z.enum(["step_shown", "repeat", "clarify", "stuck", "no_change", "done", "abandoned", "blocked", "scam_check", "scam_stopped", "loop", "deferred"]);
 export type EventType = z.infer<typeof EventType>;

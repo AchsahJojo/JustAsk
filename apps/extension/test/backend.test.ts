@@ -40,8 +40,13 @@ describe("joinWithCode", () => {
   it("saves the new token when the server returns a different one", async () => {
     mocks.mutation = async () => ({ token: "new-token", displayName: "Sam" });
     const r = await new Backend().joinWithCode("123456");
-    expect(r).toEqual({ displayName: "Sam" });
+    expect(r).toEqual({ displayName: "Sam", pending: false });
     expect(mocks.saved).toEqual([{ deviceToken: "new-token" }]);
+  });
+
+  it("reports a code that waits for the user's Allow on another computer", async () => {
+    mocks.mutation = async () => ({ token: "new-token", displayName: "Sam", pending: true });
+    expect(await new Backend().joinWithCode("123456")).toEqual({ displayName: "Sam", pending: true });
   });
 
   it("doesn't save when the token is the same", async () => {

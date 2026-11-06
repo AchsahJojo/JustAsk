@@ -5,6 +5,9 @@ import { codeAttemptMessage, friendlyError } from "../lib/prefs";
 import { pullPrefs, pushPrefs } from "../lib/prefsSync";
 import { currentDevice } from "../platform/device";
 import { useNotPaired } from "./useTaskList";
+import { Requests } from "./Requests";
+
+const WAIT_POLL_MS = 3_000;
 
 const NO_SERVER = "Accounts aren't set up on this copy of JustAsk yet. JustAsk still works on this computer without one.";
 const digits = (v: string) => v.replace(/\D/g, "");
@@ -17,12 +20,47 @@ export function AccountStep({ s, onChange, linkCode, onLinkDone }: { s: Settings
   const [busy, setBusy] = useState(false);
   // A token the server no longer knows (revoked or removed). It stays saved; the user picks a way back in.
   const notPaired = useNotPaired(s.deviceToken);
+  // A helper's code typed here while the account is in use on another computer: wait for Allow there.
+  const [waitingFor, setWaitingFor] = useState<string | null>(null);
 
   const connected = async (token: string, displayName: string) => {
     onChange(await saveSettings({ deviceToken: token, displayName }));
     setMsg(displayName ? `Connected. Hi ${displayName}!` : "Connected.");
     onChange(await pullPrefs());
   };
+
+  const waitForAllow = async (token: string, displayName: string) => {
+    onChange(await saveSettings({ deviceToken: token, displayName }));
+    setMsg("");
+    setWaitingFor(displayName || "your JustAsk");
+  };
+
+  // Also after the setup page reloads while waiting.
+  useEffect(() => {
+    if (!s.deviceToken) return;
+    let stop = false;
+    const check = async () => {
+      const r = await backend.joinStatus();
+      if (stop || !r) return;
+      if (r.status === "waiting") setWaitingFor(r.displayName || "your JustAsk");
+      else if (waitingFor !== null) {
+        setWaitingFor(null);
+        if (r.status === "ready") {
+          setMsg(r.displayName ? `Connected. Hi ${r.displayName}!` : "Connected.");
+          onChange(await pullPrefs());
+        } else {
+          onChange(await saveSettings({ deviceToken: null, displayName: "" }));
+          setMsg("That computer said no, so this browser isn't connected. Ask your helper for a new code if you meant to connect it.");
+        }
+      }
+    };
+    void check();
+    const iv = setInterval(() => void check(), WAIT_POLL_MS);
+    return () => {
+      stop = true;
+      clearInterval(iv);
+    };
+  }, [s.deviceToken, waitingFor]);
 
   const redeem = async (code: string) => {
     setMsg("");
@@ -32,10 +70,12 @@ export function AccountStep({ s, onChange, linkCode, onLinkDone }: { s: Settings
       if (s.deviceToken && !notPaired) {
         const joined = await backend.joinWithCode(code);
         if (!joined) setMsg(codeAttemptMessage(null));
+        else if (joined.pending) await waitForAllow(s.deviceToken, joined.displayName);
         else await connected(s.deviceToken, joined.displayName);
       } else {
         const r = await backend.redeem(s.convexUrl, code, currentDevice());
         if (!r) setMsg(codeAttemptMessage(null));
+        else if (r.pending) await waitForAllow(r.token, r.displayName);
         else await connected(r.token, r.displayName);
       }
     } catch (e) {
@@ -65,9 +105,17 @@ export function AccountStep({ s, onChange, linkCode, onLinkDone }: { s: Settings
   const consent = async (patch: Partial<Settings["consent"]>) => onChange(await pushPrefs({ consent: { ...s.consent, ...patch } }));
 
   return (
-    <li className={`step ${s.deviceToken && !notPaired ? "ok" : ""}`}>
+    <li className={`step ${s.deviceToken && !notPaired && waitingFor === null ? "ok" : ""}`}>
       <h2>3. Your JustAsk</h2>
-      {s.deviceToken && notPaired ? (
+      {waitingFor !== null ? (
+        <div className="card task" role="status">
+          <p className="task-title">Almost there</p>
+          <p>
+            {waitingFor === "your JustAsk" ? "JustAsk" : `${waitingFor}'s JustAsk`} is already used on another computer. On that computer, open JustAsk and
+            press <strong>Allow</strong>. This page will update by itself.
+          </p>
+        </div>
+      ) : s.deviceToken && notPaired ? (
         <>
           <p role="status">{NOT_PAIRED}</p>
           <div className="choice-grid">
@@ -78,6 +126,7 @@ export function AccountStep({ s, onChange, linkCode, onLinkDone }: { s: Settings
       ) : s.deviceToken ? (
         <>
           <p className="done">✓ Connected{s.displayName ? ` as ${s.displayName}` : ""}</p>
+          <Requests />
           {linkCode && <p className="soft">This browser is already linked{s.displayName ? ` to ${s.displayName}'s JustAsk` : ""}.</p>}
           <HaveCode busy={busy} onRedeem={redeem} />
           <div className="toggles">

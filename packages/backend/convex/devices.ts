@@ -1,9 +1,12 @@
 import { ConvexError, v } from "convex/values";
-import { internalMutation, mutation, query } from "./_generated/server";
+import { internalMutation, mutation, query, type MutationCtx } from "./_generated/server";
 import type { Doc } from "./_generated/dataModel";
 import {
   CODE_TTL_MS,
   clean,
+  findDeviceByToken,
+  isActiveDevice,
+  isPendingDevice,
   cleanDevice,
   findLiveCode,
   insertDevice,
@@ -133,7 +136,7 @@ export const peekCode = mutation({
  */
 export const redeemCode = mutation({
   args: { code: v.string(), device: v.optional(deviceInfo), token: v.optional(v.string()) },
-  returns: v.union(v.object({ token: v.string(), displayName: v.string() }), v.null()),
+  returns: v.union(v.object({ token: v.string(), displayName: v.string(), pending: v.boolean() }), v.null()),
   handler: async (ctx, args) => {
     const code = normalizeCode(args.code.replace(/\s/g, ""));
     if (!code) return null;
@@ -158,10 +161,18 @@ export const redeemCode = mutation({
       if (creator && kindOf(creator) === "desktop") machineId = row.machineId;
     }
 
+    // A caregiver's code for someone who already uses JustAsk on another computer: the new computer waits
+    // until they press Allow there (devices:approve). Otherwise any linked helper could make a code, type it
+    // in their own browser and hold the user's account. Codes the user made themselves, and first setup, don't wait.
+    const targetHasDevices = (await ctx.db.query("devices").withIndex("by_senior", (q) => q.eq("seniorId", target)).take(50)).some(isActiveDevice);
+    const needsApproval = isCaregiverCode(row) && targetHasDevices;
+    const senior = await ctx.db.get(target);
+    const displayName = senior?.displayName ?? "";
+
     if (!args.token || !current) {
-      const { token } = await insertDevice(ctx, target, { ...fields, ...(machineId !== undefined ? { machineId } : {}) });
-      const senior = await ctx.db.get(target);
-      return { token, displayName: senior?.displayName ?? "" };
+      const { token, deviceId } = await insertDevice(ctx, target, { ...fields, ...(machineId !== undefined ? { machineId } : {}) });
+      if (needsApproval) await ctx.db.patch(deviceId, { joinSeniorId: target, pendingSince: Date.now() });
+      return { token, displayName, pending: needsApproval };
     }
 
     if (current.machineId === undefined && machineId !== undefined) await ctx.db.patch(current._id, { machineId });
@@ -170,7 +181,11 @@ export const redeemCode = mutation({
     if (!own || !theirs) return null;
     let kept = own._id;
     if (own._id !== theirs._id) {
-      const targetHasDevices = (await ctx.db.query("devices").withIndex("by_senior", (q) => q.eq("seniorId", target)).take(50)).some((d) => d.revokedAt === undefined);
+      if (needsApproval) {
+        // Joining someone else's account waits for their Allow; until then this install's own account stays as it is.
+        await ctx.db.patch(current._id, { joinSeniorId: target, pendingSince: Date.now() });
+        return { token: args.token, displayName, pending: true };
+      }
       if (targetHasDevices) {
         // That account is already in use on another computer: this one joins it.
         await mergeSenior(ctx, own._id, theirs._id);
@@ -187,8 +202,8 @@ export const redeemCode = mutation({
         });
       }
     }
-    const senior = await ctx.db.get(kept);
-    return { token: args.token, displayName: senior?.displayName ?? "" };
+    const keptSenior = await ctx.db.get(kept);
+    return { token: args.token, displayName: keptSenior?.displayName ?? "", pending: false };
   },
 });
 
@@ -200,6 +215,9 @@ export const me = query({
       displayName: v.string(),
       consent: consentValidator,
       helpers: v.array(v.object({ id: v.id("caregivers"), name: v.string() })),
+      // Waiting for the user's yes: someone typed their helper code, or a new computer wants to join.
+      pendingHelpers: v.array(v.object({ id: v.id("caregivers"), name: v.string() })),
+      pendingDevices: v.array(v.object({ deviceId: v.id("devices"), label: v.string(), platform: v.string(), since: v.number() })),
       showMeSetBy: v.union(v.literal("self"), v.literal("caregiver"), v.null()),
     }),
     v.null(),
@@ -209,13 +227,20 @@ export const me = query({
     const senior = await ctx.db.get(device.seniorId);
     if (!senior) return null;
     const links = await ctx.db.query("careLinks").withIndex("by_senior", (q) => q.eq("seniorId", senior._id)).take(50);
-    const helpers = await Promise.all(
-      links.map(async (l) => {
-        const cg = await ctx.db.get(l.caregiverId);
-        return { id: l.caregiverId, name: cg?.name ?? "Your helper" };
-      }),
-    );
-    return { displayName: senior.displayName, consent: senior.consent, helpers, showMeSetBy: senior.showMeSetBy ?? null };
+    const named = (ls: typeof links) =>
+      Promise.all(
+        ls.map(async (l) => {
+          const cg = await ctx.db.get(l.caregiverId);
+          return { id: l.caregiverId, name: cg?.name ?? "Your helper" };
+        }),
+      );
+    const helpers = await named(links.filter((l) => l.pendingSince === undefined));
+    const pendingHelpers = await named(links.filter((l) => l.pendingSince !== undefined));
+    const waiting = await ctx.db.query("devices").withIndex("by_joinSeniorId", (q) => q.eq("joinSeniorId", senior._id)).take(20);
+    const pendingDevices = waiting
+      .filter((d) => d.revokedAt === undefined)
+      .map((d) => ({ deviceId: d._id, label: d.label ?? "Web browser", platform: d.platform ?? "unknown", since: d.pendingSince ?? d.pairedAt }));
+    return { displayName: senior.displayName, consent: senior.consent, helpers, pendingHelpers, pendingDevices, showMeSetBy: senior.showMeSetBy ?? null };
   },
 });
 
@@ -295,7 +320,7 @@ export const list = query({
       .withIndex("by_senior", (q) => q.eq("seniorId", me.seniorId))
       .take(50);
     return rows
-      .filter((d) => d.revokedAt === undefined)
+      .filter(isActiveDevice)
       .map((d) => ({
         deviceId: d._id,
         kind: kindOf(d),
@@ -319,6 +344,54 @@ export const revoke = mutation({
     if (!target || target.seniorId !== me.seniorId) throw new Error("not found");
     if (target.revokedAt === undefined) await ctx.db.patch(deviceId, { revokedAt: Date.now() });
     return null;
+  },
+});
+
+/**
+ * The user's install: let a waiting computer into the account (a caregiver's code typed there). An install that
+ * had its own account brings it along (the two profiles become one, as with any code).
+ */
+export const approve = mutation({
+  args: { token: v.string(), deviceId: v.id("devices") },
+  returns: v.null(),
+  handler: async (ctx, { token, deviceId }) => {
+    const me = await requireDevice(ctx, token);
+    const d = await ctx.db.get(deviceId);
+    if (!d || d.revokedAt !== undefined || d.joinSeniorId !== me.seniorId) throw new Error("not found");
+    if (d.seniorId !== me.seniorId) await mergeSenior(ctx, d.seniorId, me.seniorId);
+    await ctx.db.patch(deviceId, { joinSeniorId: undefined, pendingSince: undefined });
+    return null;
+  },
+});
+
+/** The user's install: "No, remove it". A new install is unlinked; one that had its own account keeps only that. */
+export const deny = mutation({
+  args: { token: v.string(), deviceId: v.id("devices") },
+  returns: v.null(),
+  handler: async (ctx, { token, deviceId }) => {
+    const me = await requireDevice(ctx, token);
+    const d = await ctx.db.get(deviceId);
+    if (!d || d.joinSeniorId !== me.seniorId) throw new Error("not found");
+    await refuseJoin(ctx, d);
+    return null;
+  },
+});
+
+/** Shared by deny and the cleanup cron. */
+export async function refuseJoin(ctx: MutationCtx, d: Doc<"devices">) {
+  if (d.seniorId === d.joinSeniorId) await ctx.db.patch(d._id, { revokedAt: Date.now(), joinSeniorId: undefined, pendingSince: undefined });
+  else await ctx.db.patch(d._id, { joinSeniorId: undefined, pendingSince: undefined });
+}
+
+/** A new install after redeeming a code: still waiting for Allow, ready, or turned away. */
+export const joinStatus = query({
+  args: { token: v.string() },
+  returns: v.object({ status: v.union(v.literal("waiting"), v.literal("ready"), v.literal("gone")), displayName: v.string() }),
+  handler: async (ctx, { token }) => {
+    const d = await findDeviceByToken(ctx, token);
+    if (!d) return { status: "gone" as const, displayName: "" };
+    const senior = await ctx.db.get(d.joinSeniorId ?? d.seniorId);
+    return { status: isPendingDevice(d) ? ("waiting" as const) : ("ready" as const), displayName: senior?.displayName ?? "" };
   },
 });
 

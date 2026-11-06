@@ -65,7 +65,7 @@ export function ConnectPanel({ seniorId, displayName, connected, another }: { se
         ) : (
           <p className="waiting">
             <span className="pulse" aria-hidden="true" />
-            {another ? "Waiting for the other computer…" : `Waiting for ${displayName} to type the code…`}
+            {another ? `Waiting for the other computer, then for ${displayName} to press Allow…` : `Waiting for ${displayName} to type the code…`}
           </p>
         )}
       </div>
@@ -123,6 +123,12 @@ export function ConnectPanel({ seniorId, displayName, connected, another }: { se
           {error && (
             <p className="error" role="alert">
               {error}
+            </p>
+          )}
+          {another && (
+            <p className="note">
+              <strong>Then {displayName} presses Allow.</strong> JustAsk asks on a computer they already use, so nobody can join their JustAsk without them
+              knowing.
             </p>
           )}
           <p className="note">

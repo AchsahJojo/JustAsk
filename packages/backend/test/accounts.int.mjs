@@ -150,6 +150,15 @@ const { code: patCode2 } = await sam.c.mutation("devices:newCode", { seniorId: p
 const laptop2 = await anon.mutation("devices:redeemCode", { code: patCode2 });
 assert.ok(laptop2);
 assert.notEqual(laptop2.token, fresh.token);
+// Pat already uses JustAsk, so the new computer waits for Pat's Allow.
+assert.equal(laptop2.pending, true);
+assert.equal((await sam.c.query("people:get", { seniorId: patId })).devices, 1);
+await assert.rejects(anon.query("tasks:listForDevice", { token: laptop2.token }), /waiting for approval/);
+const allow = async () => {
+  for (const d of (await anon.query("devices:me", { token: fresh.token })).pendingDevices) await anon.mutation("devices:approve", { token: fresh.token, deviceId: d.deviceId });
+};
+await allow();
+assert.equal((await anon.query("devices:joinStatus", { token: laptop2.token })).status, "ready");
 assert.equal((await sam.c.query("people:get", { seniorId: patId })).devices, 2);
 const { code: c3 } = await sam.c.mutation("devices:newCode", { seniorId: patId });
 const { code: c4 } = await sam.c.mutation("devices:newCode", { seniorId: patId });
@@ -159,14 +168,17 @@ const { token: solo2 } = await createSelf("Joe");
 const joined = await anon.mutation("devices:redeemCode", { code: c4, token: solo2 });
 assert.ok(joined);
 assert.equal(joined.displayName, "Pat");
+assert.equal(joined.pending, true);
+await allow();
 assert.equal((await sam.c.query("people:get", { seniorId: patId })).devices, 3);
-ok("second computer, code replacement, standalone joining an in-use profile");
+ok("second computer waits for Allow, code replacement, standalone joining an in-use profile");
 
 // --- Re-pair with a stale token is treated as a new install ---
 const { code: c5 } = await sam.c.mutation("devices:newCode", { seniorId: patId });
 const stale = await anon.mutation("devices:redeemCode", { code: c5, token: "f".repeat(64) });
 assert.ok(stale);
 assert.notEqual(stale.token, "f".repeat(64));
+await allow();
 ok("stale token on redeem gets a fresh device");
 
 // --- Senior disconnects: JustAsk keeps working, helper is told, their waiting tasks go away ---
@@ -244,6 +256,12 @@ ok("activity mark-all-read");
   assert.equal(await lu.c.mutation("careLinks:redeemHelperCode", { code: "000000" }), null);
   const r = await lu.c.mutation("careLinks:redeemHelperCode", { code });
   assert.equal(r.displayName, "Bea");
+  // Nothing until Bea says yes on her computer.
+  assert.equal(r.pending, true);
+  assert.deepEqual(await lu.c.query("people:list", {}), []);
+  const lu_ = (await anon.query("devices:me", { token: seniorToken })).pendingHelpers[0];
+  assert.equal(lu_.name, "Lu");
+  await anon.mutation("careLinks:respond", { token: seniorToken, caregiverId: lu_.id, allow: true });
   assert.deepEqual((await anon.query("devices:me", { token: seniorToken })).helpers.map((h) => h.name), ["Lu"]);
   const people = await lu.c.query("people:list", {});
   assert.deepEqual(people.map((x) => [x.name, x.connected]), [["Bea", true]]);
@@ -251,7 +269,7 @@ ok("activity mark-all-read");
   // A helper code is not a device code, and the other way round.
   const { code: dev } = await anon.mutation("devices:createLinkCode", { token: seniorToken });
   assert.equal(await lu.c.mutation("careLinks:redeemHelperCode", { code: dev }), null);
-  ok("helper code from the user's Settings links the caregiver once; device codes don't work as helper codes");
+  ok("helper code from the user's Settings links the caregiver once, after the user's yes; device codes don't work as helper codes");
 }
 
 console.log("\nall account checks passed");

@@ -28,7 +28,16 @@ export default defineSchema({
     createdBy: v.optional(v.union(v.literal("self"), v.literal("caregiver"))),
     createdAt: v.optional(v.number()),
   }),
-  careLinks: defineTable({ caregiverId: v.id("caregivers"), seniorId: v.id("seniors"), relation: v.string(), linkedAt: v.optional(v.number()) })
+  // `pendingSince`: a helper code was typed in the caregiver app, and the user hasn't said yes yet on their computer.
+  // A pending link gives no access (lib.findLink ignores it). Dropped after a day by the cleanup cron.
+  careLinks: defineTable({
+    caregiverId: v.id("caregivers"),
+    seniorId: v.id("seniors"),
+    relation: v.string(),
+    linkedAt: v.optional(v.number()),
+    pendingSince: v.optional(v.number()),
+  })
+    .index("by_pendingSince", ["pendingSince"])
     .index("by_caregiver", ["caregiverId"])
     .index("by_senior", ["seniorId"])
     .index("by_caregiver_and_senior", ["caregiverId", "seniorId"]),
@@ -60,9 +69,16 @@ export default defineSchema({
     machineId: v.optional(v.string()),
     lastSeenAt: v.optional(v.number()),
     revokedAt: v.optional(v.number()),
+    // Waiting for the user to press Allow on a computer they already use (a caregiver's code typed on a
+    // new computer after the first one). `joinSeniorId` is the account it wants to join; `seniorId` stays
+    // the install's own account until then. A pending install's token works for nothing but devices:joinStatus.
+    joinSeniorId: v.optional(v.id("seniors")),
+    pendingSince: v.optional(v.number()),
   })
     .index("by_token", ["tokenHash"])
-    .index("by_senior", ["seniorId"]),
+    .index("by_senior", ["seniorId"])
+    .index("by_joinSeniorId", ["joinSeniorId"])
+    .index("by_pendingSince", ["pendingSince"]),
   tasks: defineTable({
     seniorId: v.id("seniors"),
     assignedBy: v.id("caregivers"),
@@ -73,8 +89,15 @@ export default defineSchema({
     createdAt: v.number(),
     // When it became done. Older rows have none; readers fall back to createdAt.
     doneAt: v.optional(v.number()),
+    // Last time a run touched it (started, or any session event). The cleanup cron sends a task that sat
+    // "active" with no word for 2 hours back to pending (the browser closed mid-task).
+    touchedAt: v.optional(v.number()),
+    // How the last run ended, so the caregiver can see more than "Sent": deferred (put off, for example
+    // no code yet), blocked (paused for safety or trouble), loop, abandoned.
+    lastOutcome: v.optional(v.string()),
   })
     .index("by_senior_status", ["seniorId", "status"])
+    .index("by_status_and_touchedAt", ["status", "touchedAt"])
     .index("by_assigner", ["assignedBy"]),
   // A task the check said is clear (taskCheck:review). tasks:assign sends only from one of these,
   // so a vague task can't reach the older adult. Deleted when sent, or after an hour.
@@ -94,6 +117,8 @@ export default defineSchema({
     startedAt: v.number(),
     endedAt: v.optional(v.number()),
     outcome: v.optional(v.string()),
+    // The caregiver already heard "got stuck" for this run: one note per run, however many presses.
+    notifiedStuck: v.optional(v.boolean()),
   }).index("by_senior", ["seniorId"]),
   // Only events are stored. Snapshots are never written to tables or logs.
   events: defineTable({
